@@ -64,6 +64,7 @@ class AppDrawerAdapter(
     private val appFilter = createAppFilter()
     private val myUserHandle = android.os.Process.myUserHandle()
 
+    var longPressEnabled: Boolean = true
     var appsList: MutableList<AppModel> = mutableListOf()
     var appFilteredList: MutableList<AppModel> = mutableListOf()
 
@@ -112,6 +113,7 @@ class AppDrawerAdapter(
                     appLabelGravity,
                     myUserHandle,
                     appModel,
+                    longPressEnabled,
                     appClickListener,
                     appDeleteListener,
                     appInfoListener,
@@ -222,6 +224,7 @@ class AppDrawerAdapter(
             appLabelGravity: Int,
             myUserHandle: UserHandle,
             appModel: AppModel,
+            longPressEnabled: Boolean,
             clickListener: (AppModel) -> Unit,
             appDeleteListener: (AppModel) -> Unit,
             appInfoListener: (AppModel) -> Unit,
@@ -243,7 +246,7 @@ class AppDrawerAdapter(
             appTitle.setOnClickListener { clickListener(appModel) }
 
             appTitle.setOnLongClickListener {
-                if (appModel.appPackage.isNotEmpty()) {
+                if (longPressEnabled && appModel.appPackage.isNotEmpty()) {
                     appDelete.alpha = when (
                         appModel is AppModel.PinnedShortcut || !root.context.isSystemApp(appModel.appPackage, appModel.user)
                     ) {
@@ -347,10 +350,4 @@ class AppDrawerAdapter(
                     packageManager.getApplicationLabel(
                         packageManager.getApplicationInfo(appPackage, 0)
                     ).toString()
-                }
-            } catch (_: Exception) {
-                "" // As a fallback, display an empty string.
-            }
-        }
-    }
-}
+               

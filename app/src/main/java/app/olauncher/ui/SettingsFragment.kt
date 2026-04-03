@@ -8,12 +8,16 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
@@ -32,6 +36,7 @@ import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.isDarkThemeOn
 import app.olauncher.helper.isEinkDisplay
+import app.olauncher.helper.PasswordHelper
 import app.olauncher.helper.isOlauncherDefault
 import app.olauncher.helper.isTablet
 import app.olauncher.helper.openAppInfo
@@ -52,6 +57,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
     private val showPentastic = System.currentTimeMillis() % 2 == 0L
+    private var recoveryTapCount = 0
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentSettingsBinding.inflate(inflater, container, false)
@@ -84,6 +90,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateDateTime()
         populateSwipeApps()
         populateSwipeDownAction()
+        populateLockdownSettings()
         populateActionHints()
         initClickListeners()
         initObservers()
@@ -107,11 +114,33 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             binding.alignmentSelectLayout.visibility = View.GONE
 
         when (view.id) {
-            R.id.olauncherHiddenApps -> showHiddenApps()
+            R.id.olauncherHiddenApps -> {
+                if (prefs.lockdownModeOn && prefs.lockdownHiddenApps) return
+                showHiddenApps()
+            }
             R.id.moreFeatures -> viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
             R.id.screenTimeOnOff -> viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
             R.id.appInfo -> openAppInfo(requireContext(), Process.myUserHandle(), BuildConfig.APPLICATION_ID)
-            R.id.setLauncher -> viewModel.resetLauncherLiveData.call()
+            R.id.setLauncher -> {
+                if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
+                viewModel.resetLauncherLiveData.call()
+            }
+            R.id.lockdownModeStatus -> toggleLockdownMode()
+            R.id.lockdownPasswordStatus -> handleLockdownPasswordClick()
+            R.id.lockdownAppDrawerStatus -> toggleLockdownSetting({ prefs.lockdownAppDrawer }, { prefs.lockdownAppDrawer = it })
+            R.id.lockdownHoldAppStatus -> toggleLockdownSetting({ prefs.lockdownHoldApp }, { prefs.lockdownHoldApp = it })
+            R.id.lockdownHiddenAppsStatus -> toggleLockdownSetting({ prefs.lockdownHiddenApps }, { prefs.lockdownHiddenApps = it })
+            R.id.lockdownChangeLauncherStatus -> toggleLockdownSetting({ prefs.lockdownChangeLauncher }, { prefs.lockdownChangeLauncher = it })
+            R.id.lockdownPasswordRecoveryStatus -> toggleRecoverySetting()
+            R.id.passwordRecoveryTitle -> onRecoveryTitleTapped()
+            R.id.recoveryTap500Info -> showInfoDialog(getString(R.string.recovery_tap_500), getString(R.string.recovery_tap_500_info))
+            R.id.recoveryTap500Status -> toggleRecoveryMethod({ prefs.recoveryTap500 }, { prefs.recoveryTap500 = it })
+            R.id.recoveryClueInfo -> showInfoDialog(getString(R.string.recovery_clue), getString(R.string.recovery_clue_info))
+            R.id.recoveryClueStatus -> onRecoveryClueToggle()
+            R.id.recoveryEssayInfo -> showInfoDialog(getString(R.string.recovery_essay), getString(R.string.recovery_essay_info))
+            R.id.recoveryEssayStatus -> toggleRecoveryMethod({ prefs.recoveryEssay }, { prefs.recoveryEssay = it })
+            R.id.recoveryPayInfo -> showInfoDialog(getString(R.string.recovery_pay), getString(R.string.recovery_pay_info))
+            R.id.recoveryPayStatus -> onRecoveryPayToggle()
             R.id.toggleLock -> toggleLockMode()
             R.id.homeButtonRecents -> toggleHomeButtonRecents()
             R.id.autoShowKeyboard -> toggleKeyboardText()
@@ -203,6 +232,22 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     private fun initClickListeners() {
         binding.olauncherHiddenApps.setOnClickListener(this)
+        binding.lockdownModeStatus.setOnClickListener(this)
+        binding.lockdownPasswordStatus.setOnClickListener(this)
+        binding.lockdownAppDrawerStatus.setOnClickListener(this)
+        binding.lockdownHoldAppStatus.setOnClickListener(this)
+        binding.lockdownHiddenAppsStatus.setOnClickListener(this)
+        binding.lockdownChangeLauncherStatus.setOnClickListener(this)
+        binding.lockdownPasswordRecoveryStatus.setOnClickListener(this)
+        binding.passwordRecoveryTitle.setOnClickListener(this)
+        binding.recoveryTap500Info.setOnClickListener(this)
+        binding.recoveryTap500Status.setOnClickListener(this)
+        binding.recoveryClueInfo.setOnClickListener(this)
+        binding.recoveryClueStatus.setOnClickListener(this)
+        binding.recoveryEssayInfo.setOnClickListener(this)
+        binding.recoveryEssayStatus.setOnClickListener(this)
+        binding.recoveryPayInfo.setOnClickListener(this)
+        binding.recoveryPayStatus.setOnClickListener(this)
         binding.scrollLayout.setOnClickListener(this)
         binding.appInfo.setOnClickListener(this)
         binding.setLauncher.setOnClickListener(this)
@@ -604,82 +649,4 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             binding.toggleLock.text = getString(
                 if (prefs.lockModeOn && isAccessServiceEnabled(requireContext())) R.string.on
-                else R.string.off
-            )
-        } else {
-            binding.toggleLock.text = getString(
-                if (prefs.lockModeOn) R.string.on
-                else R.string.off
-            )
-        }
-    }
-
-    private fun populateSwipeDownAction() {
-        binding.swipeDownAction.text = when (prefs.swipeDownAction) {
-            Constants.SwipeDownAction.NOTIFICATIONS -> getString(R.string.notifications)
-            else -> getString(R.string.search)
-        }
-    }
-
-    private fun updateSwipeDownAction(swipeDownFor: Int) {
-        if (prefs.swipeDownAction == swipeDownFor) return
-        prefs.swipeDownAction = swipeDownFor
-        populateSwipeDownAction()
-    }
-
-    private fun populateSwipeApps() {
-        binding.swipeLeftApp.text = prefs.appNameSwipeLeft
-        binding.swipeRightApp.text = prefs.appNameSwipeRight
-        if (!prefs.swipeLeftEnabled)
-            binding.swipeLeftApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
-        if (!prefs.swipeRightEnabled)
-            binding.swipeRightApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
-    }
-
-//    private fun populateDigitalWellbeing() {
-//        binding.digitalWellbeing.isVisible = requireContext().isPackageInstalled(Constants.DIGITAL_WELLBEING_PACKAGE_NAME).not()
-//                && requireContext().isPackageInstalled(Constants.DIGITAL_WELLBEING_SAMSUNG_PACKAGE_NAME).not()
-//                && prefs.hideDigitalWellbeing.not()
-//    }
-
-    private fun showAppListIfEnabled(flag: Int) {
-        if ((flag == Constants.FLAG_SET_SWIPE_LEFT_APP) and !prefs.swipeLeftEnabled) {
-            requireContext().showToast(getString(R.string.long_press_to_enable))
-            return
-        }
-        if ((flag == Constants.FLAG_SET_SWIPE_RIGHT_APP) and !prefs.swipeRightEnabled) {
-            requireContext().showToast(getString(R.string.long_press_to_enable))
-            return
-        }
-        viewModel.getAppList(true)
-        findNavController().navigate(
-            R.id.action_settingsFragment_to_appListFragment,
-            bundleOf(Constants.Key.FLAG to flag)
-        )
-    }
-
-    private fun populateActionHints() {
-        if (prefs.aboutClicked.not())
-            binding.aboutOlauncher.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_info, 0)
-        if (viewModel.isOlauncherDefault.value != true) return
-        if (prefs.rateClicked.not() && prefs.toShowHintCounter > Constants.HINT_RATE_US && prefs.toShowHintCounter < Constants.HINT_RATE_US + 100)
-            binding.rate.setCompoundDrawablesWithIntrinsicBounds(0, android.R.drawable.arrow_down_float, 0, 0)
-    }
-
-    private fun populateProMessage() {
-        if (prefs.proMessageShown.not() && prefs.userState == Constants.UserState.SHARE) {
-            prefs.proMessageShown = true
-            viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
-        }
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
-    }
-
-    override fun onDestroy() {
-        viewModel.checkForMessages.call()
-        super.onDestroy()
-    }
-}
+                els

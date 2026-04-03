@@ -218,6 +218,7 @@ class AppDrawerFragment : Fragment() {
         }
 
         binding.recyclerView.layoutManager = linearLayoutManager
+        adapter.longPressEnabled = !(prefs.lockdownModeOn && prefs.lockdownHoldApp)
         binding.recyclerView.adapter = adapter
         binding.recyclerView.addOnScrollListener(getRecyclerViewOnScrollListener())
         binding.recyclerView.itemAnimator = null
@@ -338,8 +339,4 @@ class AppDrawerFragment : Fragment() {
         super.onStop()
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
-    }
-}
+    override fun 

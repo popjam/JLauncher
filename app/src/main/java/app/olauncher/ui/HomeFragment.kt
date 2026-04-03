@@ -93,7 +93,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             R.id.recents -> {}
             R.id.clock -> openClockApp()
             R.id.date -> openCalendarApp()
-            R.id.setDefaultLauncher -> viewModel.resetLauncherLiveData.call()
+            R.id.setDefaultLauncher -> {
+                if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
+                viewModel.resetLauncherLiveData.call()
+            }
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
 
             else -> {
@@ -193,7 +196,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 setHomeAlignment()
             }
             if (binding.firstRunTips.isVisible) return@Observer
-            binding.setDefaultLauncher.isVisible = it.not() && prefs.hideSetDefaultLauncher.not()
+            binding.setDefaultLauncher.isVisible = it.not()
+                    && prefs.hideSetDefaultLauncher.not()
+                    && !(prefs.lockdownModeOn && prefs.lockdownChangeLauncher)
         })
         viewModel.homeAppAlignment.observe(viewLifecycleOwner) {
             setHomeAlignment(it)
@@ -640,7 +645,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
             override fun onSwipeUp() {
                 super.onSwipeUp()
-                showAppList(Constants.FLAG_LAUNCH_APP)
+                if (!(prefs.lockdownModeOn && prefs.lockdownAppDrawer)) showAppList(Constants.FLAG_LAUNCH_APP)
             }
 
             override fun onSwipeDown() {
@@ -688,7 +693,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
             override fun onSwipeUp() {
                 super.onSwipeUp()
-                showAppList(Constants.FLAG_LAUNCH_APP)
+                if (!(prefs.lockdownModeOn && prefs.lockdownAppDrawer)) showAppList(Constants.FLAG_LAUNCH_APP)
             }
 
             override fun onSwipeDown() {
@@ -697,19 +702,4 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
 
             override fun onLongClick(view: View) {
-                super.onLongClick(view)
-                textOnLongClick(view)
-            }
-
-            override fun onClick(view: View) {
-                super.onClick(view)
-                textOnClick(view)
-            }
-        }
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
-    }
-}
+                super.o

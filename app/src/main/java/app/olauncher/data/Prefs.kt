@@ -43,6 +43,20 @@ class Prefs(context: Context) {
     private val LAUNCHER_RESTART_TIMESTAMP = "LAUNCHER_RECREATE_TIMESTAMP"
     private val SHOWN_ON_DAY_OF_YEAR = "SHOWN_ON_DAY_OF_YEAR"
     private val HOME_BUTTON_SHOW_RECENTS = "HOME_BUTTON_SHOW_RECENTS"
+    private val LOCKDOWN_MODE_ON = "LOCKDOWN_MODE_ON"
+    private val LOCKDOWN_PASSWORD_HASH = "LOCKDOWN_PASSWORD_HASH"
+    private val LOCKDOWN_APP_DRAWER = "LOCKDOWN_APP_DRAWER"
+    private val LOCKDOWN_HOLD_APP = "LOCKDOWN_HOLD_APP"
+    private val LOCKDOWN_HIDDEN_APPS = "LOCKDOWN_HIDDEN_APPS"
+    private val LOCKDOWN_CHANGE_LAUNCHER = "LOCKDOWN_CHANGE_LAUNCHER"
+    private val LOCKDOWN_PASSWORD_RECOVERY = "LOCKDOWN_PASSWORD_RECOVERY"
+    private val LOCKDOWN_PASSWORD_PLAINTEXT = "LOCKDOWN_PASSWORD_PLAINTEXT"
+    private val RECOVERY_TAP_500 = "RECOVERY_TAP_500"
+    private val RECOVERY_CLUE = "RECOVERY_CLUE"
+    private val RECOVERY_CLUE_TEXT = "RECOVERY_CLUE_TEXT"
+    private val RECOVERY_ESSAY = "RECOVERY_ESSAY"
+    private val RECOVERY_PAY = "RECOVERY_PAY"
+    private val RECOVERY_PAY_AMOUNT = "RECOVERY_PAY_AMOUNT"
 
     private val APP_NAME_1 = "APP_NAME_1"
     private val APP_NAME_2 = "APP_NAME_2"
@@ -222,6 +236,83 @@ class Prefs(context: Context) {
     var homeButtonShowRecents: Boolean
         get() = prefs.getBoolean(HOME_BUTTON_SHOW_RECENTS, false)
         set(value) = prefs.edit { putBoolean(HOME_BUTTON_SHOW_RECENTS, value).apply() }
+
+    var lockdownModeOn: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_MODE_ON, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_MODE_ON, value).apply() }
+
+    var lockdownPasswordHash: String
+        get() = prefs.getString(LOCKDOWN_PASSWORD_HASH, "").toString()
+        set(value) = prefs.edit { putString(LOCKDOWN_PASSWORD_HASH, value).apply() }
+
+    val isLockdownPasswordSet: Boolean
+        get() = lockdownPasswordHash.isNotEmpty()
+
+    var lockdownAppDrawer: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_APP_DRAWER, true)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_APP_DRAWER, value).apply() }
+
+    var lockdownHoldApp: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_HOLD_APP, true)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_HOLD_APP, value).apply() }
+
+    var lockdownHiddenApps: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_HIDDEN_APPS, true)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_HIDDEN_APPS, value).apply() }
+
+    var lockdownChangeLauncher: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_CHANGE_LAUNCHER, true)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_CHANGE_LAUNCHER, value).apply() }
+
+    var passwordRecoveryEnabled: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_PASSWORD_RECOVERY, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_PASSWORD_RECOVERY, value).apply() }
+
+    var lockdownPasswordPlaintext: String
+        get() = prefs.getString(LOCKDOWN_PASSWORD_PLAINTEXT, "").toString()
+        set(value) = prefs.edit { putString(LOCKDOWN_PASSWORD_PLAINTEXT, value).apply() }
+
+    var recoveryTap500: Boolean
+        get() = prefs.getBoolean(RECOVERY_TAP_500, false)
+        set(value) = prefs.edit { putBoolean(RECOVERY_TAP_500, value).apply() }
+
+    var recoveryClue: Boolean
+        get() = prefs.getBoolean(RECOVERY_CLUE, false)
+        set(value) = prefs.edit { putBoolean(RECOVERY_CLUE, value).apply() }
+
+    var recoveryClueText: String
+        get() = prefs.getString(RECOVERY_CLUE_TEXT, "").toString()
+        set(value) = prefs.edit { putString(RECOVERY_CLUE_TEXT, value).apply() }
+
+    var recoveryEssay: Boolean
+        get() = prefs.getBoolean(RECOVERY_ESSAY, false)
+        set(value) = prefs.edit { putBoolean(RECOVERY_ESSAY, value).apply() }
+
+
+    var recoveryPay: Boolean
+        get() = prefs.getBoolean(RECOVERY_PAY, false)
+        set(value) = prefs.edit { putBoolean(RECOVERY_PAY, value).apply() }
+
+    var recoveryPayAmount: Int
+        get() = prefs.getInt(RECOVERY_PAY_AMOUNT, 0)
+        set(value) = prefs.edit { putInt(RECOVERY_PAY_AMOUNT, value).apply() }
+
+    fun resetLockdownSettings() {
+        lockdownModeOn = false
+        lockdownPasswordHash = ""
+        lockdownPasswordPlaintext = ""
+        lockdownAppDrawer = true
+        lockdownHoldApp = true
+        lockdownHiddenApps = true
+        lockdownChangeLauncher = true
+        passwordRecoveryEnabled = false
+        recoveryTap500 = false
+        recoveryClue = false
+        recoveryClueText = ""
+        recoveryEssay = false
+        recoveryPay = false
+        recoveryPayAmount = 0
+    }
 
     var hiddenApps: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_APPS, mutableSetOf()) as MutableSet<String>
@@ -549,97 +640,4 @@ class Prefs(context: Context) {
         return when (location) {
             1 -> prefs.getString(APP_PACKAGE_1, "").toString()
             2 -> prefs.getString(APP_PACKAGE_2, "").toString()
-            3 -> prefs.getString(APP_PACKAGE_3, "").toString()
-            4 -> prefs.getString(APP_PACKAGE_4, "").toString()
-            5 -> prefs.getString(APP_PACKAGE_5, "").toString()
-            6 -> prefs.getString(APP_PACKAGE_6, "").toString()
-            7 -> prefs.getString(APP_PACKAGE_7, "").toString()
-            8 -> prefs.getString(APP_PACKAGE_8, "").toString()
-            else -> ""
-        }
-    }
-
-    fun getAppActivityClassName(location: Int): String {
-        return when (location) {
-            1 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_1, "").toString()
-            2 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_2, "").toString()
-            3 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_3, "").toString()
-            4 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_4, "").toString()
-            5 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_5, "").toString()
-            6 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_6, "").toString()
-            7 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_7, "").toString()
-            8 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_8, "").toString()
-            else -> ""
-        }
-    }
-
-    fun getAppUser(location: Int): String {
-        return when (location) {
-            1 -> prefs.getString(APP_USER_1, "").toString()
-            2 -> prefs.getString(APP_USER_2, "").toString()
-            3 -> prefs.getString(APP_USER_3, "").toString()
-            4 -> prefs.getString(APP_USER_4, "").toString()
-            5 -> prefs.getString(APP_USER_5, "").toString()
-            6 -> prefs.getString(APP_USER_6, "").toString()
-            7 -> prefs.getString(APP_USER_7, "").toString()
-            8 -> prefs.getString(APP_USER_8, "").toString()
-            else -> ""
-        }
-    }
-
-    fun getShortcutId(location: Int): String {
-        return when (location) {
-            1 -> shortcutId1
-            2 -> shortcutId2
-            3 -> shortcutId3
-            4 -> shortcutId4
-            5 -> shortcutId5
-            6 -> shortcutId6
-            7 -> shortcutId7
-            8 -> shortcutId8
-            else -> ""
-        }
-    }
-
-    fun getIsShortcut(location: Int): Boolean {
-        return when (location) {
-            1 -> isShortcut1
-            2 -> isShortcut2
-            3 -> isShortcut3
-            4 -> isShortcut4
-            5 -> isShortcut5
-            6 -> isShortcut6
-            7 -> isShortcut7
-            8 -> isShortcut8
-            else -> false
-        }
-    }
-
-    fun setAppActivityClassName(location: Int, activityClassName: String) {
-        when (location) {
-            1 -> appActivityClassName1 = activityClassName
-            2 -> appActivityClassName2 = activityClassName
-            3 -> appActivityClassName3 = activityClassName
-            4 -> appActivityClassName4 = activityClassName
-            5 -> appActivityClassName5 = activityClassName
-            6 -> appActivityClassName6 = activityClassName
-            7 -> appActivityClassName7 = activityClassName
-            8 -> appActivityClassName8 = activityClassName
-        }
-    }
-
-    fun updateAppActivityClassName(packageName: String, activityClassName: String) {
-        for (i in 1..8) {
-            if (getAppPackage(i) == packageName) setAppActivityClassName(i, activityClassName)
-        }
-        if (clockAppPackage == packageName) clockAppClassName = activityClassName
-        if (calendarAppPackage == packageName) calendarAppClassName = activityClassName
-        if (screenTimeAppPackage == packageName) screenTimeAppClassName = activityClassName
-        if (appPackageSwipeLeft == packageName) appActivityClassNameSwipeLeft = activityClassName
-        if (appPackageSwipeRight == packageName) appActivityClassNameRight = activityClassName
-    }
-
-    fun getAppRenameLabel(appPackage: String): String = prefs.getString(appPackage, "").toString()
-
-    fun setAppRenameLabel(appPackage: String, renameLabel: String) = prefs.edit { putString(appPackage, renameLabel) }
-}
+            
