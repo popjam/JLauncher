@@ -702,4 +702,19 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
 
             override fun onLongClick(view: View) {
-                super.o
+                super.onLongClick(view)
+                textOnLongClick(view)
+            }
+
+            override fun onClick(view: View) {
+                super.onClick(view)
+                textOnClick(view)
+            }
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}

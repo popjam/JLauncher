@@ -339,4 +339,8 @@ class AppDrawerFragment : Fragment() {
         super.onStop()
     }
 
-    override fun 
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+}

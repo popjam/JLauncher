@@ -649,4 +649,524 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             binding.toggleLock.text = getString(
                 if (prefs.lockModeOn && isAccessServiceEnabled(requireContext())) R.string.on
-                els
+                else R.string.off
+            )
+        } else {
+            binding.toggleLock.text = getString(
+                if (prefs.lockModeOn) R.string.on
+                else R.string.off
+            )
+        }
+    }
+
+    private fun populateSwipeDownAction() {
+        binding.swipeDownAction.text = when (prefs.swipeDownAction) {
+            Constants.SwipeDownAction.NOTIFICATIONS -> getString(R.string.notifications)
+            else -> getString(R.string.search)
+        }
+    }
+
+    private fun updateSwipeDownAction(swipeDownFor: Int) {
+        if (prefs.swipeDownAction == swipeDownFor) return
+        prefs.swipeDownAction = swipeDownFor
+        populateSwipeDownAction()
+    }
+
+    private fun populateSwipeApps() {
+        binding.swipeLeftApp.text = prefs.appNameSwipeLeft
+        binding.swipeRightApp.text = prefs.appNameSwipeRight
+        if (!prefs.swipeLeftEnabled)
+            binding.swipeLeftApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
+        if (!prefs.swipeRightEnabled)
+            binding.swipeRightApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
+    }
+
+//    private fun populateDigitalWellbeing() {
+//        binding.digitalWellbeing.isVisible = requireContext().isPackageInstalled(Constants.DIGITAL_WELLBEING_PACKAGE_NAME).not()
+//                && requireContext().isPackageInstalled(Constants.DIGITAL_WELLBEING_SAMSUNG_PACKAGE_NAME).not()
+//                && prefs.hideDigitalWellbeing.not()
+//    }
+
+    private fun showAppListIfEnabled(flag: Int) {
+        if ((flag == Constants.FLAG_SET_SWIPE_LEFT_APP) and !prefs.swipeLeftEnabled) {
+            requireContext().showToast(getString(R.string.long_press_to_enable))
+            return
+        }
+        if ((flag == Constants.FLAG_SET_SWIPE_RIGHT_APP) and !prefs.swipeRightEnabled) {
+            requireContext().showToast(getString(R.string.long_press_to_enable))
+            return
+        }
+        viewModel.getAppList(true)
+        findNavController().navigate(
+            R.id.action_settingsFragment_to_appListFragment,
+            bundleOf(Constants.Key.FLAG to flag)
+        )
+    }
+
+    private fun populateActionHints() {
+        if (prefs.aboutClicked.not())
+            binding.aboutOlauncher.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_info, 0)
+        if (viewModel.isOlauncherDefault.value != true) return
+        if (prefs.rateClicked.not() && prefs.toShowHintCounter > Constants.HINT_RATE_US && prefs.toShowHintCounter < Constants.HINT_RATE_US + 100)
+            binding.rate.setCompoundDrawablesWithIntrinsicBounds(0, android.R.drawable.arrow_down_float, 0, 0)
+    }
+
+    private fun populateProMessage() {
+        if (prefs.proMessageShown.not() && prefs.userState == Constants.UserState.SHARE) {
+            prefs.proMessageShown = true
+            viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
+        }
+    }
+
+    private fun populateLockdownSettings() {
+        binding.lockdownModeStatus.text = getString(
+            if (prefs.lockdownModeOn) R.string.on else R.string.off
+        )
+        binding.lockdownSettingsContainer.visibility =
+            if (prefs.lockdownModeOn) View.VISIBLE else View.GONE
+        if (prefs.lockdownModeOn) {
+            binding.lockdownPasswordStatus.text = getString(
+                if (prefs.isLockdownPasswordSet) R.string.on else R.string.off
+            )
+            binding.lockdownAppDrawerStatus.text = getString(
+                if (prefs.lockdownAppDrawer) R.string.on else R.string.off
+            )
+            binding.lockdownHoldAppStatus.text = getString(
+                if (prefs.lockdownHoldApp) R.string.on else R.string.off
+            )
+            binding.lockdownHiddenAppsStatus.text = getString(
+                if (prefs.lockdownHiddenApps) R.string.on else R.string.off
+            )
+            binding.lockdownChangeLauncherStatus.text = getString(
+                if (prefs.lockdownChangeLauncher) R.string.on else R.string.off
+            )
+            binding.lockdownPasswordRecoveryStatus.text = getString(
+                if (prefs.passwordRecoveryEnabled) R.string.on else R.string.off
+            )
+        }
+        // Hide set launcher button when restricted
+        if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher)
+            binding.setLauncher.visibility = View.GONE
+        else
+            binding.setLauncher.visibility = View.VISIBLE
+        // Show/hide recovery card
+        binding.passwordRecoveryCard.visibility =
+            if (prefs.lockdownModeOn && prefs.passwordRecoveryEnabled) View.VISIBLE else View.GONE
+        if (prefs.passwordRecoveryEnabled) populateRecoveryStatuses()
+    }
+
+    private fun populateRecoveryStatuses() {
+        binding.recoveryTap500Status.text = getString(if (prefs.recoveryTap500) R.string.on else R.string.off)
+        binding.recoveryClueStatus.text = getString(if (prefs.recoveryClue) R.string.on else R.string.off)
+        binding.recoveryEssayStatus.text = getString(if (prefs.recoveryEssay) R.string.on else R.string.off)
+        binding.recoveryPayStatus.text = getString(if (prefs.recoveryPay) R.string.on else R.string.off)
+    }
+
+    private fun toggleLockdownMode() {
+        if (prefs.lockdownModeOn) {
+            // Turning OFF lockdown
+            if (prefs.isLockdownPasswordSet) {
+                requirePasswordThen {
+                    prefs.resetLockdownSettings()
+                    populateLockdownSettings()
+                }
+            } else {
+                prefs.resetLockdownSettings()
+                populateLockdownSettings()
+            }
+        } else {
+            // Turning ON lockdown — free
+            prefs.lockdownModeOn = true
+            populateLockdownSettings()
+        }
+    }
+
+    private fun toggleLockdownSetting(getter: () -> Boolean, setter: (Boolean) -> Unit) {
+        val currentlyOn = getter()
+        if (currentlyOn) {
+            // Loosening restriction — requires password if set
+            if (prefs.isLockdownPasswordSet) {
+                requirePasswordThen {
+                    setter(false)
+                    populateLockdownSettings()
+                }
+            } else {
+                setter(false)
+                populateLockdownSettings()
+            }
+        } else {
+            // Tightening restriction — free
+            setter(true)
+            populateLockdownSettings()
+        }
+    }
+
+    private fun handleLockdownPasswordClick() {
+        if (prefs.isLockdownPasswordSet) {
+            requirePasswordThen { showPasswordSetOrRemoveDialog() }
+        } else {
+            showPasswordWarningThenSet()
+        }
+    }
+
+    private fun showPasswordWarningThenSet() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.catastrophic_warning))
+            .setMessage(getString(R.string.lockdown_password_warning))
+            .setPositiveButton(getString(R.string.proceed)) { _, _ ->
+                showSetNewPasswordDialog()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showPasswordSetOrRemoveDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.lockdown_mode))
+            .setItems(arrayOf(
+                getString(R.string.change_lockdown_password),
+                getString(R.string.remove_lockdown_password)
+            )) { _, which ->
+                when (which) {
+                    0 -> showSetNewPasswordDialog()
+                    1 -> {
+                        prefs.lockdownPasswordHash = ""
+                        populateLockdownSettings()
+                        requireContext().showToast(getString(R.string.password_removed))
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun showSetNewPasswordDialog() {
+        showPasswordInputDialog(getString(R.string.set_lockdown_password), showGenerate = true) { newPassword ->
+            if (newPassword.length < 4) {
+                requireContext().showToast(getString(R.string.password_too_short))
+                return@showPasswordInputDialog
+            }
+            showPasswordInputDialog(getString(R.string.confirm_password), showGenerate = false) { confirmPassword ->
+                if (newPassword == confirmPassword) {
+                    prefs.lockdownPasswordHash = PasswordHelper.hashPassword(newPassword)
+                    prefs.lockdownPasswordPlaintext = newPassword
+                    populateLockdownSettings()
+                    requireContext().showToast(getString(R.string.password_set_success))
+                } else {
+                    requireContext().showToast(getString(R.string.passwords_do_not_match))
+                }
+            }
+        }
+    }
+
+    private fun requirePasswordThen(action: () -> Unit) {
+        if (!prefs.isLockdownPasswordSet) {
+            action()
+            return
+        }
+        showPasswordInputDialog(getString(R.string.enter_password)) { password ->
+            if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) {
+                action()
+            } else {
+                requireContext().showToast(getString(R.string.password_incorrect))
+            }
+        }
+    }
+
+    private fun showPasswordInputDialog(
+        title: String,
+        showGenerate: Boolean = false,
+        onPasswordEntered: (String) -> Unit,
+    ) {
+        val container = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 16)
+        }
+        val editText = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = getString(R.string.enter_password)
+        }
+        container.addView(editText)
+
+        val toggleRow = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 8, 0, 0)
+        }
+        val eyeCheckbox = android.widget.CheckBox(requireContext()).apply {
+            text = "Show"
+            textSize = 14f
+            setOnCheckedChangeListener { _, isChecked ->
+                editText.inputType = if (isChecked)
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                else
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                editText.setSelection(editText.text.length)
+            }
+        }
+        toggleRow.addView(eyeCheckbox)
+        container.addView(toggleRow)
+
+        val builder = AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setView(container)
+            .setPositiveButton(getString(R.string.okay)) { _, _ ->
+                onPasswordEntered(editText.text.toString())
+            }
+            .setNegativeButton(getString(R.string.close), null)
+        if (showGenerate) {
+            builder.setNeutralButton(getString(R.string.generate_password)) { _, _ ->
+                generateAndSetPassword(onPasswordEntered)
+            }
+        } else if (prefs.passwordRecoveryEnabled) {
+            builder.setNeutralButton(getString(R.string.recover_password)) { _, _ ->
+                showRecoveryOptionsDialog()
+            }
+        }
+        builder.show()
+    }
+
+    private fun generateAndSetPassword(onPasswordEntered: (String) -> Unit) {
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*"
+        val password = (1..32).map { chars.random() }.joinToString("")
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.catastrophic_warning))
+            .setMessage(getString(R.string.generated_password_warning, password))
+            .setPositiveButton(getString(R.string.proceed)) { _, _ ->
+                prefs.lockdownPasswordHash = PasswordHelper.hashPassword(password)
+                prefs.lockdownPasswordPlaintext = password
+                populateLockdownSettings()
+                requireContext().showToast(getString(R.string.password_set_success))
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showRecoveryOptionsDialog() {
+        val methods = mutableListOf<Pair<String, () -> Unit>>()
+        if (prefs.recoveryTap500) methods.add(getString(R.string.recovery_tap_500) to {
+            requireContext().showToast(getString(R.string.recovery_tap_500_info))
+        })
+        if (prefs.recoveryClue) methods.add(getString(R.string.recovery_clue) to { useRecoveryClue() })
+        if (prefs.recoveryEssay) methods.add(getString(R.string.recovery_essay) to { useRecoveryEssay() })
+        if (prefs.recoveryPay) methods.add(getString(R.string.recovery_pay) + " (${payAmounts[prefs.recoveryPayAmount]})" to { useRecoveryPay() })
+
+        if (methods.isEmpty()) {
+            requireContext().showToast(getString(R.string.no_recovery_methods))
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.recover_password))
+            .setItems(methods.map { it.first }.toTypedArray()) { _, which ->
+                methods[which].second()
+            }
+            .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    // --- Password Recovery ---
+
+    private fun toggleRecoverySetting() {
+        if (prefs.passwordRecoveryEnabled) {
+            // Turning off recovery — requires password if set
+            if (prefs.isLockdownPasswordSet) {
+                requirePasswordThen {
+                    prefs.passwordRecoveryEnabled = false
+                    populateLockdownSettings()
+                }
+            } else {
+                prefs.passwordRecoveryEnabled = false
+                populateLockdownSettings()
+            }
+        } else {
+            // Turning on recovery — requires password if set
+            if (prefs.isLockdownPasswordSet) {
+                requirePasswordThen {
+                    prefs.passwordRecoveryEnabled = true
+                    populateLockdownSettings()
+                }
+            } else {
+                prefs.passwordRecoveryEnabled = true
+                populateLockdownSettings()
+            }
+        }
+    }
+
+    private fun toggleRecoveryMethod(getter: () -> Boolean, setter: (Boolean) -> Unit) {
+        if (prefs.isLockdownPasswordSet) {
+            requirePasswordThen {
+                setter(!getter())
+                populateRecoveryStatuses()
+            }
+        } else {
+            setter(!getter())
+            populateRecoveryStatuses()
+        }
+    }
+
+    private fun onRecoveryClueToggle() {
+        if (prefs.recoveryClue) {
+            // Turning off or viewing clue
+            if (prefs.isLockdownPasswordSet) {
+                requirePasswordThen {
+                    prefs.recoveryClue = false
+                    prefs.recoveryClueText = ""
+                    populateRecoveryStatuses()
+                }
+            } else {
+                prefs.recoveryClue = false
+                prefs.recoveryClueText = ""
+                populateRecoveryStatuses()
+            }
+        } else {
+            // Turning on — prompt for clue text
+            val action: () -> Unit = {
+                val editText = EditText(requireContext()).apply {
+                    hint = getString(R.string.enter_clue)
+                    setPadding(48, 32, 48, 32)
+                }
+                AlertDialog.Builder(requireContext())
+                    .setTitle(getString(R.string.enter_clue))
+                    .setView(editText)
+                    .setPositiveButton(getString(R.string.okay)) { _, _ ->
+                        val clue = editText.text.toString().trim()
+                        if (clue.isNotEmpty()) {
+                            prefs.recoveryClue = true
+                            prefs.recoveryClueText = clue
+                            populateRecoveryStatuses()
+                        }
+                    }
+                    .setNegativeButton(getString(R.string.cancel), null)
+                    .show()
+            }
+            if (prefs.isLockdownPasswordSet) requirePasswordThen(action) else action()
+        }
+    }
+
+    private val payAmounts = arrayOf("$3", "$9", "$20", "$50", "$99", "$299")
+
+    private fun onRecoveryPayToggle() {
+        if (prefs.recoveryPay) {
+            if (prefs.isLockdownPasswordSet) {
+                requirePasswordThen {
+                    prefs.recoveryPay = false
+                    prefs.recoveryPayAmount = 0
+                    populateRecoveryStatuses()
+                }
+            } else {
+                prefs.recoveryPay = false
+                prefs.recoveryPayAmount = 0
+                populateRecoveryStatuses()
+            }
+        } else {
+            val action: () -> Unit = {
+                AlertDialog.Builder(requireContext())
+                    .setTitle(getString(R.string.select_amount))
+                    .setItems(payAmounts) { _, which ->
+                        prefs.recoveryPay = true
+                        prefs.recoveryPayAmount = which
+                        populateRecoveryStatuses()
+                    }
+                    .setNegativeButton(getString(R.string.cancel), null)
+                    .show()
+            }
+            if (prefs.isLockdownPasswordSet) requirePasswordThen(action) else action()
+        }
+    }
+
+    private fun onRecoveryTitleTapped() {
+        if (!prefs.isLockdownPasswordSet || !prefs.recoveryTap500) return
+        recoveryTapCount++
+        if (recoveryTapCount >= 500) {
+            recoveryTapCount = 0
+            showPasswordRevealDialog()
+        } else if (recoveryTapCount % 50 == 0) {
+            requireContext().showToast(getString(R.string.recovery_tap_progress, recoveryTapCount))
+        }
+    }
+
+    private fun showPasswordRevealDialog() {
+        val password = prefs.lockdownPasswordPlaintext
+        if (password.isEmpty()) return
+        val textView = TextView(requireContext()).apply {
+            text = password
+            textSize = 20f
+            setPadding(48, 32, 48, 32)
+            setTextIsSelectable(true)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.your_password_is))
+            .setView(textView)
+            .setPositiveButton(getString(R.string.okay), null)
+            .show()
+    }
+
+    private fun showInfoDialog(title: String, message: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(getString(R.string.okay), null)
+            .show()
+    }
+
+    // Recovery usage methods — called from password dialog "Recover password" button
+
+    fun useRecoveryClue() {
+        if (!prefs.recoveryClue || prefs.recoveryClueText.isEmpty()) return
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.your_clue))
+            .setMessage(prefs.recoveryClueText)
+            .setPositiveButton(getString(R.string.okay), null)
+            .show()
+    }
+
+    fun useRecoveryEssay() {
+        if (!prefs.recoveryEssay) return
+        val editText = EditText(requireContext()).apply {
+            hint = getString(R.string.essay_prompt)
+            setPadding(48, 32, 48, 32)
+            maxLines = 10
+            // Disable paste
+            setCustomSelectionActionModeCallback(object : android.view.ActionMode.Callback {
+                override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                    menu?.removeItem(android.R.id.paste)
+                    return true
+                }
+                override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                    menu?.removeItem(android.R.id.paste)
+                    return true
+                }
+                override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?) = false
+                override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
+            })
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.recovery_essay))
+            .setMessage(getString(R.string.essay_prompt))
+            .setView(editText)
+            .setPositiveButton(getString(R.string.okay)) { _, _ ->
+                val text = editText.text.toString()
+                if (text.length >= 500) {
+                    showPasswordRevealDialog()
+                } else {
+                    requireContext().showToast(getString(R.string.essay_too_short, text.length))
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    fun useRecoveryPay() {
+        requireContext().showToast(getString(R.string.recovery_pay_not_available))
+    }
+
+    override fun onDestroyView() {
+        recoveryTapCount = 0
+        super.onDestroyView()
+        _binding = null
+    }
+
+    override fun onDestroy() {
+        viewModel.checkForMessages.call()
+        super.onDestroy()
+    }
+}

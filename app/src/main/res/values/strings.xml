@@ -165,4 +165,48 @@
     <string name="notification_bar">Notification bar</string>
     <string name="private_space">Private space</string>
 
-    <strin
+    <string name="lockdown_mode">Lockdown mode</string>
+    <string name="lockdown_password">Password</string>
+    <string name="lockdown_app_drawer">Restrict app drawer</string>
+    <string name="lockdown_hold_app">Restrict holding app</string>
+    <string name="lockdown_hidden_apps">Restrict hidden app access</string>
+    <string name="lockdown_change_launcher">Restrict changing launcher</string>
+    <string name="set_lockdown_password">Set lockdown password</string>
+    <string name="change_lockdown_password">Change password</string>
+    <string name="remove_lockdown_password">Remove password</string>
+    <string name="enter_password">Enter password</string>
+    <string name="confirm_password">Confirm password</string>
+    <string name="enter_current_password">Enter current password</string>
+    <string name="password_set_success">Lockdown password set</string>
+    <string name="password_removed">Lockdown password removed</string>
+    <string name="password_incorrect">Incorrect password</string>
+    <string name="passwords_do_not_match">Passwords do not match</string>
+    <string name="password_too_short">Password must be at least 4 characters</string>
+    <string name="catastrophic_warning">CATASTROPHIC WARNING</string>
+    <string name="lockdown_password_warning">If you forget your lockdown password, you may permanently lose access to certain phone functions unless JLauncher is removed via Settings, Play Store, or ADB.\n\nPlease consider enabling Password Recovery before setting a password.\n\nAre you sure you want to proceed?</string>
+    <string name="proceed">Proceed</string>
+    <string name="cancel">Cancel</string>
+
+    <string name="password_recovery">Password Recovery</string>
+    <string name="lockdown_password_recovery">Password recovery</string>
+    <string name="recovery_tap_500">Tap 500 times</string>
+    <string name="recovery_tap_500_info">Tap the \'Password Recovery\' header 500 times without leaving the settings screen or turning off the screen. Your password will then be displayed.</string>
+    <string name="recovery_clue">Give me a clue</string>
+    <string name="recovery_clue_info">Set a personal clue when you enable this option. You can view the clue at any time to help you remember your password.</string>
+    <string name="recovery_essay">Write an essay</string>
+    <string name="recovery_essay_info">Write a 500 character essay on why you want your password retrieved. No copy/paste allowed. After submission, your password will be displayed.</string>
+    <string name="recovery_pay">Pay money</string>
+    <string name="recovery_pay_info">Pay a fee to retrieve your password. Choose an amount when enabling this option.</string>
+    <string name="enter_clue">Enter your clue</string>
+    <string name="your_clue">Your clue</string>
+    <string name="essay_prompt">Write a 500 character essay on why you want your password retrieved.</string>
+    <string name="essay_too_short">Essay must be at least 500 characters (%1$d/500)</string>
+    <string name="your_password_is">Your password is:</string>
+    <string name="recovery_tap_progress">%1$d / 500</string>
+    <string name="recovery_pay_not_available">Payment recovery is not yet available</string>
+    <string name="select_amount">Select amount</string>
+    <string name="no_recovery_methods">No recovery methods are enabled</string>
+    <string name="generate_password">Generate random password</string>
+    <string name="generated_password_warning">Your generated password is:\n\n%1$s\n\nThis is the only time you will see it. Make sure you have recovery methods enabled.</string>
+    <string name="recover_password">Recover password</string>
+</resources>

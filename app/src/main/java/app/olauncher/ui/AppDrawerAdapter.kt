@@ -350,4 +350,10 @@ class AppDrawerAdapter(
                     packageManager.getApplicationLabel(
                         packageManager.getApplicationInfo(appPackage, 0)
                     ).toString()
-               
+                }
+            } catch (_: Exception) {
+                "" // As a fallback, display an empty string.
+            }
+        }
+    }
+}
