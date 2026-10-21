@@ -51,7 +51,7 @@ internal open class OnSwipeTouchListener(c: Context?) : OnTouchListener {
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            onSingleTapConfirmed(e)
+            this@OnSwipeTouchListener.onSingleTapConfirmed(e)
             return super.onSingleTapConfirmed(e)
         }
 
