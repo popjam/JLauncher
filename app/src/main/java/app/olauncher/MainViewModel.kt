@@ -443,7 +443,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getTodaysScreenTime() {
-        if (prefs.screenTimeLastUpdated.hasBeenMinutes(1).not()) return
+        // The timestamp outlives this ViewModel (activity recreated, process restarted), so only
+        // skip the refresh when there's already a value to show
+        if (screenTimeMillis.value != null && prefs.screenTimeLastUpdated.hasBeenMinutes(1).not()) return
 
         val eventLogWrapper = EventLogWrapper(
             appContext
