@@ -142,6 +142,35 @@
                         android:singleLine="true" />
                 </FrameLayout>
 
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        style="@style/TextSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:paddingVertical="8dp"
+                        android:text="@string/use_for_a_set_time"
+                        android:textColor="?attr/primaryColor" />
+
+                    <TextView
+                        android:id="@+id/useForStatus"
+                        style="@style/TextSmallBold"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|bottom"
+                        android:layout_marginEnd="4dp"
+                        android:ellipsize="middle"
+                        android:maxWidth="160dp"
+                        android:paddingVertical="8dp"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="8dp"
+                        android:singleLine="true" />
+                </FrameLayout>
+
                 <LinearLayout
                     android:id="@+id/pauseSettingsContainer"
                     android:layout_width="match_parent"
@@ -149,6 +178,7 @@
                     android:orientation="vertical">
 
                     <FrameLayout
+                        android:id="@+id/pauseSecondsRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp">
@@ -193,6 +223,35 @@
 
                         <TextView
                             android:id="@+id/pausedAppsCount"
+                            style="@style/TextSmallBold"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|bottom"
+                            android:layout_marginEnd="4dp"
+                            android:ellipsize="middle"
+                            android:maxWidth="160dp"
+                            android:paddingVertical="8dp"
+                            android:paddingStart="24dp"
+                            android:paddingEnd="8dp"
+                            android:singleLine="true" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp">
+
+                        <TextView
+                            style="@style/TextSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:paddingVertical="8dp"
+                            android:text="@string/apps_opened_elsewhere"
+                            android:textColor="?attr/primaryColor" />
+
+                        <TextView
+                            android:id="@+id/wellnessAnywhere"
                             style="@style/TextSmallBold"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"

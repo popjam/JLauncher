@@ -1,15 +1,27 @@
 package app.olauncher.helper
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import app.olauncher.data.Prefs
 
 /**
- * Wellness "pause before opening": chosen apps show a breathing pause before they open.
+ * Wellness: chosen apps go through a screen before they open, with a breathing pause, a choice of
+ * how long to use the app for, or both.
  *
- * Known addictive apps are added automatically, both when the feature is turned on and the first
+ * Known addictive apps are added automatically, both when a feature is turned on and the first
  * time one installed later is opened. Each is only added once, so removing it from the list sticks.
+ *
+ * Getting through the screen gives the app a pass: until the home screen next shows, or until the
+ * chosen time runs out, when the app is closed. Passes are only touched on the main thread.
  */
 object AppPause {
+
+    private const val UNTIL_HOME = Long.MAX_VALUE
+    private val passes = HashMap<String, Long>()
+    private val timers = HashMap<String, Runnable>()
+    private val handler = Handler(Looper.getMainLooper())
 
     private val ADDICTIVE_PACKAGES = setOf(
         // Reddit and Reddit clients
@@ -51,9 +63,13 @@ object AppPause {
         "co.hinge.app",
     )
 
-    /** Whether opening [packageName] should show the pause. May add a newly installed addictive app. */
-    fun shouldPause(prefs: Prefs, packageName: String): Boolean {
-        if (!prefs.pauseAppsOn) return false
+    /** "Use for" needs the accessibility service to close the app when the time is up. */
+    fun useForActive(prefs: Prefs) = prefs.useForOn && MyAccessibilityService.isRunning
+
+    /** Whether opening [packageName] should show the wellness screen. May add a newly installed addictive app. */
+    fun needsGate(prefs: Prefs, packageName: String): Boolean {
+        if (!prefs.pauseAppsOn && !useForActive(prefs)) return false
+        if (hasPass(packageName)) return false
         if (packageName in prefs.pausedApps) return true
         if (packageName in ADDICTIVE_PACKAGES && packageName !in prefs.pauseAppsReviewed) {
             prefs.pausedApps = prefs.pausedApps + packageName
@@ -76,5 +92,33 @@ object AppPause {
         prefs.pausedApps = if (paused) prefs.pausedApps + packageName else prefs.pausedApps - packageName
         // Counts as reviewed either way, so a removed addictive app isn't added back
         if (packageName in ADDICTIVE_PACKAGES) prefs.pauseAppsReviewed = prefs.pauseAppsReviewed + packageName
+    }
+
+    private fun hasPass(packageName: String): Boolean {
+        val until = passes[packageName] ?: return false
+        return until > SystemClock.elapsedRealtime()
+    }
+
+    /** Lets [packageName] open without the screen, for [minutes] or, if null, until the home screen shows. */
+    fun grantPass(packageName: String, minutes: Int?) {
+        timers.remove(packageName)?.let { handler.removeCallbacks(it) }
+        if (minutes == null) {
+            passes[packageName] = UNTIL_HOME
+            return
+        }
+        val ms = minutes * 60_000L
+        passes[packageName] = SystemClock.elapsedRealtime() + ms
+        val timeUp = Runnable {
+            timers.remove(packageName)
+            passes.remove(packageName)
+            MyAccessibilityService.closeIfShowing(packageName)
+        }
+        timers[packageName] = timeUp
+        handler.postDelayed(timeUp, ms)
+    }
+
+    /** The home screen ends passes that weren't given a time. */
+    fun onHomeShown() {
+        passes.values.removeAll { it == UNTIL_HOME }
     }
 }

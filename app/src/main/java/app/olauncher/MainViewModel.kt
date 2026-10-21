@@ -84,7 +84,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectedApp(appModel: AppModel, flag: Int) {
         if (appModel is AppModel.PrivateSpaceHeader) return
         if ((flag == Constants.FLAG_LAUNCH_APP || flag == Constants.FLAG_HIDDEN_APPS)
-            && AppPause.shouldPause(prefs, appModel.appPackage)
+            && AppPause.needsGate(prefs, appModel.appPackage)
         ) {
             pausedApp = appModel
             // Posted, so it runs after callers like the app drawer have gone back to the home screen
@@ -94,10 +94,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         launchSelectedApp(appModel, flag)
     }
 
-    /** Opens the app behind the pause once it has run its course. */
-    fun openPausedApp() {
+    /** Opens the app behind the pause once it has run its course, for [minutes] if a time was chosen. */
+    fun openPausedApp(minutes: Int?) {
         val appModel = pausedApp ?: return
         pausedApp = null
+        AppPause.grantPass(appModel.appPackage, minutes)
         launchSelectedApp(appModel, Constants.FLAG_LAUNCH_APP)
     }
 

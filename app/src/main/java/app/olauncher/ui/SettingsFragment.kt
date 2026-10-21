@@ -197,6 +197,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
                 viewModel.resetLauncherLiveData.call()
             }
             R.id.pauseAppsStatus -> togglePauseApps()
+            R.id.useForStatus -> toggleUseFor()
+            R.id.wellnessAnywhere -> openWellnessAccessibility()
             R.id.pauseSeconds -> pickPauseSeconds()
             R.id.pausedAppsCount -> loosenLockdown { findNavController().navigate(R.id.action_settingsFragment_to_pausedAppsFragment) }
             R.id.moodPromptStatus -> toggleMoodPrompt()
@@ -324,6 +326,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private fun initClickListeners() {
         binding.olauncherHiddenApps.setOnClickListener(this)
         binding.pauseAppsStatus.setOnClickListener(this)
+        binding.useForStatus.setOnClickListener(this)
+        binding.wellnessAnywhere.setOnClickListener(this)
         binding.pauseSeconds.setOnClickListener(this)
         binding.pausedAppsCount.setOnClickListener(this)
         binding.moodPromptStatus.setOnClickListener(this)
@@ -835,10 +839,46 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     // --- Wellness ---
 
     private fun populateWellnessSettings() {
+        val serviceOn = isAccessServiceEnabled(requireContext())
         binding.pauseAppsStatus.text = getString(if (prefs.pauseAppsOn) R.string.on else R.string.off)
-        binding.pauseSettingsContainer.isVisible = prefs.pauseAppsOn
+        binding.useForStatus.text = getString(
+            when {
+                !prefs.useForOn -> R.string.off
+                serviceOn -> R.string.on
+                else -> R.string.needs_accessibility
+            }
+        )
+        binding.pauseSettingsContainer.isVisible = prefs.pauseAppsOn || prefs.useForOn
+        binding.pauseSecondsRow.isVisible = prefs.pauseAppsOn
         binding.pauseSeconds.text = getString(R.string.seconds_value, prefs.pauseSeconds)
         binding.pausedAppsCount.text = prefs.pausedApps.count { requireContext().isPackageInstalled(it) }.toString()
+        binding.wellnessAnywhere.text = getString(if (serviceOn) R.string.on else R.string.off)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The accessibility service may have been turned on or off in system settings
+        populateWellnessSettings()
+    }
+
+    /** Both features share JLauncher's accessibility service, also used for double tap to lock. */
+    private fun openWellnessAccessibility() {
+        requireContext().showToast(getString(R.string.wellness_needs_accessibility), Toast.LENGTH_LONG)
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    private fun toggleUseFor() {
+        if (prefs.useForOn) {
+            loosenLockdown {
+                prefs.useForOn = false
+                populateWellnessSettings()
+            }
+        } else {
+            prefs.useForOn = true
+            AppPause.addAddictiveApps(requireContext(), prefs)
+            populateWellnessSettings()
+            if (!isAccessServiceEnabled(requireContext())) openWellnessAccessibility()
+        }
     }
 
     /** Like other lockdown settings, anything that weakens the pause needs the password while lockdown is on. */

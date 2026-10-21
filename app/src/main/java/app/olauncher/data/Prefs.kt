@@ -28,6 +28,7 @@ class Prefs(context: Context) {
     private val PAUSED_APPS = "PAUSED_APPS"
     private val PAUSE_APPS_REVIEWED = "PAUSE_APPS_REVIEWED"
     private val PAUSE_SECONDS = "PAUSE_SECONDS"
+    private val USE_FOR_ON = "USE_FOR_ON"
     private val AUTO_SHOW_KEYBOARD = "AUTO_SHOW_KEYBOARD"
     private val KEYBOARD_MESSAGE = "KEYBOARD_MESSAGE"
     private val DAILY_WALLPAPER = "DAILY_WALLPAPER"
@@ -372,6 +373,11 @@ class Prefs(context: Context) {
     var pauseSeconds: Int
         get() = prefs.getInt(PAUSE_SECONDS, 10)
         set(value) = prefs.edit { putInt(PAUSE_SECONDS, value) }
+
+    /** Wellness: ask how long to use a chosen app for, and close it when the time is up. */
+    var useForOn: Boolean
+        get() = prefs.getBoolean(USE_FOR_ON, false)
+        set(value) = prefs.edit { putBoolean(USE_FOR_ON, value) }
 
     var hiddenAppsUpdated: Boolean
         get() = prefs.getBoolean(HIDDEN_APPS_UPDATED, false)
