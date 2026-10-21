@@ -7,7 +7,11 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
 
 class Prefs(context: Context) {
-    private val PREFS_FILENAME = "app.olauncher"
+    companion object {
+        const val FILE_NAME = "app.olauncher"
+    }
+
+    private val PREFS_FILENAME = FILE_NAME
 
     private val FIRST_OPEN = "FIRST_OPEN"
     private val FIRST_OPEN_TIME = "FIRST_OPEN_TIME"

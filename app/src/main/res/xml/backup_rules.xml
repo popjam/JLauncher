@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-   Auto Backup for Android 11 and lower. Only the mood tracker data is backed up;
-   launcher settings are left out because they can hold the lockdown password.
+   Auto Backup for Android 11 and lower: launcher settings and mood tracker data.
    See https://developer.android.com/guide/topics/data/autobackup
 -->
 <full-backup-content>
+    <include
+        domain="sharedpref"
+        path="app.olauncher.xml" />
     <include
         domain="file"
         path="mood/mood_data.json" />

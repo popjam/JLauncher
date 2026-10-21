@@ -1,19 +1,15 @@
 package app.olauncher.data
 
 import android.content.Context
-import android.net.Uri
-import android.provider.DocumentsContract
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
-import java.util.concurrent.Executors
 
 /**
  * Mood + daily usage history, stored as a single JSON file in app storage.
  *
  * Kept out of SharedPreferences on purpose: the accessibility service runs in a separate process
- * and needs to read fresh data, and the file is what gets exported, synced to the backup folder
- * and included in Android Auto Backup (see backup rules).
+ * and needs to read fresh data. [BackupManager] bundles this file with the launcher settings.
  */
 class MoodStore(context: Context) {
 
@@ -41,17 +37,15 @@ class MoodStore(context: Context) {
     }
 
     fun update(block: (Data) -> Unit) {
-        val json = synchronized(LOCK) {
+        synchronized(LOCK) {
             val data = load()
             block(data)
-            val json = toJson(data).toString(2)
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "$FILE_NAME.tmp")
-            tmp.writeText(json)
+            tmp.writeText(toJson(data).toString(2))
             tmp.renameTo(file)
-            json
         }
-        syncToBackupFolder(json)
+        BackupManager.requestSync(appContext)
     }
 
     fun getDay(date: LocalDate): Day? = load().days[date.toString()]
@@ -89,94 +83,29 @@ class MoodStore(context: Context) {
         if (mood != null) data.days[today] = Day(mood, data.days[today]?.usageMs)
     }
 
-    // --- Export / import / backup folder ---
+    // --- Backup ---
 
-    fun exportTo(uri: Uri): Boolean = try {
-        val json = synchronized(LOCK) { toJson(load()).toString(2) }
-        appContext.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
-        true
-    } catch (e: Exception) {
-        e.printStackTrace()
-        false
-    }
-
-    /** Merges days from [uri] into local data. Returns the number of days read, or -1 on failure. */
-    fun importFrom(uri: Uri): Int = try {
-        val text = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
-            ?: throw IllegalStateException("Empty file")
-        val imported = fromJson(JSONObject(text))
-        update { data -> merge(data, imported) }
-        imported.days.size
-    } catch (e: Exception) {
-        e.printStackTrace()
-        -1
+    /** Everything except the backup folder link, which only makes sense on this device. */
+    fun toBackupJson(): JSONObject = synchronized(LOCK) {
+        toJson(load()).apply { remove("backupFolder") }
     }
 
     /**
-     * Links a folder picked with ACTION_OPEN_DOCUMENT_TREE. If it already holds a backup (e.g. after
-     * a reinstall) that is merged in first, then the folder is kept in sync on every change.
-     * Returns the number of days restored, or -1 if the folder couldn't be used.
+     * Merges a backup into local data: moods from the backup win, usage keeps the larger value,
+     * and the prompt settings are taken from the backup. Returns the number of days in the backup.
      */
-    fun setBackupFolder(treeUri: Uri): Int {
-        val existing = findBackupDocument(treeUri)
-        var restored = 0
-        if (existing != null) {
-            restored = importFrom(existing)
-            if (restored < 0) return -1
-        }
-        update { it.backupFolder = treeUri.toString() }
-        return restored
-    }
-
-    fun clearBackupFolder() = update { it.backupFolder = "" }
-
-    private fun syncToBackupFolder(json: String) {
-        val folder = load().backupFolder
-        if (folder.isEmpty()) return
-        IO.execute {
-            try {
-                val treeUri = Uri.parse(folder)
-                val doc = findBackupDocument(treeUri) ?: DocumentsContract.createDocument(
-                    appContext.contentResolver,
-                    DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri)),
-                    "application/json",
-                    BACKUP_FILE_NAME
-                ) ?: return@execute
-                appContext.contentResolver.openOutputStream(doc, "wt")?.use { it.write(json.toByteArray()) }
-            } catch (e: Exception) {
-                e.printStackTrace()
+    fun restoreFrom(json: JSONObject): Int {
+        val backup = fromJson(json)
+        update { data ->
+            backup.days.forEach { (key, day) ->
+                val local = data.days[key]
+                val usage = listOfNotNull(local?.usageMs, day.usageMs).maxOrNull()
+                data.days[key] = Day(day.mood ?: local?.mood, usage)
             }
+            if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
+            if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
         }
-    }
-
-    private fun findBackupDocument(treeUri: Uri): Uri? {
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            treeUri, DocumentsContract.getTreeDocumentId(treeUri)
-        )
-        return try {
-            appContext.contentResolver.query(
-                childrenUri,
-                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-                null, null, null
-            )?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    if (cursor.getString(1) == BACKUP_FILE_NAME)
-                        return DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(0))
-                }
-                null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    private fun merge(into: Data, from: Data) {
-        from.days.forEach { (key, day) ->
-            val local = into.days[key]
-            val usage = listOfNotNull(local?.usageMs, day.usageMs).maxOrNull()
-            into.days[key] = Day(day.mood ?: local?.mood, usage)
-        }
+        return backup.days.size
     }
 
     private fun toJson(data: Data) = JSONObject().apply {
@@ -215,7 +144,6 @@ class MoodStore(context: Context) {
     companion object {
         const val DIR = "mood"
         const val FILE_NAME = "mood_data.json"
-        const val BACKUP_FILE_NAME = "jlauncher_mood.json"
         const val DEFAULT_PROMPT_MINUTES = 21 * 60
 
         const val HAPPY = 0
@@ -225,7 +153,6 @@ class MoodStore(context: Context) {
         const val SAD = 4
 
         private val LOCK = Any()
-        private val IO = Executors.newSingleThreadExecutor()
 
         fun moodForUsage(usageMs: Long): Int {
             val minutes = usageMs / 60_000

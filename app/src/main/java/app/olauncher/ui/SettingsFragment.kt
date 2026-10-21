@@ -14,7 +14,9 @@ import android.provider.DocumentsContract
 import android.text.InputType
 import android.text.format.DateFormat
 import androidx.activity.result.contract.ActivityResultContracts
+import app.olauncher.data.BackupManager
 import app.olauncher.data.MoodStore
+import org.json.JSONObject
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -69,17 +71,17 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private var recoveryTapCount = 0
     private val moodStore by lazy { MoodStore(requireContext()) }
 
-    private val exportMoodData = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    private val exportBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@registerForActivityResult
-        requireContext().showToast(getString(if (moodStore.exportTo(uri)) R.string.data_exported else R.string.export_failed))
+        val exported = BackupManager.export(requireContext(), uri)
+        requireContext().showToast(getString(if (exported) R.string.backup_exported else R.string.export_failed))
     }
 
-    private val importMoodData = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val importBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        val days = moodStore.importFrom(uri)
-        requireContext().showToast(
-            if (days >= 0) getString(R.string.days_imported, days) else getString(R.string.import_failed)
-        )
+        val backup = BackupManager.read(requireContext(), uri)
+        if (backup == null) requireContext().showToast(getString(R.string.import_failed))
+        else restoreBackup(backup)
     }
 
     private val pickBackupFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -91,15 +93,28 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        val restored = moodStore.setBackupFolder(uri)
-        requireContext().showToast(
-            when {
-                restored < 0 -> getString(R.string.backup_folder_failed)
-                restored > 0 -> getString(R.string.backup_restored, restored)
-                else -> getString(R.string.backup_folder_set)
+        val linkFolder = {
+            BackupManager.setBackupFolder(requireContext(), uri)
+            populateBackupSettings()
+        }
+        val existing = BackupManager.findBackupInFolder(requireContext(), uri)
+            ?.let { BackupManager.read(requireContext(), it) }
+        if (existing == null) {
+            linkFolder()
+            requireContext().showToast(getString(R.string.backup_folder_set))
+            return@registerForActivityResult
+        }
+        // Don't silently overwrite either side: ask which one to keep
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.backup_folder))
+            .setMessage(getString(R.string.backup_found_message))
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.restore)) { _, _ -> restoreBackup(existing, linkFolder) }
+            .setNegativeButton(getString(R.string.keep_current)) { _, _ ->
+                linkFolder()
+                requireContext().showToast(getString(R.string.backup_folder_set))
             }
-        )
-        populateMoodSettings()
+            .show()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -135,6 +150,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateSwipeDownAction()
         populateLockdownSettings()
         populateMoodSettings()
+        populateBackupSettings()
         populateActionHints()
         initClickListeners()
         initObservers()
@@ -171,14 +187,14 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             }
             R.id.moodPromptStatus -> toggleMoodPrompt()
             R.id.moodPromptTime -> pickMoodPromptTime()
-            R.id.moodBackupFolder -> onBackupFolderClicked()
-            R.id.moodExport -> {
+            R.id.backupFolder -> onBackupFolderClicked()
+            R.id.backupExport -> {
                 viewModel.isPickingFile = true
-                exportMoodData.launch(MoodStore.BACKUP_FILE_NAME)
+                exportBackup.launch(BackupManager.BACKUP_FILE_NAME)
             }
-            R.id.moodImport -> {
+            R.id.backupImport -> {
                 viewModel.isPickingFile = true
-                importMoodData.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+                importBackup.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             }
             R.id.lockdownModeStatus -> toggleLockdownMode()
             R.id.lockdownPasswordStatus -> handleLockdownPasswordClick()
@@ -289,9 +305,9 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.olauncherHiddenApps.setOnClickListener(this)
         binding.moodPromptStatus.setOnClickListener(this)
         binding.moodPromptTime.setOnClickListener(this)
-        binding.moodBackupFolder.setOnClickListener(this)
-        binding.moodExport.setOnClickListener(this)
-        binding.moodImport.setOnClickListener(this)
+        binding.backupFolder.setOnClickListener(this)
+        binding.backupExport.setOnClickListener(this)
+        binding.backupImport.setOnClickListener(this)
         binding.lockdownModeStatus.setOnClickListener(this)
         binding.lockdownPasswordStatus.setOnClickListener(this)
         binding.lockdownAppDrawerStatus.setOnClickListener(this)
@@ -786,8 +802,23 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         val time = LocalTime.of(data.promptMinutes / 60, data.promptMinutes % 60)
         val pattern = if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a"
         binding.moodPromptTime.text = time.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-        binding.moodBackupFolder.text = if (data.backupFolder.isEmpty()) getString(R.string.off)
-        else backupFolderName(data.backupFolder)
+    }
+
+    // --- Backup ---
+
+    private fun populateBackupSettings() {
+        val folder = BackupManager.backupFolder(requireContext())
+        binding.backupFolder.text = if (folder.isEmpty()) getString(R.string.off) else backupFolderName(folder)
+    }
+
+    /** Replaces settings with a backup. Needs the lockdown password, since it could loosen lockdown. */
+    private fun restoreBackup(backup: JSONObject, afterRestore: () -> Unit = {}) {
+        requirePasswordThen {
+            BackupManager.restore(requireContext(), backup)
+            afterRestore()
+            requireContext().showToast(getString(R.string.backup_restored))
+            requireActivity().recreate()
+        }
     }
 
     private fun backupFolderName(treeUri: String): String = try {
@@ -842,7 +873,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     }
 
     private fun onBackupFolderClicked() {
-        if (moodStore.load().backupFolder.isEmpty()) {
+        if (BackupManager.backupFolder(requireContext()).isEmpty()) {
             launchBackupFolderPicker()
             return
         }
@@ -852,8 +883,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
                 when (which) {
                     0 -> launchBackupFolderPicker()
                     1 -> {
-                        moodStore.clearBackupFolder()
-                        populateMoodSettings()
+                        BackupManager.setBackupFolder(requireContext(), null)
+                        populateBackupSettings()
                     }
                 }
             }

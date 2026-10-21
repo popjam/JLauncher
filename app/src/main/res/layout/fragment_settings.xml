@@ -172,6 +172,27 @@
                         android:singleLine="true" />
                 </FrameLayout>
 
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    style="@style/TextLarge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/backup"
+                    android:textColor="?attr/primaryColor" />
+
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -187,7 +208,7 @@
                         android:textColor="?attr/primaryColor" />
 
                     <TextView
-                        android:id="@+id/moodBackupFolder"
+                        android:id="@+id/backupFolder"
                         style="@style/TextSmallBold"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -202,25 +223,25 @@
                 </FrameLayout>
 
                 <TextView
-                    android:id="@+id/moodExport"
+                    android:id="@+id/backupExport"
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_marginTop="4dp"
                     android:paddingVertical="8dp"
-                    android:text="@string/export_data"
+                    android:text="@string/export_backup"
                     android:textColor="?attr/primaryColor" />
 
                 <TextView
-                    android:id="@+id/moodImport"
+                    android:id="@+id/backupImport"
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_marginTop="4dp"
                     android:paddingVertical="8dp"
-                    android:text="@string/import_data"
+                    android:text="@string/import_backup"
                     android:textColor="?attr/primaryColor" />
 
             </LinearLayout>

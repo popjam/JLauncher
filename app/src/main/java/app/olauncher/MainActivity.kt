@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.findNavController
+import app.olauncher.data.BackupManager
 import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.ActivityMainBinding
@@ -105,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         initClickListeners()
         initObservers(viewModel)
         viewModel.getAppList()
+        BackupManager.watchSettings(this)
         setupOrientation()
 
         window.addFlags(FLAG_LAYOUT_NO_LIMITS)
@@ -134,6 +136,8 @@ class MainActivity : AppCompatActivity() {
         isResumed = true
         viewModel.isPrivateSpaceToggling = false
         viewModel.isPickingFile = false
+        // Picks up mood answers made from the accessibility service's process
+        BackupManager.requestSync(this)
     }
 
     override fun onStop() {
