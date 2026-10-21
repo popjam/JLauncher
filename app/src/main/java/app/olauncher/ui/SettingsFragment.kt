@@ -41,6 +41,7 @@ import app.olauncher.R
 import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentSettingsBinding
+import app.olauncher.helper.AppPause
 import app.olauncher.helper.animateAlpha
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.getColorFromAttr
@@ -49,6 +50,7 @@ import app.olauncher.helper.isDarkThemeOn
 import app.olauncher.helper.isEinkDisplay
 import app.olauncher.helper.PasswordHelper
 import app.olauncher.helper.isOlauncherDefault
+import app.olauncher.helper.isPackageInstalled
 import app.olauncher.helper.isTablet
 import app.olauncher.helper.openAppInfo
 import app.olauncher.helper.openUrl
@@ -156,6 +158,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateSwipeApps()
         populateSwipeDownAction()
         populateLockdownSettings()
+        populateWellnessSettings()
         populateMoodSettings()
         populateBackupSettings()
         populateActionHints()
@@ -193,6 +196,9 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
                 if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
                 viewModel.resetLauncherLiveData.call()
             }
+            R.id.pauseAppsStatus -> togglePauseApps()
+            R.id.pauseSeconds -> pickPauseSeconds()
+            R.id.pausedAppsCount -> loosenLockdown { findNavController().navigate(R.id.action_settingsFragment_to_pausedAppsFragment) }
             R.id.moodPromptStatus -> toggleMoodPrompt()
             R.id.moodPromptTime -> pickMoodPromptTime()
             R.id.backupFolder -> onBackupFolderClicked()
@@ -317,6 +323,9 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     private fun initClickListeners() {
         binding.olauncherHiddenApps.setOnClickListener(this)
+        binding.pauseAppsStatus.setOnClickListener(this)
+        binding.pauseSeconds.setOnClickListener(this)
+        binding.pausedAppsCount.setOnClickListener(this)
         binding.moodPromptStatus.setOnClickListener(this)
         binding.moodPromptTime.setOnClickListener(this)
         binding.backupFolder.setOnClickListener(this)
@@ -821,6 +830,48 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             prefs.proMessageShown = true
             viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
         }
+    }
+
+    // --- Wellness ---
+
+    private fun populateWellnessSettings() {
+        binding.pauseAppsStatus.text = getString(if (prefs.pauseAppsOn) R.string.on else R.string.off)
+        binding.pauseSettingsContainer.isVisible = prefs.pauseAppsOn
+        binding.pauseSeconds.text = getString(R.string.seconds_value, prefs.pauseSeconds)
+        binding.pausedAppsCount.text = prefs.pausedApps.count { requireContext().isPackageInstalled(it) }.toString()
+    }
+
+    /** Like other lockdown settings, anything that weakens the pause needs the password while lockdown is on. */
+    private fun loosenLockdown(action: () -> Unit) {
+        if (prefs.lockdownModeOn) requirePasswordThen(action) else action()
+    }
+
+    private fun togglePauseApps() {
+        if (prefs.pauseAppsOn) {
+            loosenLockdown {
+                prefs.pauseAppsOn = false
+                populateWellnessSettings()
+            }
+        } else {
+            prefs.pauseAppsOn = true
+            AppPause.addAddictiveApps(requireContext(), prefs)
+            populateWellnessSettings()
+        }
+    }
+
+    private fun pickPauseSeconds() {
+        val options = intArrayOf(5, 10, 15, 20, 30, 45, 60)
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.pause_length))
+            .setItems(options.map { getString(R.string.seconds_value, it) }.toTypedArray()) { _, which ->
+                val seconds = options[which]
+                val apply = {
+                    prefs.pauseSeconds = seconds
+                    populateWellnessSettings()
+                }
+                if (seconds < prefs.pauseSeconds) loosenLockdown(apply) else apply()
+            }
+            .show()
     }
 
     // --- Mood tracker ---

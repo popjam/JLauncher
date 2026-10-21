@@ -98,6 +98,122 @@
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="12dp"
                 android:layout_marginTop="12dp"
+                android:animateLayoutChanges="true"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    style="@style/TextLarge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/wellness"
+                    android:textColor="?attr/primaryColor" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        style="@style/TextSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:paddingVertical="8dp"
+                        android:text="@string/pause_before_opening"
+                        android:textColor="?attr/primaryColor" />
+
+                    <TextView
+                        android:id="@+id/pauseAppsStatus"
+                        style="@style/TextSmallBold"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|bottom"
+                        android:layout_marginEnd="4dp"
+                        android:ellipsize="middle"
+                        android:maxWidth="160dp"
+                        android:paddingVertical="8dp"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="8dp"
+                        android:singleLine="true" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:id="@+id/pauseSettingsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp">
+
+                        <TextView
+                            style="@style/TextSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:paddingVertical="8dp"
+                            android:text="@string/pause_length"
+                            android:textColor="?attr/primaryColor" />
+
+                        <TextView
+                            android:id="@+id/pauseSeconds"
+                            style="@style/TextSmallBold"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|bottom"
+                            android:layout_marginEnd="4dp"
+                            android:ellipsize="middle"
+                            android:maxWidth="160dp"
+                            android:paddingVertical="8dp"
+                            android:paddingStart="24dp"
+                            android:paddingEnd="8dp"
+                            android:singleLine="true" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp">
+
+                        <TextView
+                            style="@style/TextSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:paddingVertical="8dp"
+                            android:text="@string/paused_apps"
+                            android:textColor="?attr/primaryColor" />
+
+                        <TextView
+                            android:id="@+id/pausedAppsCount"
+                            style="@style/TextSmallBold"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end|bottom"
+                            android:layout_marginEnd="4dp"
+                            android:ellipsize="middle"
+                            android:maxWidth="160dp"
+                            android:paddingVertical="8dp"
+                            android:paddingStart="24dp"
+                            android:paddingEnd="8dp"
+                            android:singleLine="true" />
+                    </FrameLayout>
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/rounded_rect_shade_color"
                 android:orientation="vertical"
                 android:padding="12dp">

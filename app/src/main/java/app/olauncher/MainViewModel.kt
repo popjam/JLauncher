@@ -20,6 +20,7 @@ import androidx.work.WorkManager
 import app.olauncher.data.AppModel
 import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
+import app.olauncher.helper.AppPause
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.WallpaperWorker
 import app.olauncher.helper.formattedTimeSpent
@@ -74,9 +75,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val checkForMessages = SingleLiveEvent<Unit?>()
     val resetLauncherLiveData = SingleLiveEvent<Unit?>()
     val showRecentApps = SingleLiveEvent<Unit?>()
+    val showPause = SingleLiveEvent<Unit?>()
+
+    /** App waiting behind the wellness pause; opened with [openPausedApp]. */
+    var pausedApp: AppModel? = null
+        private set
 
     fun selectedApp(appModel: AppModel, flag: Int) {
         if (appModel is AppModel.PrivateSpaceHeader) return
+        if ((flag == Constants.FLAG_LAUNCH_APP || flag == Constants.FLAG_HIDDEN_APPS)
+            && AppPause.shouldPause(prefs, appModel.appPackage)
+        ) {
+            pausedApp = appModel
+            // Posted, so it runs after callers like the app drawer have gone back to the home screen
+            showPause.postValue(Unit)
+            return
+        }
+        launchSelectedApp(appModel, flag)
+    }
+
+    /** Opens the app behind the pause once it has run its course. */
+    fun openPausedApp() {
+        val appModel = pausedApp ?: return
+        pausedApp = null
+        launchSelectedApp(appModel, Constants.FLAG_LAUNCH_APP)
+    }
+
+    fun cancelPausedApp() {
+        pausedApp = null
+    }
+
+    private fun launchSelectedApp(appModel: AppModel, flag: Int) {
         when (flag) {
             Constants.FLAG_LAUNCH_APP -> {
                 when (appModel) {

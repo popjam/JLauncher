@@ -239,6 +239,18 @@
     <string name="turn_off">Turn off</string>
     <string name="previous_month">Previous month</string>
     <string name="next_month">Next month</string>
+
+    <string name="wellness">Wellness</string>
+    <string name="pause_before_opening">Pause before opening</string>
+    <string name="pause_length">Pause length</string>
+    <string name="paused_apps">Paused apps</string>
+    <string name="paused_apps_description">These apps make you wait and breathe before they open.</string>
+    <string name="seconds_value">%1$d s</string>
+    <string name="take_a_breath">Take a breath</string>
+    <string name="breathe_in">Breathe in</string>
+    <string name="breathe_out">Breathe out</string>
+    <string name="open_app">Open</string>
+    <string name="open_app_in">Open in %1$d</string>
     <string-array name="mood_names">
         <item>Happy</item>
         <item>Mildly happy</item>

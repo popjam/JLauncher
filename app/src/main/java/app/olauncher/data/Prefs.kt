@@ -24,6 +24,10 @@ class Prefs(context: Context) {
     private val HOME_APPS_NUM = "HOME_APPS_NUM"
     private val HOME_PAGES = "HOME_PAGES"
     private val HOME_PAGE = "HOME_PAGE"
+    private val PAUSE_APPS_ON = "PAUSE_APPS_ON"
+    private val PAUSED_APPS = "PAUSED_APPS"
+    private val PAUSE_APPS_REVIEWED = "PAUSE_APPS_REVIEWED"
+    private val PAUSE_SECONDS = "PAUSE_SECONDS"
     private val AUTO_SHOW_KEYBOARD = "AUTO_SHOW_KEYBOARD"
     private val KEYBOARD_MESSAGE = "KEYBOARD_MESSAGE"
     private val DAILY_WALLPAPER = "DAILY_WALLPAPER"
@@ -349,6 +353,25 @@ class Prefs(context: Context) {
     var hiddenApps: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_APPS, mutableSetOf()) as MutableSet<String>
         set(value) = prefs.edit { putStringSet(HIDDEN_APPS, value).apply() }
+
+    /** Wellness: make chosen apps wait [pauseSeconds] before opening. */
+    var pauseAppsOn: Boolean
+        get() = prefs.getBoolean(PAUSE_APPS_ON, false)
+        set(value) = prefs.edit { putBoolean(PAUSE_APPS_ON, value) }
+
+    /** Package names that get the pause. Copies, since the set SharedPreferences returns mustn't be changed. */
+    var pausedApps: Set<String>
+        get() = prefs.getStringSet(PAUSED_APPS, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(PAUSED_APPS, value.toSet()) }
+
+    /** Known addictive apps already added (or deliberately removed), so they aren't added again. */
+    var pauseAppsReviewed: Set<String>
+        get() = prefs.getStringSet(PAUSE_APPS_REVIEWED, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(PAUSE_APPS_REVIEWED, value.toSet()) }
+
+    var pauseSeconds: Int
+        get() = prefs.getInt(PAUSE_SECONDS, 10)
+        set(value) = prefs.edit { putInt(PAUSE_SECONDS, value) }
 
     var hiddenAppsUpdated: Boolean
         get() = prefs.getBoolean(HIDDEN_APPS_UPDATED, false)

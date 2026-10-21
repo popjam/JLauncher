@@ -193,6 +193,10 @@ class MainActivity : AppCompatActivity() {
         viewModel.checkForMessages.observe(this) {
             checkForMessages()
         }
+        viewModel.showPause.observe(this) {
+            if (navController.currentDestination?.id != R.id.pauseFragment)
+                navController.navigate(R.id.action_global_pauseFragment)
+        }
         viewModel.showDialog.observe(this) {
             when (it) {
                 Constants.Dialog.ABOUT -> {

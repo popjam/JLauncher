@@ -66,6 +66,35 @@
             app:exitAnim="@anim/fade_exit"
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
+        <action
+            android:id="@+id/action_settingsFragment_to_pausedAppsFragment"
+            app:destination="@id/pausedAppsFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
     </fragment>
+
+    <fragment
+        android:id="@+id/pausedAppsFragment"
+        android:name="app.olauncher.ui.PausedAppsFragment"
+        android:label="PausedAppsFragment"
+        tools:layout="@layout/fragment_paused_apps" />
+
+    <!-- Wellness pause before opening an app; always shown over the home screen -->
+    <fragment
+        android:id="@+id/pauseFragment"
+        android:name="app.olauncher.ui.PauseFragment"
+        android:label="PauseFragment"
+        tools:layout="@layout/fragment_pause" />
+
+    <action
+        android:id="@+id/action_global_pauseFragment"
+        app:destination="@id/pauseFragment"
+        app:enterAnim="@anim/fade_enter"
+        app:exitAnim="@anim/fade_exit"
+        app:popEnterAnim="@anim/fade_enter"
+        app:popExitAnim="@anim/fade_exit"
+        app:popUpTo="@id/mainFragment" />
 
 </navigation>
