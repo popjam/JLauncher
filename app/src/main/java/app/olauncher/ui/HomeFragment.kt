@@ -761,28 +761,37 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             override fun onDoubleClick() {
                 super.onDoubleClick()
                 if (!prefs.lockModeOn) return
+                // The first tap already turned the page; put it back before locking
+                if (lastPageStep != 0) changePage(-lastPageStep)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
                     binding.lock.performClick()
                 else
                     lockPhone()
             }
 
-            // With double tap to lock on, wait until the tap can't be the start of a double tap
-            override fun onClick(e: MotionEvent) {
-                if (!prefs.lockModeOn) changePageFromTap(e.x)
-            }
+            // Every tap turns the page straight away, so rapid taps turn as many pages
+            override fun onClick(e: MotionEvent) = changePageFromTap(e.x)
 
-            override fun onSingleTapConfirmed(e: MotionEvent) {
-                if (prefs.lockModeOn) changePageFromTap(e.x)
+            // With double tap to lock on, the second tap locks instead
+            override fun onSecondTap(e: MotionEvent) {
+                if (!prefs.lockModeOn) changePageFromTap(e.x)
             }
         }
     }
 
+    /** Last page change, so a double tap to lock can undo the page turn of its first tap. */
+    private var lastPageStep = 0
+
     /** Tapping the left half shows the previous page and the right half the next, wrapping at the ends. */
     private fun changePageFromTap(x: Float) {
+        changePage(if (x < binding.mainLayout.width / 2f) -1 else 1)
+    }
+
+    private fun changePage(step: Int) {
         val pages = prefs.homePages
+        lastPageStep = 0
         if (pages < 2) return
-        val step = if (x < binding.mainLayout.width / 2f) -1 else 1
+        lastPageStep = step
         prefs.homePage = (prefs.homePage + step + pages) % pages
         // Only the home apps differ between pages, so leave the clock and screen time alone
         hideHomeApps()

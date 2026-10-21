@@ -50,9 +50,10 @@ internal open class OnSwipeTouchListener(c: Context?) : OnTouchListener {
             return super.onSingleTapUp(e)
         }
 
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            this@OnSwipeTouchListener.onSingleTapConfirmed(e)
-            return super.onSingleTapConfirmed(e)
+        // The second tap of a double tap never reaches onSingleTapUp, so report it here
+        override fun onDoubleTapEvent(e: MotionEvent): Boolean {
+            if (e.actionMasked == MotionEvent.ACTION_UP) onSecondTap(e)
+            return super.onDoubleTapEvent(e)
         }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -113,7 +114,7 @@ internal open class OnSwipeTouchListener(c: Context?) : OnTouchListener {
     open fun onTripleClick() {}
     open fun onClick() {}
     open fun onClick(e: MotionEvent) {}
-    open fun onSingleTapConfirmed(e: MotionEvent) {}
+    open fun onSecondTap(e: MotionEvent) {}
 
     init {
         gestureDetector = GestureDetector(c, GestureListener())
