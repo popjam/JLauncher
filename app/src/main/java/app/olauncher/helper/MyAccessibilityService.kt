@@ -41,7 +41,6 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
-        Prefs(applicationContext).lockModeOn = true
         super.onServiceConnected()
         registerScreenReceiver()
         if ((getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive)

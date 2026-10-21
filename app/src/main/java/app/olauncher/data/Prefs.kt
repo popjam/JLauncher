@@ -20,6 +20,7 @@ class Prefs(context: Context) {
     private val FIRST_HIDE = "FIRST_HIDE"
     private val USER_STATE = "USER_STATE"
     private val LOCK_MODE = "LOCK_MODE"
+    private val LOCK_MODE_PENDING = "LOCK_MODE_PENDING"
     private val HOME_APPS_NUM = "HOME_APPS_NUM"
     private val HOME_PAGES = "HOME_PAGES"
     private val HOME_PAGE = "HOME_PAGE"
@@ -164,6 +165,11 @@ class Prefs(context: Context) {
     var lockModeOn: Boolean
         get() = prefs.getBoolean(LOCK_MODE, false)
         set(value) = prefs.edit { putBoolean(LOCK_MODE, value).apply() }
+
+    /** Double tap to lock was turned on while the accessibility service was off; finish once it's enabled. */
+    var lockModePending: Boolean
+        get() = prefs.getBoolean(LOCK_MODE_PENDING, false)
+        set(value) = prefs.edit { putBoolean(LOCK_MODE_PENDING, value).apply() }
 
     var autoShowKeyboard: Boolean
         get() = prefs.getBoolean(AUTO_SHOW_KEYBOARD, true)

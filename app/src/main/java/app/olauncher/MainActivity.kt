@@ -28,6 +28,7 @@ import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.hasBeenDays
 import app.olauncher.helper.hasBeenHours
 import app.olauncher.helper.hasBeenMinutes
+import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.isDarkThemeOn
 import app.olauncher.helper.isDaySince
 import app.olauncher.helper.isDefaultLauncher
@@ -136,6 +137,10 @@ class MainActivity : AppCompatActivity() {
         isResumed = true
         viewModel.isPrivateSpaceToggling = false
         viewModel.isPickingFile = false
+        if (prefs.lockModePending && isAccessServiceEnabled(this)) {
+            prefs.lockModePending = false
+            prefs.lockModeOn = true
+        }
         // Picks up mood answers made from the accessibility service's process
         BackupManager.requestSync(this)
     }

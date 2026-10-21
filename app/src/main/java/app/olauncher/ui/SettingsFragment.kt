@@ -524,7 +524,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     private fun openAccessibilityService() {
         toggleAccessibilityVisibility(false)
-        // prefs.lockModeOn = true
+        // Turned on in MainActivity.onResume once the service is enabled
+        if (!isAccessServiceEnabled(requireContext())) prefs.lockModePending = true
         populateLockSettings()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
