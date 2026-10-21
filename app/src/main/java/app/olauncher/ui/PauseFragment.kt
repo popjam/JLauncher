@@ -36,6 +36,7 @@ class PauseFragment : Fragment() {
         val prefs = Prefs(requireContext())
         screen = PauseScreen(
             binding,
+            app.appPackage,
             app.appLabel,
             pauseSeconds = if (prefs.pauseAppsOn) prefs.pauseSeconds else null,
             askUseFor = AppPause.useForActive(prefs),

@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.ContextThemeWrapper
@@ -15,7 +16,6 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
-import androidx.appcompat.app.AppCompatDelegate
 import app.olauncher.MainActivity
 import app.olauncher.R
 import app.olauncher.data.Prefs
@@ -104,8 +104,11 @@ class MyAccessibilityService : AccessibilityService() {
                 }
             }
             val binding = FragmentPauseBinding.inflate(LayoutInflater.from(context), root, true)
+            // Solid black, so none of the app shows through (the launcher's own shade is see-through)
+            binding.root.setBackgroundColor(Color.BLACK)
             val screen = PauseScreen(
                 binding,
+                pkg,
                 appLabel(pkg),
                 pauseSeconds = if (prefs.pauseAppsOn) prefs.pauseSeconds else null,
                 askUseFor = AppPause.useForActive(prefs),
@@ -121,7 +124,7 @@ class MyAccessibilityService : AccessibilityService() {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT
+                PixelFormat.OPAQUE
             )
             (getSystemService(Context.WINDOW_SERVICE) as WindowManager).addView(root, params)
             gateView = root
@@ -165,15 +168,10 @@ class MyAccessibilityService : AccessibilityService() {
         pkg
     }
 
-    /** Applies the launcher's own light/dark choice, which may differ from the system's. */
+    /** Always the dark theme, whatever the launcher uses, so the text reads on the black overlay. */
     private fun themedContext(): Context {
         val config = Configuration(resources.configuration)
-        val nightMask = when (Prefs(this).appTheme) {
-            AppCompatDelegate.MODE_NIGHT_YES -> Configuration.UI_MODE_NIGHT_YES
-            AppCompatDelegate.MODE_NIGHT_NO -> Configuration.UI_MODE_NIGHT_NO
-            else -> config.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        }
-        config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMask
+        config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_YES
         return ContextThemeWrapper(createConfigurationContext(config), R.style.AppTheme)
     }
 

@@ -4,11 +4,17 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.os.Build
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.core.view.isVisible
 import app.olauncher.R
 import app.olauncher.databinding.FragmentPauseBinding
+import app.olauncher.helper.appUsagePermissionGranted
+import app.olauncher.helper.usageStats.EventLogWrapper
+import java.util.Calendar
+import kotlin.concurrent.thread
+import kotlin.math.roundToInt
 
 /**
  * The wellness screen in [binding]: a breathing pause of [pauseSeconds] (skipped when null), then,
@@ -19,6 +25,7 @@ import app.olauncher.databinding.FragmentPauseBinding
  */
 class PauseScreen(
     private val binding: FragmentPauseBinding,
+    private val packageName: String,
     private val appLabel: String,
     private val pauseSeconds: Int?,
     private val askUseFor: Boolean,
@@ -61,7 +68,8 @@ class PauseScreen(
             showUseFor()
             return
         }
-        binding.pauseAppName.text = appLabel
+        binding.pauseAppName.text = context.getString(R.string.really_use_app, appLabel)
+        showShareOfToday()
         binding.pauseOpen.isEnabled = false
         binding.pauseOpen.alpha = 0.3f
         startBreathing()
@@ -84,6 +92,35 @@ class PauseScreen(
         binding.pauseOpen.text = context.getString(R.string.open_app)
         binding.pauseOpen.isEnabled = true
         binding.pauseOpen.alpha = 1f
+    }
+
+    /** Shows the app's share of today's screen time. Reading the usage log is slow, so it runs off the main thread. */
+    private fun showShareOfToday() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !context.appUsagePermissionGranted()) return
+        thread {
+            val percent = try {
+                val startOfDay = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                val events = EventLogWrapper(context)
+                val stats = events.aggregateForegroundStats(
+                    events.getForegroundStatsByTimestamps(startOfDay, System.currentTimeMillis())
+                )
+                val total = events.aggregateSimpleUsageStats(stats)
+                val app = stats.filter { it.applicationId == packageName }.sumOf { it.timeUsed }
+                if (total > 0) (app * 100f / total).roundToInt() else 0
+            } catch (e: Exception) {
+                e.printStackTrace()
+                return@thread
+            }
+            binding.root.post {
+                binding.pauseUsage.text = context.getString(R.string.spent_today_on_app, percent, appLabel)
+                binding.pauseUsage.isVisible = true
+            }
+        }
     }
 
     /** Swaps the breathing pause for the time choice, on the same card. */

@@ -249,6 +249,8 @@
     <string name="paused_apps_description">These apps go through the wellness screen before they open.</string>
     <string name="needs_accessibility">Needs accessibility</string>
     <string name="wellness_needs_accessibility">Turn on JLauncher here so it can catch apps opened from links or recent apps, and close apps when time is up</string>
+    <string name="really_use_app">Do you really want to use %1$s?</string>
+    <string name="spent_today_on_app">You have spent %1$d%% of today on %2$s</string>
     <string name="use_for_question">How long do you want to use %1$s for?</string>
     <string name="minutes_short">%1$dm</string>
     <string name="time_up">Time\'s up for %1$s</string>
