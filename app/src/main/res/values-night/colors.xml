@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--Mood faces, brighter shades for dark theme-->
+    <color name="moodHappy">#43A047</color>
+    <color name="moodMildlyHappy">#9CCC65</color>
+    <color name="moodNeutral">#FDD835</color>
+    <color name="moodMildlySad">#FB8C00</color>
+    <color name="moodSad">#E53935</color>
+</resources>

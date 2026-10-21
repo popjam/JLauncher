@@ -209,4 +209,37 @@
     <string name="generate_password">Generate random password</string>
     <string name="generated_password_warning">Your generated password is:\n\n%1$s\n\nThis is the only time you will see it. Make sure you have recovery methods enabled.</string>
     <string name="recover_password">Recover password</string>
+
+    <string name="mood_tracker">Mood tracker</string>
+    <string name="mood">Mood</string>
+    <string name="usage">Usage</string>
+    <string name="today">Today</string>
+    <string name="how_are_you_feeling">How are you feeling?</string>
+    <string name="daily_mood_prompt">Daily mood prompt</string>
+    <string name="prompt_time">Prompt time</string>
+    <string name="backup_folder">Backup folder</string>
+    <string name="export_data">Export data</string>
+    <string name="import_data">Import data</string>
+    <string name="usage_line">Usage %1$s</string>
+    <string name="no_data">No data</string>
+    <string name="mood_prompt_accessibility">To show the prompt over other apps, turn on JLauncher\'s accessibility service.\n\nOtherwise it will appear when you return to the home screen.</string>
+    <string name="open_settings">Open settings</string>
+    <string name="data_exported">Data exported</string>
+    <string name="export_failed">Export failed</string>
+    <string name="days_imported">%1$d days imported</string>
+    <string name="import_failed">Import failed</string>
+    <string name="backup_folder_set">Backup folder set</string>
+    <string name="backup_restored">Restored %1$d days from backup</string>
+    <string name="backup_folder_failed">Couldn\'t use that folder</string>
+    <string name="change_folder">Change folder</string>
+    <string name="turn_off">Turn off</string>
+    <string name="previous_month">Previous month</string>
+    <string name="next_month">Next month</string>
+    <string-array name="mood_names">
+        <item>Happy</item>
+        <item>Mildly happy</item>
+        <item>Neutral</item>
+        <item>Mildly sad</item>
+        <item>Sad</item>
+    </string-array>
 </resources>

@@ -24,7 +24,20 @@
             app:exitAnim="@anim/fade_exit"
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
+        <action
+            android:id="@+id/action_mainFragment_to_moodFragment"
+            app:destination="@id/moodFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
     </fragment>
+
+    <fragment
+        android:id="@+id/moodFragment"
+        android:name="app.olauncher.ui.MoodFragment"
+        android:label="MoodFragment"
+        tools:layout="@layout/fragment_mood" />
 
     <fragment
         android:id="@+id/appListFragment"

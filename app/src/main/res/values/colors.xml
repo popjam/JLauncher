@@ -28,4 +28,11 @@
     <color name="blackInverseTrans80">#CCFFFFFF</color>
     <color name="blackInverseTrans90">#E6FFFFFF</color>
 
+    <!--Mood faces, darker shades for light theme-->
+    <color name="moodHappy">#2E7D32</color>
+    <color name="moodMildlyHappy">#558B2F</color>
+    <color name="moodNeutral">#B28704</color>
+    <color name="moodMildlySad">#D84315</color>
+    <color name="moodSad">#C62828</color>
+
 </resources>

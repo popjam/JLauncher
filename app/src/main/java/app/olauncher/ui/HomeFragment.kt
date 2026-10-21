@@ -29,9 +29,12 @@ import app.olauncher.MainViewModel
 import app.olauncher.R
 import app.olauncher.data.AppModel
 import app.olauncher.data.Constants
+import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
+import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.appUsagePermissionGranted
+import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.expandNotificationDrawer
 import app.olauncher.helper.getChangedAppTheme
@@ -85,6 +88,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         viewModel.isOlauncherDefault()
         if (prefs.showStatusBar) showStatusBar()
         else hideStatusBar()
+        showMoodPromptIfDue()
     }
 
     override fun onClick(view: View) {
@@ -98,6 +102,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 viewModel.resetLauncherLiveData.call()
             }
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
+            R.id.moodAvatar -> openMoodTracker()
 
             else -> {
                 try { // Launch app
@@ -209,6 +214,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         viewModel.screenTimeValue.observe(viewLifecycleOwner) {
             it?.let { binding.tvScreenTime.text = it }
         }
+        viewModel.screenTimeMillis.observe(viewLifecycleOwner) {
+            it ?: return@observe
+            binding.moodAvatar.mood = MoodStore.moodForUsage(it)
+            binding.moodAvatar.visibility = View.VISIBLE
+        }
+        binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {
             binding.recents.performClick()
         }
@@ -238,6 +249,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.setDefaultLauncher.setOnLongClickListener(this)
         binding.tvScreenTime.setOnClickListener(this)
         binding.tvScreenTime.setOnLongClickListener(this)
+        binding.moodAvatar.setOnClickListener(this)
     }
 
     private fun setHomeAlignment(horizontalGravity: Int = prefs.homeAlignment) {
@@ -274,10 +286,13 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun populateScreenTime() {
-        if (requireContext().appUsagePermissionGranted().not()) return
+        if (requireContext().appUsagePermissionGranted().not()) {
+            binding.screenTimeLayout.visibility = View.GONE
+            return
+        }
 
         viewModel.getTodaysScreenTime()
-        binding.tvScreenTime.visibility = View.VISIBLE
+        binding.screenTimeLayout.visibility = View.VISIBLE
 
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val horizontalMargin = if (isLandscape) 64.dpToPx() else 10.dpToPx()
@@ -295,8 +310,42 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             marginEnd = horizontalMargin
             gravity = if (prefs.homeAlignment == Gravity.END) Gravity.START else Gravity.END
         }
-        binding.tvScreenTime.layoutParams = params
-        binding.tvScreenTime.setPadding(10.dpToPx())
+        binding.screenTimeLayout.layoutParams = params
+        binding.tvScreenTime.setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 10.dpToPx())
+    }
+
+    /** Keeps the avatar + screen time column vertically centred on the time and date. */
+    private fun alignScreenTimeWithDateTime() {
+        val binding = _binding ?: return
+        val dateTime = binding.dateTimeLayout
+        val screenTime = binding.screenTimeLayout
+        if (!screenTime.isVisible || !dateTime.isVisible || dateTime.height == 0) return
+        val top = (dateTime.top + (dateTime.height - screenTime.height) / 2).coerceAtLeast(0)
+        val params = screenTime.layoutParams as FrameLayout.LayoutParams
+        if (params.topMargin != top) {
+            params.topMargin = top
+            screenTime.layoutParams = params
+        }
+    }
+
+    private fun openMoodTracker() {
+        try {
+            findNavController().navigate(R.id.action_mainFragment_to_moodFragment)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** Fallback when the accessibility service can't show the prompt over other apps. */
+    private fun showMoodPromptIfDue() {
+        if (isAccessServiceEnabled(requireContext())) return
+        val moodStore = MoodStore(requireContext())
+        if (!moodStore.isPromptDue()) return
+        MoodPrompt.bind(binding.moodPrompt.root) { mood ->
+            moodStore.answerPrompt(mood)
+            binding.moodPrompt.root.visibility = View.GONE
+        }
+        binding.moodPrompt.root.visibility = View.VISIBLE
     }
 
     private fun populateHomeScreen(appCountUpdated: Boolean) {

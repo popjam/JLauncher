@@ -32,10 +32,16 @@ import app.olauncher.helper.isPackageInstalled
 import app.olauncher.helper.isPrivateSpaceLocked
 import app.olauncher.helper.showToast
 import app.olauncher.helper.usageStats.EventLogWrapper
+import app.olauncher.data.MoodStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
+
+private const val USAGE_HISTORY_DAYS = 7
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext by lazy { application.applicationContext }
@@ -51,6 +57,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val launcherResetFailed = MutableLiveData<Boolean>()
     val homeAppAlignment = MutableLiveData<Int>()
     val screenTimeValue = MutableLiveData<String>()
+    val screenTimeMillis = MutableLiveData<Long>()
+    private val moodStore by lazy { MoodStore(appContext) }
 
     val privateSpaceApps = MutableLiveData<List<AppModel>?>()
     val privateSpaceLocked = MutableLiveData<Boolean>()
@@ -58,6 +66,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Suppress backToHomeScreen during Private Space lock/unlock auth
     var isPrivateSpaceToggling = false
+    // Set while a system file/folder picker is open, so Settings isn't closed underneath it
+    var isPickingFile = false
 
     val showDialog = SingleLiveEvent<String>()
     val checkForMessages = SingleLiveEvent<Unit?>()
@@ -455,7 +465,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         val viewTimeSpent = appContext.formattedTimeSpent(timeSpent)
         screenTimeValue.postValue(viewTimeSpent)
+        screenTimeMillis.postValue(timeSpent)
         prefs.screenTimeLastUpdated = endTime
+        moodStore.setUsage(LocalDate.now(), timeSpent)
+        refreshRecentUsage(eventLogWrapper)
+    }
+
+    /**
+     * Android keeps only about a week of detailed usage events, so the mood tracker stores each day's
+     * total itself. Today's value is saved on every refresh; this re-reads the last few full days so
+     * time spent after the last refresh of a day is not lost. Runs at most once an hour.
+     */
+    private fun refreshRecentUsage(eventLogWrapper: EventLogWrapper) {
+        if (prefs.usageHistoryLastUpdated.hasBeenMinutes(60).not()) return
+        prefs.usageHistoryLastUpdated = System.currentTimeMillis()
+        viewModelScope.launch(Dispatchers.IO) {
+            val zone = ZoneId.systemDefault()
+            for (daysAgo in 1..USAGE_HISTORY_DAYS) {
+                try {
+                    val day = LocalDate.now().minusDays(daysAgo.toLong())
+                    val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+                    val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+                    val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
+                        eventLogWrapper.aggregateForegroundStats(
+                            eventLogWrapper.getForegroundStatsByTimestamps(start, end)
+                        )
+                    )
+                    if (timeSpent > 0) moodStore.setUsage(day, timeSpent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 
     fun getPrivateSpaceAppList() {

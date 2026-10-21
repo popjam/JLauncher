@@ -8,7 +8,16 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.app.TimePickerDialog
+import android.net.Uri
+import android.provider.DocumentsContract
 import android.text.InputType
+import android.text.format.DateFormat
+import androidx.activity.result.contract.ActivityResultContracts
+import app.olauncher.data.MoodStore
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -58,6 +67,40 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private val binding get() = _binding!!
     private val showPentastic = System.currentTimeMillis() % 2 == 0L
     private var recoveryTapCount = 0
+    private val moodStore by lazy { MoodStore(requireContext()) }
+
+    private val exportMoodData = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri ?: return@registerForActivityResult
+        requireContext().showToast(getString(if (moodStore.exportTo(uri)) R.string.data_exported else R.string.export_failed))
+    }
+
+    private val importMoodData = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        val days = moodStore.importFrom(uri)
+        requireContext().showToast(
+            if (days >= 0) getString(R.string.days_imported, days) else getString(R.string.import_failed)
+        )
+    }
+
+    private val pickBackupFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri ?: return@registerForActivityResult
+        try {
+            requireContext().contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        val restored = moodStore.setBackupFolder(uri)
+        requireContext().showToast(
+            when {
+                restored < 0 -> getString(R.string.backup_folder_failed)
+                restored > 0 -> getString(R.string.backup_restored, restored)
+                else -> getString(R.string.backup_folder_set)
+            }
+        )
+        populateMoodSettings()
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentSettingsBinding.inflate(inflater, container, false)
@@ -91,6 +134,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateSwipeApps()
         populateSwipeDownAction()
         populateLockdownSettings()
+        populateMoodSettings()
         populateActionHints()
         initClickListeners()
         initObservers()
@@ -124,6 +168,17 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             R.id.setLauncher -> {
                 if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
                 viewModel.resetLauncherLiveData.call()
+            }
+            R.id.moodPromptStatus -> toggleMoodPrompt()
+            R.id.moodPromptTime -> pickMoodPromptTime()
+            R.id.moodBackupFolder -> onBackupFolderClicked()
+            R.id.moodExport -> {
+                viewModel.isPickingFile = true
+                exportMoodData.launch(MoodStore.BACKUP_FILE_NAME)
+            }
+            R.id.moodImport -> {
+                viewModel.isPickingFile = true
+                importMoodData.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             }
             R.id.lockdownModeStatus -> toggleLockdownMode()
             R.id.lockdownPasswordStatus -> handleLockdownPasswordClick()
@@ -232,6 +287,11 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     private fun initClickListeners() {
         binding.olauncherHiddenApps.setOnClickListener(this)
+        binding.moodPromptStatus.setOnClickListener(this)
+        binding.moodPromptTime.setOnClickListener(this)
+        binding.moodBackupFolder.setOnClickListener(this)
+        binding.moodExport.setOnClickListener(this)
+        binding.moodImport.setOnClickListener(this)
         binding.lockdownModeStatus.setOnClickListener(this)
         binding.lockdownPasswordStatus.setOnClickListener(this)
         binding.lockdownAppDrawerStatus.setOnClickListener(this)
@@ -716,6 +776,88 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             prefs.proMessageShown = true
             viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
         }
+    }
+
+    // --- Mood tracker ---
+
+    private fun populateMoodSettings() {
+        val data = moodStore.load()
+        binding.moodPromptStatus.text = getString(if (data.promptEnabled) R.string.on else R.string.off)
+        val time = LocalTime.of(data.promptMinutes / 60, data.promptMinutes % 60)
+        val pattern = if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a"
+        binding.moodPromptTime.text = time.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        binding.moodBackupFolder.text = if (data.backupFolder.isEmpty()) getString(R.string.off)
+        else backupFolderName(data.backupFolder)
+    }
+
+    private fun backupFolderName(treeUri: String): String = try {
+        // Tree document ids look like "primary:Documents/JLauncher"
+        DocumentsContract.getTreeDocumentId(Uri.parse(treeUri)).substringAfter(':').substringAfterLast('/')
+            .ifEmpty { getString(R.string.on) }
+    } catch (e: Exception) {
+        getString(R.string.on)
+    }
+
+    private fun toggleMoodPrompt() {
+        val enable = !moodStore.load().promptEnabled
+        moodStore.update { it.promptEnabled = enable }
+        populateMoodSettings()
+        if (!enable) return
+
+        val askForScreenTime = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !requireContext().appUsagePermissionGranted())
+                viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
+        }
+        if (isAccessServiceEnabled(requireContext())) {
+            askForScreenTime()
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.daily_mood_prompt))
+            .setMessage(getString(R.string.mood_prompt_accessibility))
+            .setPositiveButton(getString(R.string.open_settings)) { _, _ ->
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+            .setNegativeButton(getString(R.string.not_now)) { _, _ -> askForScreenTime() }
+            .show()
+    }
+
+    private fun pickMoodPromptTime() {
+        val minutes = moodStore.load().promptMinutes
+        TimePickerDialog(
+            requireContext(),
+            { _, hour, minute ->
+                moodStore.update { it.promptMinutes = hour * 60 + minute }
+                populateMoodSettings()
+            },
+            minutes / 60,
+            minutes % 60,
+            DateFormat.is24HourFormat(requireContext())
+        ).show()
+    }
+
+    private fun launchBackupFolderPicker() {
+        viewModel.isPickingFile = true
+        pickBackupFolder.launch(null)
+    }
+
+    private fun onBackupFolderClicked() {
+        if (moodStore.load().backupFolder.isEmpty()) {
+            launchBackupFolderPicker()
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.backup_folder))
+            .setItems(arrayOf(getString(R.string.change_folder), getString(R.string.turn_off))) { _, which ->
+                when (which) {
+                    0 -> launchBackupFolderPicker()
+                    1 -> {
+                        moodStore.clearBackupFolder()
+                        populateMoodSettings()
+                    }
+                }
+            }
+            .show()
     }
 
     private fun populateLockdownSettings() {
