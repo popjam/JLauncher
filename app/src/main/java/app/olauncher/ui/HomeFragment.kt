@@ -8,6 +8,8 @@ import android.content.res.Configuration
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -36,12 +38,12 @@ import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
 import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.appUsagePermissionGranted
-import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.expandNotificationDrawer
 import app.olauncher.helper.getChangedAppTheme
 import app.olauncher.helper.getUserHandleFromString
 import app.olauncher.helper.isPackageInstalled
+import app.olauncher.helper.isPackageStillInstalled
 import app.olauncher.helper.openAlarmApp
 import app.olauncher.helper.openCalendar
 import app.olauncher.helper.openCameraApp
@@ -52,6 +54,8 @@ import app.olauncher.helper.showToast
 import app.olauncher.listener.OnSwipeTouchListener
 import app.olauncher.listener.ViewSwipeTouchListener
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 
@@ -91,6 +95,30 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         if (prefs.showStatusBar) showStatusBar()
         else hideStatusBar()
         showMoodPromptIfDue()
+        scheduleMidnightRefresh()
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(midnightRefresh)
+        super.onPause()
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** The date and today's screen time only refresh on resume, so roll them over if home is open at midnight. */
+    private val midnightRefresh = Runnable {
+        if (_binding == null) return@Runnable
+        populateDateTime()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted())
+            viewModel.getTodaysScreenTime(force = true)
+        scheduleMidnightRefresh()
+    }
+
+    private fun scheduleMidnightRefresh() {
+        handler.removeCallbacks(midnightRefresh)
+        val nextMidnight = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        // A second late, so "today" has definitely changed
+        handler.postDelayed(midnightRefresh, nextMidnight - System.currentTimeMillis() + 1000)
     }
 
     override fun onClick(view: View) {
@@ -342,11 +370,14 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
     }
 
-    /** Fallback when the accessibility service can't show the prompt over other apps. */
+    /** The daily mood prompt only appears here, when returning to the home screen. */
     private fun showMoodPromptIfDue() {
-        if (isAccessServiceEnabled(requireContext())) return
         val moodStore = MoodStore(requireContext())
-        if (!moodStore.isPromptDue()) return
+        if (!moodStore.isPromptDue()) {
+            // E.g. today's mood was set from the mood tracker instead
+            binding.moodPrompt.root.visibility = View.GONE
+            return
+        }
         MoodPrompt.bind(binding.moodPrompt.root) { mood ->
             moodStore.answerPrompt(mood)
             binding.moodPrompt.root.visibility = View.GONE
@@ -456,14 +487,18 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 textView.text = ""
                 return false
             } catch (e: Exception) {
+                // Can't check right now (e.g. not the default launcher, or the profile is locked); keep it
                 e.printStackTrace()
-                textView.text = ""
-                return false
+                textView.text = appName
+                return true
             }
         }
 
-        // Regular app check
-        if (isPackageInstalled(requireContext(), packageName, userString)) {
+        // Regular app check. Apps mid-update or in a paused profile have no launchable activity for a
+        // moment but are still installed, so only clear the slot once the app is really gone.
+        if (isPackageInstalled(requireContext(), packageName, userString)
+            || isPackageStillInstalled(requireContext(), packageName, userString)
+        ) {
             textView.text = appName
             return true
         }
@@ -730,11 +765,6 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                     binding.lock.performClick()
                 else
                     lockPhone()
-            }
-
-            override fun onClick() {
-                super.onClick()
-                viewModel.checkForMessages.call()
             }
 
             // With double tap to lock on, wait until the tap can't be the start of a double tap

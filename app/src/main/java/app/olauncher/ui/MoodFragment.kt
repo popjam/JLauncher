@@ -67,7 +67,7 @@ class MoodFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Data can change while away, e.g. the prompt was answered from the overlay
+        // Data can change while away, e.g. today's usage was refreshed
         data = moodStore.load()
         render()
     }

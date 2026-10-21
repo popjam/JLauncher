@@ -105,9 +105,15 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             return@registerForActivityResult
         }
         // Don't silently overwrite either side: ask which one to keep
+        val savedAt = BackupManager.savedAt(existing)?.let {
+            "\n\n" + getString(
+                R.string.backup_saved_on,
+                java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(it)
+            )
+        }.orEmpty()
         AlertDialog.Builder(requireContext())
             .setTitle(getString(R.string.backup_folder))
-            .setMessage(getString(R.string.backup_found_message))
+            .setMessage(getString(R.string.backup_found_message) + savedAt)
             .setCancelable(false)
             .setPositiveButton(getString(R.string.restore)) { _, _ -> restoreBackup(existing, linkFolder) }
             .setNegativeButton(getString(R.string.keep_current)) { _, _ ->
@@ -831,7 +837,11 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     private fun populateBackupSettings() {
         val folder = BackupManager.backupFolder(requireContext())
-        binding.backupFolder.text = if (folder.isEmpty()) getString(R.string.off) else backupFolderName(folder)
+        binding.backupFolder.text = when {
+            folder.isEmpty() -> getString(R.string.off)
+            BackupManager.isFolderFailing(requireContext()) -> getString(R.string.backup_not_saving)
+            else -> backupFolderName(folder)
+        }
     }
 
     /** Replaces settings with a backup. Needs the lockdown password, since it could loosen lockdown. */
@@ -858,22 +868,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateMoodSettings()
         if (!enable) return
 
-        val askForScreenTime = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !requireContext().appUsagePermissionGranted())
-                viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
-        }
-        if (isAccessServiceEnabled(requireContext())) {
-            askForScreenTime()
-            return
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.daily_mood_prompt))
-            .setMessage(getString(R.string.mood_prompt_accessibility))
-            .setPositiveButton(getString(R.string.open_settings)) { _, _ ->
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-            .setNegativeButton(getString(R.string.not_now)) { _, _ -> askForScreenTime() }
-            .show()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !requireContext().appUsagePermissionGranted())
+            viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
     }
 
     private fun pickMoodPromptTime() {

@@ -141,8 +141,8 @@ class MainActivity : AppCompatActivity() {
             prefs.lockModePending = false
             prefs.lockModeOn = true
         }
-        // Picks up mood answers made from the accessibility service's process
-        BackupManager.requestSync(this)
+        // Backs up the day's usage, which doesn't trigger a backup itself
+        BackupManager.syncIfStale(this)
     }
 
     override fun onStop() {

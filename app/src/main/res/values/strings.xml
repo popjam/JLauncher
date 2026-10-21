@@ -220,8 +220,6 @@
     <string name="prompt_time">Prompt time</string>
     <string name="usage_line">Usage %1$s</string>
     <string name="no_data">No data</string>
-    <string name="mood_prompt_accessibility">To show the prompt over other apps, turn on JLauncher\'s accessibility service.\n\nOtherwise it will appear when you return to the home screen.</string>
-    <string name="open_settings">Open settings</string>
 
     <string name="backup">Backup</string>
     <string name="backup_folder">Backup folder</string>
@@ -233,6 +231,8 @@
     <string name="backup_folder_set">Backup folder set</string>
     <string name="backup_restored">Backup restored</string>
     <string name="backup_found_message">This folder already has a JLauncher backup.\n\nRestore it and replace your current settings, or keep your current settings and overwrite the backup?</string>
+    <string name="backup_saved_on">Backup saved %1$s</string>
+    <string name="backup_not_saving">Not saving</string>
     <string name="restore">Restore</string>
     <string name="keep_current">Keep current</string>
     <string name="change_folder">Change folder</string>

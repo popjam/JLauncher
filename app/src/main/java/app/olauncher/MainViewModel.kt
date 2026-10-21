@@ -39,6 +39,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 
 private const val USAGE_HISTORY_DAYS = 7
@@ -442,61 +443,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         homeAppAlignment.value = prefs.homeAlignment
     }
 
-    fun getTodaysScreenTime() {
+    private val screenTimeLoading = AtomicBoolean(false)
+
+    /** [force] skips the once-a-minute limit, e.g. when the day rolls over. */
+    fun getTodaysScreenTime(force: Boolean = false) {
         // The timestamp outlives this ViewModel (activity recreated, process restarted), so only
         // skip the refresh when there's already a value to show
-        if (screenTimeMillis.value != null && prefs.screenTimeLastUpdated.hasBeenMinutes(1).not()) return
+        if (!force && screenTimeMillis.value != null && prefs.screenTimeLastUpdated.hasBeenMinutes(1).not()) return
+        if (!screenTimeLoading.compareAndSet(false, true)) return
 
-        val eventLogWrapper = EventLogWrapper(
-            appContext
-        )
-        // Start of today in millis
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        // Reading the day's usage events can take a while on a busy day, so keep it off the main thread
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val eventLogWrapper = EventLogWrapper(appContext)
+                // Start of today in millis
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val startTime = calendar.timeInMillis
+                val endTime = System.currentTimeMillis()
+
+                val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
+                    eventLogWrapper.aggregateForegroundStats(
+                        eventLogWrapper.getForegroundStatsByTimestamps(startTime, endTime)
+                    )
+                )
+                screenTimeValue.postValue(appContext.formattedTimeSpent(timeSpent))
+                screenTimeMillis.postValue(timeSpent)
+                prefs.screenTimeLastUpdated = endTime
+                moodStore.setUsage(LocalDate.now(), timeSpent)
+                refreshRecentUsage(eventLogWrapper)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                screenTimeLoading.set(false)
+            }
         }
-        val startTime = calendar.timeInMillis
-        val endTime = System.currentTimeMillis()
-
-        val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
-            eventLogWrapper.aggregateForegroundStats(
-                eventLogWrapper.getForegroundStatsByTimestamps(startTime, endTime)
-            )
-        )
-        val viewTimeSpent = appContext.formattedTimeSpent(timeSpent)
-        screenTimeValue.postValue(viewTimeSpent)
-        screenTimeMillis.postValue(timeSpent)
-        prefs.screenTimeLastUpdated = endTime
-        moodStore.setUsage(LocalDate.now(), timeSpent)
-        refreshRecentUsage(eventLogWrapper)
     }
 
     /**
      * Android keeps only about a week of detailed usage events, so the mood tracker stores each day's
      * total itself. Today's value is saved on every refresh; this re-reads the last few full days so
-     * time spent after the last refresh of a day is not lost. Runs at most once an hour.
+     * time spent after the last refresh of a day is not lost. Runs at most once an hour, on the
+     * caller's background thread.
      */
     private fun refreshRecentUsage(eventLogWrapper: EventLogWrapper) {
         if (prefs.usageHistoryLastUpdated.hasBeenMinutes(60).not()) return
         prefs.usageHistoryLastUpdated = System.currentTimeMillis()
-        viewModelScope.launch(Dispatchers.IO) {
-            val zone = ZoneId.systemDefault()
-            for (daysAgo in 1..USAGE_HISTORY_DAYS) {
-                try {
-                    val day = LocalDate.now().minusDays(daysAgo.toLong())
-                    val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
-                    val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
-                    val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
-                        eventLogWrapper.aggregateForegroundStats(
-                            eventLogWrapper.getForegroundStatsByTimestamps(start, end)
-                        )
+        val zone = ZoneId.systemDefault()
+        for (daysAgo in 1..USAGE_HISTORY_DAYS) {
+            try {
+                val day = LocalDate.now().minusDays(daysAgo.toLong())
+                val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+                val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+                val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
+                    eventLogWrapper.aggregateForegroundStats(
+                        eventLogWrapper.getForegroundStatsByTimestamps(start, end)
                     )
-                    if (timeSpent > 0) moodStore.setUsage(day, timeSpent)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+                )
+                if (timeSpent > 0) moodStore.setUsage(day, timeSpent)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

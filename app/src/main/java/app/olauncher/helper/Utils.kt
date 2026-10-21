@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.graphics.Bitmap
@@ -193,6 +194,27 @@ fun isPackageInstalled(context: Context, packageName: String, userString: String
     val activityInfo = launcher.getActivityList(packageName, getUserHandleFromString(context, userString))
     if (activityInfo.isNotEmpty()) return true
     return false
+}
+
+/**
+ * Whether the package is still installed for the user even if it has nothing to launch right now,
+ * e.g. while it's being updated or its work profile is paused.
+ */
+fun isPackageStillInstalled(context: Context, packageName: String, userString: String): Boolean {
+    if (packageName.isBlank()) return false
+    return try {
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val launcher = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            launcher.getApplicationInfo(packageName, 0, getUserHandleFromString(context, userString))
+        } else context.packageManager.getApplicationInfo(packageName, 0)
+        info != null
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    } catch (e: Exception) {
+        // Can't tell right now, so don't treat it as uninstalled
+        e.printStackTrace()
+        true
+    }
 }
 
 fun isPrivateSpaceProfile(context: Context, userHandle: UserHandle): Boolean {

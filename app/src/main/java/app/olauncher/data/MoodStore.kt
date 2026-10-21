@@ -8,8 +8,7 @@ import java.time.LocalDate
 /**
  * Mood + daily usage history, stored as a single JSON file in app storage.
  *
- * Kept out of SharedPreferences on purpose: the accessibility service runs in a separate process
- * and needs to read fresh data. [BackupManager] bundles this file with the launcher settings.
+ * [BackupManager] bundles this file with the launcher settings.
  */
 class MoodStore(context: Context) {
 
@@ -36,7 +35,8 @@ class MoodStore(context: Context) {
         }
     }
 
-    fun update(block: (Data) -> Unit) {
+    /** [sync] = false skips the backup; used for usage, which changes too often to back up every time. */
+    fun update(sync: Boolean = true, block: (Data) -> Unit) {
         synchronized(LOCK) {
             val data = load()
             block(data)
@@ -45,7 +45,7 @@ class MoodStore(context: Context) {
             tmp.writeText(toJson(data).toString(2))
             tmp.renameTo(file)
         }
-        BackupManager.requestSync(appContext)
+        if (sync) BackupManager.requestSync(appContext)
     }
 
     fun getDay(date: LocalDate): Day? = load().days[date.toString()]
@@ -56,11 +56,14 @@ class MoodStore(context: Context) {
         data.days[key] = Day(mood, old?.usageMs)
     }
 
-    /** Keeps the larger value, so a partial snapshot never overwrites a complete day. */
+    /**
+     * Keeps the larger value, so a partial snapshot never overwrites a complete day.
+     * Not backed up straight away: [BackupManager.syncIfStale] and other changes pick it up.
+     */
     fun setUsage(date: LocalDate, usageMs: Long) {
         val old = getDay(date)?.usageMs
         if (old != null && old >= usageMs) return
-        update { data ->
+        update(sync = false) { data ->
             val key = date.toString()
             data.days[key] = Day(data.days[key]?.mood, maxOf(usageMs, data.days[key]?.usageMs ?: 0L))
         }

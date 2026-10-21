@@ -26,8 +26,15 @@ object BackupManager {
     private const val LEGACY_BACKUP_FILE_NAME = "jlauncher_mood.json"
     private const val VERSION = 2
     private const val SYNC_DELAY_MS = 2_000L
+    private const val DAILY_SYNC_MS = 24 * 60 * 60 * 1000L
+
+    // Backup bookkeeping, kept with the settings but never backed up themselves
+    private const val LAST_SYNC = "BACKUP_LAST_SYNC"
+    private const val SYNC_FAILED = "BACKUP_SYNC_FAILED"
 
     private val EXCLUDED_KEYS = setOf(
+        LAST_SYNC,
+        SYNC_FAILED,
         "FIRST_OPEN",                   // first-run setup state
         "HOME_PAGE",                    // page currently shown on the home screen
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
@@ -63,6 +70,9 @@ object BackupManager {
         return mood?.let { MoodStore(context).restoreFrom(it) } ?: 0
     }
 
+    /** When the backup was written, if it records it (older backups don't). */
+    fun savedAt(backup: JSONObject): Long? = backup.optLong("savedAt").takeIf { it > 0 }
+
     fun read(context: Context, uri: Uri): JSONObject? = try {
         context.contentResolver.openInputStream(uri)?.use { JSONObject(it.readBytes().decodeToString()) }
     } catch (e: Exception) {
@@ -71,7 +81,7 @@ object BackupManager {
     }
 
     fun export(context: Context, uri: Uri): Boolean = try {
-        val json = buildBackup(context).toString(2)
+        val json = buildBackup(context).put("savedAt", System.currentTimeMillis()).toString(2)
         context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
         true
     } catch (e: Exception) {
@@ -130,8 +140,18 @@ object BackupManager {
 
     fun setBackupFolder(context: Context, treeUri: Uri?) {
         MoodStore(context).update { it.backupFolder = treeUri?.toString().orEmpty() }
+        prefs(context).edit().remove(SYNC_FAILED).apply()
         lastSyncedJson = null
         requestSync(context)
+    }
+
+    /** True when a folder is linked but backups to it aren't working (access lost or the last write failed). */
+    fun isFolderFailing(context: Context): Boolean {
+        val folder = backupFolder(context)
+        if (folder.isEmpty()) return false
+        val uri = Uri.parse(folder)
+        val hasAccess = context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
+        return !hasAccess || prefs(context).getBoolean(SYNC_FAILED, false)
     }
 
     /** The backup file in a picked folder, if there is one (including the older mood-only name). */
@@ -172,25 +192,42 @@ object BackupManager {
         }
     }
 
+    /**
+     * Usage changes don't trigger a sync on their own (they change on nearly every return to the
+     * home screen), so this picks them up once a day. Call when the launcher comes to the front.
+     */
+    fun syncIfStale(context: Context) {
+        if (System.currentTimeMillis() - prefs(context).getLong(LAST_SYNC, 0L) >= DAILY_SYNC_MS)
+            requestSync(context)
+    }
+
     private fun syncNow(context: Context) {
         val folder = backupFolder(context)
         if (folder.isEmpty()) return
+        val prefs = prefs(context)
         try {
-            val json = buildBackup(context).toString(2)
-            if (json == lastSyncedJson) return
-            val treeUri = Uri.parse(folder)
-            val doc = listFolder(context, treeUri)[BACKUP_FILE_NAME]
-                ?.let { DocumentsContract.buildDocumentUriUsingTree(treeUri, it) }
-                ?: DocumentsContract.createDocument(
-                    context.contentResolver,
-                    DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri)),
-                    "application/json",
-                    BACKUP_FILE_NAME
-                ) ?: return
-            context.contentResolver.openOutputStream(doc, "wt")?.use { it.write(json.toByteArray()) }
-            lastSyncedJson = json
+            val backup = buildBackup(context)
+            // Compared without the timestamp, which is different every time
+            val json = backup.toString(2)
+            if (json != lastSyncedJson) {
+                val treeUri = Uri.parse(folder)
+                val doc = listFolder(context, treeUri)[BACKUP_FILE_NAME]
+                    ?.let { DocumentsContract.buildDocumentUriUsingTree(treeUri, it) }
+                    ?: DocumentsContract.createDocument(
+                        context.contentResolver,
+                        DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri)),
+                        "application/json",
+                        BACKUP_FILE_NAME
+                    ) ?: throw IllegalStateException("Couldn't create the backup file")
+                val output = context.contentResolver.openOutputStream(doc, "wt")
+                    ?: throw IllegalStateException("Couldn't open the backup file")
+                output.use { it.write(backup.put("savedAt", System.currentTimeMillis()).toString(2).toByteArray()) }
+                lastSyncedJson = json
+            }
+            prefs.edit().putLong(LAST_SYNC, System.currentTimeMillis()).remove(SYNC_FAILED).apply()
         } catch (e: Exception) {
             e.printStackTrace()
+            prefs.edit().putBoolean(SYNC_FAILED, true).apply()
         }
     }
 
