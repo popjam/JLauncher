@@ -216,6 +216,16 @@
         android:text="@string/set_as_default_launcher_u"
         android:visibility="gone" />
 
+    <!-- Home page indicator -->
+    <LinearLayout
+        android:id="@+id/pageIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:orientation="horizontal"
+        android:visibility="gone" />
+
     <!-- Daily mood prompt, used when the accessibility service can't show it over other apps -->
     <include
         android:id="@+id/moodPrompt"

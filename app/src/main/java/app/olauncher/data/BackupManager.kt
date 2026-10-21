@@ -29,6 +29,7 @@ object BackupManager {
 
     private val EXCLUDED_KEYS = setOf(
         "FIRST_OPEN",                   // first-run setup state
+        "HOME_PAGE",                    // page currently shown on the home screen
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
         "SCREEN_TIME_LAST_UPDATED",
         "USAGE_HISTORY_LAST_UPDATED",

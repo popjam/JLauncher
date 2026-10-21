@@ -9,6 +9,7 @@ import androidx.core.content.edit
 class Prefs(context: Context) {
     companion object {
         const val FILE_NAME = "app.olauncher"
+        const val MAX_HOME_PAGES = 5
     }
 
     private val PREFS_FILENAME = FILE_NAME
@@ -20,6 +21,8 @@ class Prefs(context: Context) {
     private val USER_STATE = "USER_STATE"
     private val LOCK_MODE = "LOCK_MODE"
     private val HOME_APPS_NUM = "HOME_APPS_NUM"
+    private val HOME_PAGES = "HOME_PAGES"
+    private val HOME_PAGE = "HOME_PAGE"
     private val AUTO_SHOW_KEYBOARD = "AUTO_SHOW_KEYBOARD"
     private val KEYBOARD_MESSAGE = "KEYBOARD_MESSAGE"
     private val DAILY_WALLPAPER = "DAILY_WALLPAPER"
@@ -181,6 +184,20 @@ class Prefs(context: Context) {
     var homeAppsNum: Int
         get() = prefs.getInt(HOME_APPS_NUM, 4)
         set(value) = prefs.edit { putInt(HOME_APPS_NUM, value).apply() }
+
+    var homePages: Int
+        get() = prefs.getInt(HOME_PAGES, 1).coerceIn(1, MAX_HOME_PAGES)
+        set(value) = prefs.edit { putInt(HOME_PAGES, value).apply() }
+
+    /** Page currently shown on the home screen; home app slots below are read and written for this page. */
+    var homePage: Int
+        get() = prefs.getInt(HOME_PAGE, 0).coerceIn(0, homePages - 1)
+        set(value) = prefs.edit { putInt(HOME_PAGE, value).apply() }
+
+    /** The first page keeps the original keys so existing home apps stay on it. */
+    private fun slotKey(key: String, page: Int) = if (page == 0) key else "${key}_P$page"
+
+    private fun page(key: String) = slotKey(key, homePage)
 
     var homeAlignment: Int
         get() = prefs.getInt(HOME_ALIGNMENT, Gravity.START)
@@ -356,132 +373,132 @@ class Prefs(context: Context) {
         set(value) = prefs.edit { putInt(SWIPE_DOWN_ACTION, value).apply() }
 
     var appName1: String
-        get() = prefs.getString(APP_NAME_1, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_1, value).apply() }
+        get() = prefs.getString(page(APP_NAME_1), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_1), value).apply() }
 
     var appName2: String
-        get() = prefs.getString(APP_NAME_2, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_2, value).apply() }
+        get() = prefs.getString(page(APP_NAME_2), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_2), value).apply() }
 
     var appName3: String
-        get() = prefs.getString(APP_NAME_3, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_3, value).apply() }
+        get() = prefs.getString(page(APP_NAME_3), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_3), value).apply() }
 
     var appName4: String
-        get() = prefs.getString(APP_NAME_4, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_4, value).apply() }
+        get() = prefs.getString(page(APP_NAME_4), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_4), value).apply() }
 
     var appName5: String
-        get() = prefs.getString(APP_NAME_5, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_5, value).apply() }
+        get() = prefs.getString(page(APP_NAME_5), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_5), value).apply() }
 
     var appName6: String
-        get() = prefs.getString(APP_NAME_6, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_6, value).apply() }
+        get() = prefs.getString(page(APP_NAME_6), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_6), value).apply() }
 
     var appName7: String
-        get() = prefs.getString(APP_NAME_7, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_7, value).apply() }
+        get() = prefs.getString(page(APP_NAME_7), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_7), value).apply() }
 
     var appName8: String
-        get() = prefs.getString(APP_NAME_8, "").toString()
-        set(value) = prefs.edit { putString(APP_NAME_8, value).apply() }
+        get() = prefs.getString(page(APP_NAME_8), "").toString()
+        set(value) = prefs.edit { putString(page(APP_NAME_8), value).apply() }
 
     var appPackage1: String
-        get() = prefs.getString(APP_PACKAGE_1, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_1, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_1), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_1), value).apply() }
 
     var appPackage2: String
-        get() = prefs.getString(APP_PACKAGE_2, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_2, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_2), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_2), value).apply() }
 
     var appPackage3: String
-        get() = prefs.getString(APP_PACKAGE_3, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_3, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_3), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_3), value).apply() }
 
     var appPackage4: String
-        get() = prefs.getString(APP_PACKAGE_4, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_4, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_4), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_4), value).apply() }
 
     var appPackage5: String
-        get() = prefs.getString(APP_PACKAGE_5, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_5, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_5), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_5), value).apply() }
 
     var appPackage6: String
-        get() = prefs.getString(APP_PACKAGE_6, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_6, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_6), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_6), value).apply() }
 
     var appPackage7: String
-        get() = prefs.getString(APP_PACKAGE_7, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_7, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_7), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_7), value).apply() }
 
     var appPackage8: String
-        get() = prefs.getString(APP_PACKAGE_8, "").toString()
-        set(value) = prefs.edit { putString(APP_PACKAGE_8, value).apply() }
+        get() = prefs.getString(page(APP_PACKAGE_8), "").toString()
+        set(value) = prefs.edit { putString(page(APP_PACKAGE_8), value).apply() }
 
     var appActivityClassName1: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_1, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_1, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_1), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_1), value).apply() }
 
     var appActivityClassName2: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_2, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_2, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_2), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_2), value).apply() }
 
     var appActivityClassName3: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_3, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_3, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_3), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_3), value).apply() }
 
     var appActivityClassName4: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_4, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_4, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_4), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_4), value).apply() }
 
     var appActivityClassName5: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_5, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_5, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_5), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_5), value).apply() }
 
     var appActivityClassName6: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_6, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_6, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_6), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_6), value).apply() }
 
     var appActivityClassName7: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_7, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_7, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_7), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_7), value).apply() }
 
     var appActivityClassName8: String?
-        get() = prefs.getString(APP_ACTIVITY_CLASS_NAME_8, "").toString()
-        set(value) = prefs.edit { putString(APP_ACTIVITY_CLASS_NAME_8, value).apply() }
+        get() = prefs.getString(page(APP_ACTIVITY_CLASS_NAME_8), "").toString()
+        set(value) = prefs.edit { putString(page(APP_ACTIVITY_CLASS_NAME_8), value).apply() }
 
     var appUser1: String
-        get() = prefs.getString(APP_USER_1, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_1, value).apply() }
+        get() = prefs.getString(page(APP_USER_1), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_1), value).apply() }
 
     var appUser2: String
-        get() = prefs.getString(APP_USER_2, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_2, value).apply() }
+        get() = prefs.getString(page(APP_USER_2), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_2), value).apply() }
 
     var appUser3: String
-        get() = prefs.getString(APP_USER_3, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_3, value).apply() }
+        get() = prefs.getString(page(APP_USER_3), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_3), value).apply() }
 
     var appUser4: String
-        get() = prefs.getString(APP_USER_4, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_4, value).apply() }
+        get() = prefs.getString(page(APP_USER_4), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_4), value).apply() }
 
     var appUser5: String
-        get() = prefs.getString(APP_USER_5, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_5, value).apply() }
+        get() = prefs.getString(page(APP_USER_5), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_5), value).apply() }
 
     var appUser6: String
-        get() = prefs.getString(APP_USER_6, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_6, value).apply() }
+        get() = prefs.getString(page(APP_USER_6), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_6), value).apply() }
 
     var appUser7: String
-        get() = prefs.getString(APP_USER_7, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_7, value).apply() }
+        get() = prefs.getString(page(APP_USER_7), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_7), value).apply() }
 
     var appUser8: String
-        get() = prefs.getString(APP_USER_8, "").toString()
-        set(value) = prefs.edit { putString(APP_USER_8, value).apply() }
+        get() = prefs.getString(page(APP_USER_8), "").toString()
+        set(value) = prefs.edit { putString(page(APP_USER_8), value).apply() }
 
     var appNameSwipeLeft: String
         get() = prefs.getString(APP_NAME_SWIPE_LEFT, "Camera").toString()
@@ -552,68 +569,68 @@ class Prefs(context: Context) {
         set(value) = prefs.edit { putString(SCREEN_TIME_APP_CLASS_NAME, value).apply() }
 
     var isShortcut1: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_1, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_1, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_1), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_1), value) }
 
     var shortcutId1: String
-        get() = prefs.getString(SHORTCUT_ID_1, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_1, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_1), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_1), value) }
 
     var isShortcut2: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_2, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_2, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_2), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_2), value) }
 
     var shortcutId2: String
-        get() = prefs.getString(SHORTCUT_ID_2, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_2, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_2), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_2), value) }
 
     var isShortcut3: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_3, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_3, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_3), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_3), value) }
 
     var shortcutId3: String
-        get() = prefs.getString(SHORTCUT_ID_3, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_3, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_3), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_3), value) }
 
     var isShortcut4: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_4, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_4, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_4), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_4), value) }
 
     var shortcutId4: String
-        get() = prefs.getString(SHORTCUT_ID_4, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_4, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_4), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_4), value) }
 
     var isShortcut5: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_5, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_5, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_5), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_5), value) }
 
     var shortcutId5: String
-        get() = prefs.getString(SHORTCUT_ID_5, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_5, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_5), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_5), value) }
 
     var isShortcut6: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_6, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_6, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_6), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_6), value) }
 
     var shortcutId6: String
-        get() = prefs.getString(SHORTCUT_ID_6, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_6, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_6), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_6), value) }
 
     var isShortcut7: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_7, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_7, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_7), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_7), value) }
 
     var shortcutId7: String
-        get() = prefs.getString(SHORTCUT_ID_7, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_7, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_7), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_7), value) }
 
     var isShortcut8: Boolean
-        get() = prefs.getBoolean(IS_SHORTCUT_8, false)
-        set(value) = prefs.edit { putBoolean(IS_SHORTCUT_8, value) }
+        get() = prefs.getBoolean(page(IS_SHORTCUT_8), false)
+        set(value) = prefs.edit { putBoolean(page(IS_SHORTCUT_8), value) }
 
     var shortcutId8: String
-        get() = prefs.getString(SHORTCUT_ID_8, "").toString()
-        set(value) = prefs.edit { putString(SHORTCUT_ID_8, value) }
+        get() = prefs.getString(page(SHORTCUT_ID_8), "").toString()
+        set(value) = prefs.edit { putString(page(SHORTCUT_ID_8), value) }
 
     var shortcutIdSwipeLeft: String
         get() = prefs.getString(SHORTCUT_ID_SWIPE_LEFT, "").toString()
@@ -633,56 +650,56 @@ class Prefs(context: Context) {
 
     fun getAppName(location: Int): String {
         return when (location) {
-            1 -> prefs.getString(APP_NAME_1, "").toString()
-            2 -> prefs.getString(APP_NAME_2, "").toString()
-            3 -> prefs.getString(APP_NAME_3, "").toString()
-            4 -> prefs.getString(APP_NAME_4, "").toString()
-            5 -> prefs.getString(APP_NAME_5, "").toString()
-            6 -> prefs.getString(APP_NAME_6, "").toString()
-            7 -> prefs.getString(APP_NAME_7, "").toString()
-            8 -> prefs.getString(APP_NAME_8, "").toString()
+            1 -> prefs.getString(page(APP_NAME_1), "").toString()
+            2 -> prefs.getString(page(APP_NAME_2), "").toString()
+            3 -> prefs.getString(page(APP_NAME_3), "").toString()
+            4 -> prefs.getString(page(APP_NAME_4), "").toString()
+            5 -> prefs.getString(page(APP_NAME_5), "").toString()
+            6 -> prefs.getString(page(APP_NAME_6), "").toString()
+            7 -> prefs.getString(page(APP_NAME_7), "").toString()
+            8 -> prefs.getString(page(APP_NAME_8), "").toString()
             else -> ""
         }
     }
 
     fun getAppPackage(location: Int): String {
         return when (location) {
-            1 -> prefs.getString(APP_PACKAGE_1, "").toString()
-            2 -> prefs.getString(APP_PACKAGE_2, "").toString()
-            3 -> prefs.getString(APP_PACKAGE_3, "").toString()
-            4 -> prefs.getString(APP_PACKAGE_4, "").toString()
-            5 -> prefs.getString(APP_PACKAGE_5, "").toString()
-            6 -> prefs.getString(APP_PACKAGE_6, "").toString()
-            7 -> prefs.getString(APP_PACKAGE_7, "").toString()
-            8 -> prefs.getString(APP_PACKAGE_8, "").toString()
+            1 -> prefs.getString(page(APP_PACKAGE_1), "").toString()
+            2 -> prefs.getString(page(APP_PACKAGE_2), "").toString()
+            3 -> prefs.getString(page(APP_PACKAGE_3), "").toString()
+            4 -> prefs.getString(page(APP_PACKAGE_4), "").toString()
+            5 -> prefs.getString(page(APP_PACKAGE_5), "").toString()
+            6 -> prefs.getString(page(APP_PACKAGE_6), "").toString()
+            7 -> prefs.getString(page(APP_PACKAGE_7), "").toString()
+            8 -> prefs.getString(page(APP_PACKAGE_8), "").toString()
             else -> ""
         }
     }
 
     fun getAppActivityClassName(location: Int): String {
         return when (location) {
-            1 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_1, "").toString()
-            2 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_2, "").toString()
-            3 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_3, "").toString()
-            4 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_4, "").toString()
-            5 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_5, "").toString()
-            6 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_6, "").toString()
-            7 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_7, "").toString()
-            8 -> prefs.getString(APP_ACTIVITY_CLASS_NAME_8, "").toString()
+            1 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_1), "").toString()
+            2 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_2), "").toString()
+            3 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_3), "").toString()
+            4 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_4), "").toString()
+            5 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_5), "").toString()
+            6 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_6), "").toString()
+            7 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_7), "").toString()
+            8 -> prefs.getString(page(APP_ACTIVITY_CLASS_NAME_8), "").toString()
             else -> ""
         }
     }
 
     fun getAppUser(location: Int): String {
         return when (location) {
-            1 -> prefs.getString(APP_USER_1, "").toString()
-            2 -> prefs.getString(APP_USER_2, "").toString()
-            3 -> prefs.getString(APP_USER_3, "").toString()
-            4 -> prefs.getString(APP_USER_4, "").toString()
-            5 -> prefs.getString(APP_USER_5, "").toString()
-            6 -> prefs.getString(APP_USER_6, "").toString()
-            7 -> prefs.getString(APP_USER_7, "").toString()
-            8 -> prefs.getString(APP_USER_8, "").toString()
+            1 -> prefs.getString(page(APP_USER_1), "").toString()
+            2 -> prefs.getString(page(APP_USER_2), "").toString()
+            3 -> prefs.getString(page(APP_USER_3), "").toString()
+            4 -> prefs.getString(page(APP_USER_4), "").toString()
+            5 -> prefs.getString(page(APP_USER_5), "").toString()
+            6 -> prefs.getString(page(APP_USER_6), "").toString()
+            7 -> prefs.getString(page(APP_USER_7), "").toString()
+            8 -> prefs.getString(page(APP_USER_8), "").toString()
             else -> ""
         }
     }
@@ -729,8 +746,9 @@ class Prefs(context: Context) {
     }
 
     fun updateAppActivityClassName(packageName: String, activityClassName: String) {
-        for (i in 1..8) {
-            if (getAppPackage(i) == packageName) setAppActivityClassName(i, activityClassName)
+        for (page in 0 until homePages) for (i in 1..8) {
+            if (prefs.getString(slotKey("APP_PACKAGE_$i", page), "") == packageName)
+                prefs.edit { putString(slotKey("APP_ACTIVITY_CLASS_NAME_$i", page), activityClassName) }
         }
         if (clockAppPackage == packageName) clockAppClassName = activityClassName
         if (calendarAppPackage == packageName) calendarAppClassName = activityClassName

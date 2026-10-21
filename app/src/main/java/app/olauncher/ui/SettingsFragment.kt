@@ -135,6 +135,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         checkAdminPermission()
 
         binding.homeAppsNum.text = prefs.homeAppsNum.toString()
+        binding.homePages.text = prefs.homePages.toString()
         populateProMessage()
         populateKeyboardText()
         populateScreenTimeOnOff()
@@ -161,6 +162,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     override fun onClick(view: View) {
         binding.appsNumSelectLayout.visibility = View.GONE
+        binding.pagesSelectLayout.visibility = View.GONE
         binding.dateTimeSelectLayout.visibility = View.GONE
         binding.appThemeSelectLayout.visibility = View.GONE
         binding.swipeDownSelectLayout.visibility = View.GONE
@@ -216,6 +218,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             R.id.homeButtonRecents -> toggleHomeButtonRecents()
             R.id.autoShowKeyboard -> toggleKeyboardText()
             R.id.homeAppsNum -> binding.appsNumSelectLayout.visibility = View.VISIBLE
+            R.id.homePages -> binding.pagesSelectLayout.visibility = View.VISIBLE
             R.id.dailyWallpaperUrl -> requireContext().openUrl(prefs.dailyWallpaperUrl)
             R.id.dailyWallpaper -> toggleDailyWallpaperUpdate()
             R.id.alignment -> binding.alignmentSelectLayout.visibility = View.VISIBLE
@@ -248,6 +251,11 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             R.id.maxApps6 -> updateHomeAppsNum(6)
             R.id.maxApps7 -> updateHomeAppsNum(7)
             R.id.maxApps8 -> updateHomeAppsNum(8)
+            R.id.pages1 -> updateHomePages(1)
+            R.id.pages2 -> updateHomePages(2)
+            R.id.pages3 -> updateHomePages(3)
+            R.id.pages4 -> updateHomePages(4)
+            R.id.pages5 -> updateHomePages(5)
 
             R.id.textSizeMinus -> adjustTextSizePreview(-0.1f)
             R.id.textSizePlus -> adjustTextSizePreview(0.1f)
@@ -376,6 +384,12 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.maxApps6.setOnClickListener(this)
         binding.maxApps7.setOnClickListener(this)
         binding.maxApps8.setOnClickListener(this)
+        binding.homePages.setOnClickListener(this)
+        binding.pages1.setOnClickListener(this)
+        binding.pages2.setOnClickListener(this)
+        binding.pages3.setOnClickListener(this)
+        binding.pages4.setOnClickListener(this)
+        binding.pages5.setOnClickListener(this)
 
         binding.textSizeMinus.setOnClickListener(this)
         binding.textSizePlus.setOnClickListener(this)
@@ -588,6 +602,14 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.homeAppsNum.text = num.toString()
         binding.appsNumSelectLayout.visibility = View.GONE
         prefs.homeAppsNum = num
+        viewModel.refreshHome(true)
+    }
+
+    private fun updateHomePages(num: Int) {
+        binding.homePages.text = num.toString()
+        binding.pagesSelectLayout.visibility = View.GONE
+        prefs.homePages = num
+        if (prefs.homePage >= num) prefs.homePage = num - 1
         viewModel.refreshHome(true)
     }
 

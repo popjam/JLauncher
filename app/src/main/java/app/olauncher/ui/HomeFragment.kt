@@ -10,10 +10,12 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresApi
@@ -351,6 +353,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private fun populateHomeScreen(appCountUpdated: Boolean) {
         if (appCountUpdated) hideHomeApps()
         populateDateTime()
+        populatePageIndicator()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             populateScreenTime()
@@ -725,7 +728,46 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 super.onClick()
                 viewModel.checkForMessages.call()
             }
+
+            // With double tap to lock on, wait until the tap can't be the start of a double tap
+            override fun onClick(e: MotionEvent) {
+                if (!prefs.lockModeOn) changePageFromTap(e.x)
+            }
+
+            override fun onSingleTapConfirmed(e: MotionEvent) {
+                if (prefs.lockModeOn) changePageFromTap(e.x)
+            }
         }
+    }
+
+    /** Tapping the left half shows the previous page and the right half the next, wrapping at the ends. */
+    private fun changePageFromTap(x: Float) {
+        val pages = prefs.homePages
+        if (pages < 2) return
+        val step = if (x < binding.mainLayout.width / 2f) -1 else 1
+        prefs.homePage = (prefs.homePage + step + pages) % pages
+        populateHomeScreen(true)
+    }
+
+    private fun populatePageIndicator() {
+        val indicator = binding.pageIndicator
+        val pages = prefs.homePages
+        indicator.isVisible = pages > 1
+        if (pages < 2) return
+        if (indicator.childCount != pages) {
+            indicator.removeAllViews()
+            repeat(pages) {
+                indicator.addView(View(requireContext()).apply {
+                    setBackgroundResource(R.drawable.page_dot)
+                    layoutParams = LinearLayout.LayoutParams(5.dpToPx(), 5.dpToPx()).apply {
+                        marginStart = 3.dpToPx()
+                        marginEnd = 3.dpToPx()
+                    }
+                })
+            }
+        }
+        val current = prefs.homePage
+        for (i in 0 until pages) indicator.getChildAt(i).alpha = if (i == current) 1f else 0.3f
     }
 
     private fun getViewSwipeTouchListener(context: Context, view: View): View.OnTouchListener {
