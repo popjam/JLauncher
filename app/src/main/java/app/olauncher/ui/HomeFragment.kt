@@ -303,11 +303,15 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         } else {
             if (prefs.dateTimeVisibility == Constants.DateTime.DATE_ONLY) 45.dpToPx() else 72.dpToPx()
         }
+        // Once laid out, alignScreenTimeWithDateTime owns the top margin; resetting it here makes the
+        // column jump down and back on every refresh
+        val alignedTop = (binding.screenTimeLayout.layoutParams as FrameLayout.LayoutParams).topMargin
+            .takeIf { binding.dateTimeLayout.isVisible && binding.dateTimeLayout.height > 0 }
         val params = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = marginTop
+            topMargin = alignedTop ?: marginTop
             marginStart = horizontalMargin
             marginEnd = horizontalMargin
             gravity = if (prefs.homeAlignment == Gravity.END) Gravity.START else Gravity.END
@@ -358,6 +362,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             populateScreenTime()
 
+        populateHomeApps()
+    }
+
+    private fun populateHomeApps() {
         val homeAppsNum = prefs.homeAppsNum
         if (homeAppsNum == 0) return
 
@@ -746,7 +754,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         if (pages < 2) return
         val step = if (x < binding.mainLayout.width / 2f) -1 else 1
         prefs.homePage = (prefs.homePage + step + pages) % pages
-        populateHomeScreen(true)
+        // Only the home apps differ between pages, so leave the clock and screen time alone
+        hideHomeApps()
+        populatePageIndicator()
+        populateHomeApps()
     }
 
     private fun populatePageIndicator() {
