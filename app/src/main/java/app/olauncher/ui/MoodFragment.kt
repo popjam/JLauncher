@@ -2,6 +2,7 @@ package app.olauncher.ui
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -18,6 +19,7 @@ import app.olauncher.databinding.FragmentMoodBinding
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getColorFromAttr
+import app.olauncher.helper.hideKeyboard
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -40,7 +42,10 @@ class MoodFragment : Fragment() {
     private val dayCells = mutableListOf<DayCell>()
     private val weekRows = mutableListOf<LinearLayout>()
 
-    private class DayCell(val box: FrameLayout, val number: TextView, val face: PixelFaceView)
+    /** The date whose note is in the input, so re-renders don't overwrite unsaved typing. */
+    private var noteDate: LocalDate? = null
+
+    private class DayCell(val box: FrameLayout, val number: TextView, val face: PixelFaceView, val noteDot: View)
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentMoodBinding.inflate(inflater, container, false)
@@ -63,13 +68,33 @@ class MoodFragment : Fragment() {
             if (shownMonth < YearMonth.now()) shownMonth = shownMonth.plusMonths(1)
             render()
         }
+        binding.noteInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
     }
 
     override fun onResume() {
         super.onResume()
-        // Data can change while away, e.g. today's usage was refreshed
+        // Data can change while away, e.g. today's usage was refreshed or the prompt added a note
         data = moodStore.load()
+        noteDate = null
         render()
+    }
+
+    override fun onPause() {
+        saveNote()
+        super.onPause()
+    }
+
+    private fun saveNote() {
+        val date = noteDate ?: return
+        val note = MoodStore.sanitizeNote(binding.noteInput.text?.toString())
+        if (note != data.days[date.toString()]?.note) {
+            moodStore.setNote(date, note)
+            data = moodStore.load()
+            renderCalendar()
+        }
+        // Show the cleaned-up text, unless still typing
+        if (!binding.noteInput.hasFocus() && binding.noteInput.text?.toString() != note.orEmpty())
+            binding.noteInput.setText(note.orEmpty())
     }
 
     private fun buildMoodFaces() {
@@ -111,13 +136,18 @@ class MoodFragment : Fragment() {
                     setTextColor(context.getColorFromAttr(R.attr.primaryColor))
                 }
                 val face = PixelFaceView(context)
+                // Marks a day with a note, at the bottom right of the face
+                val noteDot = View(context).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL } }
                 box.addView(number, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 box.addView(face, FrameLayout.LayoutParams(26.dpToPx(), 26.dpToPx(), Gravity.CENTER))
+                box.addView(noteDot, FrameLayout.LayoutParams(5.dpToPx(), 5.dpToPx(), Gravity.BOTTOM or Gravity.END).apply {
+                    setMargins(0, 0, 6.dpToPx(), 6.dpToPx())
+                })
 
                 val cell = FrameLayout(context)
                 cell.addView(box, FrameLayout.LayoutParams(40.dpToPx(), 40.dpToPx(), Gravity.CENTER))
                 row.addView(cell, LinearLayout.LayoutParams(0, 44.dpToPx(), 1f))
-                dayCells.add(DayCell(box, number, face))
+                dayCells.add(DayCell(box, number, face, noteDot))
             }
             weekRows.add(row)
             binding.calendarGrid.addView(row)
@@ -155,6 +185,11 @@ class MoodFragment : Fragment() {
 
         binding.dayLabel.text = if (selectedDate == LocalDate.now()) getString(R.string.today)
         else selectedDate.format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.getDefault()))
+
+        if (noteDate != selectedDate) {
+            noteDate = selectedDate
+            binding.noteInput.setText(day?.note.orEmpty())
+        }
 
         binding.moodFaces.isVisible = !showUsage
         binding.usageRow.isVisible = showUsage
@@ -202,6 +237,12 @@ class MoodFragment : Fragment() {
             cell.number.text = date.dayOfMonth.toString()
             cell.number.alpha = if (isFuture) 0.3f else 0.6f
 
+            cell.noteDot.isVisible = day?.note != null && !isFuture
+            (cell.noteDot.background as GradientDrawable).setColor(
+                if (cell.face.isVisible) PixelFaceView.moodColor(requireContext(), cell.face.mood)
+                else requireContext().getColorFromAttr(R.attr.primaryColor)
+            )
+
             cell.box.setBackgroundResource(
                 when (date) {
                     selectedDate -> R.drawable.bg_day_selected
@@ -210,6 +251,9 @@ class MoodFragment : Fragment() {
                 }
             )
             cell.box.setOnClickListener {
+                saveNote()
+                binding.noteInput.clearFocus()
+                binding.noteInput.hideKeyboard()
                 selectedDate = date
                 render()
             }

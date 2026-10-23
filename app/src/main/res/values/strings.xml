@@ -218,6 +218,9 @@
     <string name="how_are_you_feeling">How are you feeling?</string>
     <string name="daily_mood_prompt">Daily mood prompt</string>
     <string name="prompt_time">Prompt time</string>
+    <string name="thoughts">Thoughts</string>
+    <string name="thoughts_hint">Write 3 positive things...</string>
+    <string name="confirm">Confirm</string>
     <string name="usage_line">Usage %1$s</string>
     <string name="no_data">No data</string>
 

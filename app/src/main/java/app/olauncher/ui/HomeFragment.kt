@@ -378,8 +378,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             binding.moodPrompt.root.visibility = View.GONE
             return
         }
-        MoodPrompt.bind(binding.moodPrompt.root) { mood ->
-            moodStore.answerPrompt(mood)
+        // Already showing: rebinding would wipe anything typed before leaving and coming back
+        if (binding.moodPrompt.root.visibility == View.VISIBLE) return
+        MoodPrompt.bind(binding.moodPrompt.root) { mood, note ->
+            moodStore.answerPrompt(mood, note)
             binding.moodPrompt.root.visibility = View.GONE
         }
         binding.moodPrompt.root.visibility = View.VISIBLE

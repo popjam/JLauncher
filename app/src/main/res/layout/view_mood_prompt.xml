@@ -59,6 +59,51 @@
             android:layout_marginEnd="8dp"
             android:orientation="horizontal" />
 
+        <TextView
+            style="@style/TextSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:alpha="0.7"
+            android:text="@string/thoughts"
+            android:textColor="?attr/primaryColor"
+            android:textSize="14sp" />
+
+        <EditText
+            android:id="@+id/moodPromptNote"
+            style="@style/TextSmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/rounded_box"
+            android:gravity="top|start"
+            android:hint="@string/thoughts_hint"
+            android:importantForAutofill="no"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLength="2000"
+            android:maxLines="6"
+            android:minLines="3"
+            android:padding="12dp"
+            android:shadowRadius="0"
+            android:textColor="?attr/primaryColor"
+            android:textColorHint="?attr/primaryColorTrans50"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/moodPromptConfirm"
+            style="@style/TextSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/rounded_box"
+            android:paddingHorizontal="24dp"
+            android:paddingVertical="10dp"
+            android:text="@string/confirm"
+            android:textColor="?attr/primaryColor" />
+
     </LinearLayout>
 
 </FrameLayout>
