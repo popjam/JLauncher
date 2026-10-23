@@ -54,7 +54,9 @@ import app.olauncher.helper.showToast
 import app.olauncher.listener.OnSwipeTouchListener
 import app.olauncher.listener.ViewSwipeTouchListener
 import java.text.SimpleDateFormat
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
@@ -100,6 +102,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     override fun onPause() {
         handler.removeCallbacks(midnightRefresh)
+        handler.removeCallbacks(moodPromptCheck)
         super.onPause()
     }
 
@@ -109,6 +112,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private val midnightRefresh = Runnable {
         if (_binding == null) return@Runnable
         populateDateTime()
+        // Hides a prompt left open from yesterday
+        showMoodPromptIfDue()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted())
             viewModel.getTodaysScreenTime(force = true)
         scheduleMidnightRefresh()
@@ -370,12 +375,24 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
     }
 
-    /** The daily mood prompt only appears here, when returning to the home screen. */
+    private val moodPromptCheck = Runnable {
+        if (_binding != null) showMoodPromptIfDue()
+    }
+
+    /**
+     * The daily mood prompt only appears on the home screen. Dismissing it snoozes it for half an
+     * hour, until a mood is given or the day ends; a timer brings it back while home stays open.
+     */
     private fun showMoodPromptIfDue() {
+        handler.removeCallbacks(moodPromptCheck)
         val moodStore = MoodStore(requireContext())
-        if (!moodStore.isPromptDue()) {
+        val now = LocalDateTime.now()
+        val next = moodStore.nextPromptAt(now)
+        if (next == null || next > now) {
             // E.g. today's mood was set from the mood tracker instead
             binding.moodPrompt.root.visibility = View.GONE
+            // Midnight is covered by midnightRefresh
+            if (next != null) handler.postDelayed(moodPromptCheck, Duration.between(now, next).toMillis() + 1000)
             return
         }
         // Already showing: rebinding would wipe anything typed before leaving and coming back
@@ -383,6 +400,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         MoodPrompt.bind(binding.moodPrompt.root) { mood, note ->
             moodStore.answerPrompt(mood, note)
             binding.moodPrompt.root.visibility = View.GONE
+            showMoodPromptIfDue()
         }
         binding.moodPrompt.root.visibility = View.VISIBLE
     }

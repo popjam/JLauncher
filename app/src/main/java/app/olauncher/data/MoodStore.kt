@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * Mood + daily usage history, stored as a single JSON file in app storage.
@@ -21,7 +22,7 @@ class MoodStore(context: Context) {
         val days: MutableMap<String, Day> = sortedMapOf(),
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
-        var lastPromptDate: String = "",
+        var promptSnoozedUntil: String = "",
         var backupFolder: String = "",
     )
 
@@ -79,19 +80,29 @@ class MoodStore(context: Context) {
 
     // --- Daily prompt ---
 
-    fun isPromptDue(now: java.time.LocalDateTime = java.time.LocalDateTime.now()): Boolean {
+    fun isPromptDue(now: LocalDateTime = LocalDateTime.now()): Boolean = nextPromptAt(now)?.let { it <= now } ?: false
+
+    /**
+     * When the prompt is next due today: the prompt time, or [PROMPT_SNOOZE_MINUTES] after it was
+     * last dismissed. Null when it's off or today's mood is already in; it stops at midnight.
+     */
+    fun nextPromptAt(now: LocalDateTime = LocalDateTime.now()): LocalDateTime? {
         val data = load()
-        if (!data.promptEnabled) return false
-        val today = now.toLocalDate().toString()
-        if (data.lastPromptDate == today) return false
-        if (data.days[today]?.mood != null) return false
-        return now.hour * 60 + now.minute >= data.promptMinutes
+        if (!data.promptEnabled) return null
+        val today = now.toLocalDate()
+        if (data.days[today.toString()]?.mood != null) return null
+        val promptTime = today.atStartOfDay().plusMinutes(data.promptMinutes.toLong())
+        val snoozedUntil = data.promptSnoozedUntil.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+        return listOfNotNull(promptTime, snoozedUntil).max()
     }
 
+    /** A null [mood] means the prompt was dismissed, so it comes back after [PROMPT_SNOOZE_MINUTES]. */
     fun answerPrompt(mood: Int?, note: String? = null) = update { data ->
         val today = LocalDate.now().toString()
-        data.lastPromptDate = today
-        if (mood != null) {
+        if (mood == null) {
+            data.promptSnoozedUntil = LocalDateTime.now().plusMinutes(PROMPT_SNOOZE_MINUTES).withNano(0).toString()
+        } else {
             val old = data.days[today]
             data.days[today] = Day(mood, old?.usageMs, sanitizeNote(note) ?: old?.note)
         }
@@ -126,7 +137,7 @@ class MoodStore(context: Context) {
         put("version", 1)
         put("promptEnabled", data.promptEnabled)
         put("promptMinutes", data.promptMinutes)
-        put("lastPromptDate", data.lastPromptDate)
+        put("promptSnoozedUntil", data.promptSnoozedUntil)
         put("backupFolder", data.backupFolder)
         put("days", JSONObject().apply {
             data.days.forEach { (key, day) ->
@@ -143,7 +154,7 @@ class MoodStore(context: Context) {
         val data = Data(
             promptEnabled = json.optBoolean("promptEnabled", false),
             promptMinutes = json.optInt("promptMinutes", DEFAULT_PROMPT_MINUTES),
-            lastPromptDate = json.optString("lastPromptDate", ""),
+            promptSnoozedUntil = json.optString("promptSnoozedUntil", ""),
             backupFolder = json.optString("backupFolder", ""),
         )
         val days = json.optJSONObject("days") ?: return data
@@ -162,6 +173,7 @@ class MoodStore(context: Context) {
         const val FILE_NAME = "mood_data.json"
         const val DEFAULT_PROMPT_MINUTES = 21 * 60
         const val MAX_NOTE_LENGTH = 2000
+        const val PROMPT_SNOOZE_MINUTES = 30L
 
         const val HAPPY = 0
         const val MILDLY_HAPPY = 1
