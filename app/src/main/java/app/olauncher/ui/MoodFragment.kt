@@ -47,7 +47,11 @@ class MoodFragment : Fragment() {
     private var selectedStat = MoodStore.MOOD
     private var selectedDate: LocalDate = LocalDate.now()
     private var shownMonth: YearMonth = YearMonth.now()
+
+    /** The All graph shows weekly totals over [graphYear], or daily scores over [graphMonth] */
+    private var graphDaily = false
     private var graphYear = LocalDate.now().get(WEEKS.weekBasedYear())
+    private var graphMonth: YearMonth = YearMonth.now()
 
     private val dayCells = mutableListOf<DayCell>()
     private val weekRows = mutableListOf<LinearLayout>()
@@ -79,17 +83,12 @@ class MoodFragment : Fragment() {
             if (shownMonth < YearMonth.now()) shownMonth = shownMonth.plusMonths(1)
             render()
         }
-        binding.prevYear.setOnClickListener {
-            graphYear--
-            renderGraph(yearChanged = true)
-        }
-        binding.nextYear.setOnClickListener {
-            graphYear++
-            renderGraph(yearChanged = true)
-        }
+        binding.prevGraph.setOnClickListener { moveGraph(-1) }
+        binding.nextGraph.setOnClickListener { moveGraph(1) }
+        binding.graphTitle.setOnClickListener { toggleGraphMode() }
         binding.selectAllStats.setOnClickListener { setHidden(emptySet()) }
         binding.clearStats.setOnClickListener { setHidden(stats.map { it.id }.toSet()) }
-        binding.weeklyChart.onWeekSelected = { renderWeekDetails(it) }
+        binding.statChart.onPointSelected = { renderPointDetails(it) }
         binding.noteInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
     }
 
@@ -365,71 +364,130 @@ class MoodFragment : Fragment() {
         weekRows.last().isVisible = dayCells.takeLast(7).any { it.box.isVisible }
     }
 
-    /** Weekly totals for [graphYear]: each day scores 5 (happy) to 1 (sad), and days with no entry 0. */
-    private fun weeklyTotals(): Map<String, Map<Int, Int>> {
-        val totals = mutableMapOf<String, MutableMap<Int, Int>>()
+    /** Where a date falls on the graph shown (its week or day of the month), or null when it's off it. */
+    private fun graphPoint(date: LocalDate): Int? =
+        if (graphDaily) date.dayOfMonth.takeIf { YearMonth.from(date) == graphMonth }
+        else date.get(WEEKS.weekOfWeekBasedYear()).takeIf { date.get(WEEKS.weekBasedYear()) == graphYear }
+
+    /**
+     * Each stat's value at each point on the graph: a day scores 5 (happy) to 1 (sad), and a day with
+     * no entry 0. Weekly points add up their days.
+     */
+    private fun graphValues(): Map<String, Map<Int, Int>> {
+        val values = mutableMapOf<String, MutableMap<Int, Int>>()
         data.days.forEach { (key, day) ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@forEach
-            if (date.get(WEEKS.weekBasedYear()) != graphYear) return@forEach
-            val week = date.get(WEEKS.weekOfWeekBasedYear())
+            val point = graphPoint(date) ?: return@forEach
             stats.forEach { stat ->
                 day.face(stat.id)?.let { face ->
-                    val weeks = totals.getOrPut(stat.id) { mutableMapOf() }
-                    weeks[week] = (weeks[week] ?: 0) + MoodStore.score(face)
+                    val points = values.getOrPut(stat.id) { mutableMapOf() }
+                    points[point] = (points[point] ?: 0) + MoodStore.score(face)
                 }
             }
         }
-        return totals
+        return values
     }
 
-    private fun renderGraph(yearChanged: Boolean = false) {
-        val today = LocalDate.now()
-        val thisYear = today.get(WEEKS.weekBasedYear())
-        val firstYear = data.days.keys.firstOrNull()
-            ?.let { runCatching { LocalDate.parse(it).get(WEEKS.weekBasedYear()) }.getOrNull() } ?: thisYear
-        graphYear = graphYear.coerceIn(minOf(firstYear, thisYear), thisYear)
+    /** Steps the year (weekly) or month (daily) shown. */
+    private fun moveGraph(by: Int) {
+        if (graphDaily) graphMonth = graphMonth.plusMonths(by.toLong()) else graphYear += by
+        renderGraph(rangeChanged = true)
+    }
 
-        binding.yearTitle.text = getString(R.string.year_weekly_total, graphYear)
-        listOf(binding.prevYear to (graphYear > firstYear), binding.nextYear to (graphYear < thisYear)).forEach { (arrow, enabled) ->
+    /** Switches between weekly totals and daily scores, keeping to the period that was being looked at. */
+    private fun toggleGraphMode() {
+        val picked = binding.statChart.selected
+        val today = LocalDate.now()
+        if (graphDaily) {
+            val date = picked?.let { graphMonth.atDay(it) } ?: graphMonth.atDay(minOf(15, graphMonth.lengthOfMonth()))
+            graphYear = date.get(WEEKS.weekBasedYear())
+        } else {
+            graphMonth = when {
+                // The month most of the picked week is in
+                picked != null -> YearMonth.from(
+                    today.with(WEEKS.weekBasedYear(), graphYear.toLong())
+                        .with(WEEKS.weekOfWeekBasedYear(), picked.toLong())
+                        .with(DayOfWeek.THURSDAY)
+                )
+                graphYear == today.get(WEEKS.weekBasedYear()) -> YearMonth.from(today)
+                else -> YearMonth.of(graphYear, 12)
+            }
+        }
+        graphDaily = !graphDaily
+        renderGraph(rangeChanged = true)
+    }
+
+    private fun renderGraph(rangeChanged: Boolean = false) {
+        val today = LocalDate.now()
+        val firstDate = data.days.keys.firstOrNull()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
+        val canGoBack: Boolean
+        val canGoForward: Boolean
+        if (graphDaily) {
+            val thisMonth = YearMonth.from(today)
+            val firstMonth = minOf(YearMonth.from(firstDate), thisMonth)
+            graphMonth = graphMonth.coerceIn(firstMonth, thisMonth)
+            binding.graphTitle.text = getString(
+                R.string.graph_daily_title, graphMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+            )
+            canGoBack = graphMonth > firstMonth
+            canGoForward = graphMonth < thisMonth
+            binding.prevGraph.contentDescription = getString(R.string.previous_month)
+            binding.nextGraph.contentDescription = getString(R.string.next_month)
+        } else {
+            val thisYear = today.get(WEEKS.weekBasedYear())
+            val firstYear = minOf(firstDate.get(WEEKS.weekBasedYear()), thisYear)
+            graphYear = graphYear.coerceIn(firstYear, thisYear)
+            binding.graphTitle.text = getString(R.string.graph_weekly_title, graphYear)
+            canGoBack = graphYear > firstYear
+            canGoForward = graphYear < thisYear
+            binding.prevGraph.contentDescription = getString(R.string.previous_year)
+            binding.nextGraph.contentDescription = getString(R.string.next_year)
+        }
+        listOf(binding.prevGraph to canGoBack, binding.nextGraph to canGoForward).forEach { (arrow, enabled) ->
             arrow.isEnabled = enabled
             arrow.alpha = if (enabled) 1f else 0.3f
         }
 
-        val totals = weeklyTotals()
-        // From the first week with anything in it to this week, or the last week with data in past years
-        val weeksWithData = totals.values.flatMap { it.keys }
-        val firstWeek = weeksWithData.minOrNull()
-        val lastWeek = if (graphYear == thisYear) today.get(WEEKS.weekOfWeekBasedYear()) else weeksWithData.maxOrNull()
-        val hasData = firstWeek != null && lastWeek != null
-        binding.weeklyChart.isVisible = hasData
+        val values = graphValues()
+        // From the first point with anything in it to today, or to the last point with data in the past
+        val pointsWithData = values.values.flatMap { it.keys }
+        val first = pointsWithData.minOrNull()
+        val last = graphPoint(today) ?: pointsWithData.maxOrNull()
+        val hasData = first != null && last != null
+        binding.statChart.isVisible = hasData
         binding.graphEmpty.isVisible = !hasData
         if (hasData) {
             val visible = stats.filter { it.id !in data.hiddenInGraph }
-            binding.weeklyChart.setData(
-                visible.map { WeeklyChartView.Series(it.color, totals[it.id].orEmpty()) },
-                firstWeek!!,
-                maxOf(firstWeek, lastWeek!!),
-                clearSelection = yearChanged,
+            binding.statChart.setData(
+                visible.map { StatChartView.Series(it.color, values[it.id].orEmpty()) },
+                first!!,
+                maxOf(first, last!!),
+                max = if (graphDaily) 5 else 35,
+                gridStep = if (graphDaily) 1 else 7,
+                label = if (graphDaily) { day -> day.toString() } else { week -> getString(R.string.week_short, week) },
+                clearSelection = rangeChanged,
             )
         }
-        renderWeekDetails(if (hasData) binding.weeklyChart.selectedWeek else null)
+        renderPointDetails(if (hasData) binding.statChart.selected else null)
         renderChips()
     }
 
-    /** The tapped week's totals, each with its stat's dot. */
-    private fun renderWeekDetails(week: Int?) {
-        binding.weekDetails.isVisible = week != null
-        if (week == null) return
-        val totals = weeklyTotals()
-        val text = SpannableStringBuilder(getString(R.string.week_number, week))
+    /** The tapped week's or day's values, each with its stat's dot. */
+    private fun renderPointDetails(point: Int?) {
+        binding.pointDetails.isVisible = point != null
+        if (point == null) return
+        val values = graphValues()
+        val title = if (graphDaily) graphMonth.atDay(point).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+        else getString(R.string.week_number, point)
+        val text = SpannableStringBuilder(title)
         stats.filter { it.id !in data.hiddenInGraph }.forEachIndexed { i, stat ->
             text.append(if (i % 3 == 0) "\n" else "     ")
             val dotStart = text.length
             text.append("● ")
             text.setSpan(ForegroundColorSpan(stat.color), dotStart, dotStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            text.append(getString(R.string.stat_total, stat.name, totals[stat.id]?.get(week) ?: 0))
+            text.append(getString(R.string.stat_total, stat.name, values[stat.id]?.get(point) ?: 0))
         }
-        binding.weekDetails.text = text
+        binding.pointDetails.text = text
     }
 
     /** Tap a stat to show or hide its line. */

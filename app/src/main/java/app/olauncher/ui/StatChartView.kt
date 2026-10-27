@@ -15,24 +15,27 @@ import app.olauncher.helper.getColorFromAttr
 import kotlin.math.roundToInt
 
 /**
- * One line per stat: weekly totals (0 to [MAX]) for weeks [firstWeek] to [lastWeek], stretched to fill
- * the width. Tapping picks a week, marked with a line, and reports it to [onWeekSelected].
+ * One line per stat over points [first] to [last] (weeks or days), stretched to fill the width, with
+ * values from 0 to [max]. Tapping picks a point, marked with a line, and reports it to [onPointSelected].
  */
-class WeeklyChartView @JvmOverloads constructor(
+class StatChartView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    /** [totals] holds every week from first to last. */
-    class Series(val color: Int, val totals: Map<Int, Int>)
+    /** Points missing from [values] count as 0. */
+    class Series(val color: Int, val values: Map<Int, Int>)
 
     private var series = emptyList<Series>()
-    private var firstWeek = 1
-    private var lastWeek = 1
+    private var first = 1
+    private var last = 1
+    private var max = 35
+    private var gridStep = 7
+    private var label: (Int) -> String = { it.toString() }
 
-    var selectedWeek: Int? = null
+    var selected: Int? = null
         private set
-    var onWeekSelected: ((week: Int?) -> Unit)? = null
+    var onPointSelected: ((point: Int?) -> Unit)? = null
 
     private val ink = context.getColorFromAttr(R.attr.primaryColor)
     private val gridPaint = Paint().apply { strokeWidth = 1f; color = ColorUtils.setAlphaComponent(ink, 30) }
@@ -56,12 +59,26 @@ class WeeklyChartView @JvmOverloads constructor(
     private val top get() = 8.dpToPx().toFloat()
     private val bottom get() = height - 20.dpToPx().toFloat()
 
-    /** Keeps the picked week unless [clearSelection] or the range changed. */
-    fun setData(series: List<Series>, firstWeek: Int, lastWeek: Int, clearSelection: Boolean = false) {
-        if (clearSelection || firstWeek != this.firstWeek || lastWeek != this.lastWeek) selectedWeek = null
+    /**
+     * Grid lines every [gridStep], [label] names points along the bottom. The picked point is kept
+     * unless [clearSelection] or the range changed.
+     */
+    fun setData(
+        series: List<Series>,
+        first: Int,
+        last: Int,
+        max: Int,
+        gridStep: Int,
+        label: (Int) -> String,
+        clearSelection: Boolean = false,
+    ) {
+        if (clearSelection || first != this.first || last != this.last) selected = null
         this.series = series
-        this.firstWeek = firstWeek
-        this.lastWeek = lastWeek
+        this.first = first
+        this.last = last
+        this.max = max
+        this.gridStep = gridStep
+        this.label = label
         invalidate()
     }
 
@@ -72,53 +89,52 @@ class WeeklyChartView @JvmOverloads constructor(
         )
     }
 
-    private fun x(week: Int): Float =
-        if (lastWeek == firstWeek) (left + right) / 2
-        else left + (week - firstWeek) * (right - left) / (lastWeek - firstWeek)
+    private fun x(point: Int): Float =
+        if (last == first) (left + right) / 2
+        else left + (point - first) * (right - left) / (last - first)
 
-    private fun y(total: Int): Float = top + (1 - total.toFloat() / MAX) * (bottom - top)
+    private fun y(value: Int): Float = top + (1 - value.toFloat() / max) * (bottom - top)
 
     override fun onDraw(canvas: Canvas) {
-        // Grid, a line per week's worth of a single face
         textPaint.textAlign = Paint.Align.RIGHT
-        for (total in 0..MAX step 7) {
-            canvas.drawLine(left, y(total), right, y(total), if (total == 0) axisPaint else gridPaint)
-            canvas.drawText(total.toString(), left - 5.dpToPx(), y(total) + textPaint.textSize / 3, textPaint)
+        for (value in 0..max step gridStep) {
+            canvas.drawLine(left, y(value), right, y(value), if (value == 0) axisPaint else gridPaint)
+            canvas.drawText(value.toString(), left - 5.dpToPx(), y(value) + textPaint.textSize / 3, textPaint)
         }
 
-        // Up to about five week labels, always including the first and last
-        val span = lastWeek - firstWeek
+        // Up to about five labels, always including the first and last
+        val span = last - first
         val step = maxOf(1, (span + 4) / 5)
-        val labels = (firstWeek..lastWeek step step).toMutableList()
-        if (labels.last() != lastWeek) {
-            if (lastWeek - labels.last() < step / 2.0 && labels.size > 1) labels.removeAt(labels.lastIndex)
-            labels.add(lastWeek)
+        val labels = (first..last step step).toMutableList()
+        if (labels.last() != last) {
+            if (last - labels.last() < step / 2.0 && labels.size > 1) labels.removeAt(labels.lastIndex)
+            labels.add(last)
         }
         val labelY = height - 5.dpToPx().toFloat()
-        labels.forEach { week ->
+        labels.forEach { point ->
             textPaint.textAlign = when {
                 span == 0 -> Paint.Align.CENTER
-                week == firstWeek -> Paint.Align.LEFT
-                week == lastWeek -> Paint.Align.RIGHT
+                point == first -> Paint.Align.LEFT
+                point == last -> Paint.Align.RIGHT
                 else -> Paint.Align.CENTER
             }
-            canvas.drawText(context.getString(R.string.week_short, week), x(week), labelY, textPaint)
+            canvas.drawText(label(point), x(point), labelY, textPaint)
         }
 
-        selectedWeek?.let { canvas.drawLine(x(it), top, x(it), bottom, selectPaint) }
+        selected?.let { canvas.drawLine(x(it), top, x(it), bottom, selectPaint) }
 
         val dotRadius = 3.dpToPx().toFloat()
         series.forEach { s ->
             linePaint.color = s.color
             dotPaint.color = s.color
             path.reset()
-            for (week in firstWeek..lastWeek) {
-                val total = s.totals[week] ?: 0
-                if (week == firstWeek) path.moveTo(x(week), y(total)) else path.lineTo(x(week), y(total))
+            for (point in first..last) {
+                val value = s.values[point] ?: 0
+                if (point == first) path.moveTo(x(point), y(value)) else path.lineTo(x(point), y(value))
             }
-            if (span == 0) canvas.drawCircle(x(firstWeek), y(s.totals[firstWeek] ?: 0), dotRadius, dotPaint)
+            if (span == 0) canvas.drawCircle(x(first), y(s.values[first] ?: 0), dotRadius, dotPaint)
             else canvas.drawPath(path, linePaint)
-            selectedWeek?.let { canvas.drawCircle(x(it), y(s.totals[it] ?: 0), dotRadius, dotPaint) }
+            selected?.let { canvas.drawCircle(x(it), y(s.values[it] ?: 0), dotRadius, dotPaint) }
         }
     }
 
@@ -127,11 +143,11 @@ class WeeklyChartView @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
-                val week = if (lastWeek == firstWeek) firstWeek
-                else (firstWeek + (event.x - left) / (right - left) * (lastWeek - firstWeek)).roundToInt().coerceIn(firstWeek, lastWeek)
-                if (week != selectedWeek) {
-                    selectedWeek = week
-                    onWeekSelected?.invoke(week)
+                val point = if (last == first) first
+                else (first + (event.x - left) / (right - left) * (last - first)).roundToInt().coerceIn(first, last)
+                if (point != selected) {
+                    selected = point
+                    onPointSelected?.invoke(point)
                     invalidate()
                 }
                 return true
@@ -142,10 +158,5 @@ class WeeklyChartView @JvmOverloads constructor(
             }
         }
         return super.onTouchEvent(event)
-    }
-
-    companion object {
-        /** Seven happy days */
-        const val MAX = 35
     }
 }

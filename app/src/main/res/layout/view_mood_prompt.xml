@@ -74,17 +74,23 @@
                 android:text="‹"
                 android:textColor="?attr/primaryColor" />
 
-            <TextView
-                android:id="@+id/moodPromptStat"
-                style="@style/TextSmall"
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:singleLine="true"
-                android:textColor="?attr/primaryColor"
-                tools:text="Sleep 2/4" />
+                android:layout_weight="1">
+
+                <!-- Wraps its text and sits in the middle, so the dot is right next to the name -->
+                <TextView
+                    android:id="@+id/moodPromptStat"
+                    style="@style/TextSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="?attr/primaryColor"
+                    tools:text="Sleep 2/4" />
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/moodPromptNext"

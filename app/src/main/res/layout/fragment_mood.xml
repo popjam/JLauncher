@@ -226,7 +226,7 @@
                     android:layout_marginBottom="8dp">
 
                     <TextView
-                        android:id="@+id/prevYear"
+                        android:id="@+id/prevGraph"
                         style="@style/TextLarge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -237,16 +237,19 @@
                         android:textColor="?attr/primaryColor" />
 
                     <TextView
-                        android:id="@+id/yearTitle"
+                        android:id="@+id/graphTitle"
                         style="@style/TextSmall"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
+                        android:background="?attr/selectableItemBackground"
+                        android:contentDescription="@string/switch_graph"
+                        android:padding="8dp"
                         android:textColor="?attr/primaryColor"
-                        tools:text="2026 · weekly total" />
+                        tools:text="2026 · weekly  ⇄" />
 
                     <TextView
-                        android:id="@+id/nextYear"
+                        android:id="@+id/nextGraph"
                         style="@style/TextLarge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -257,8 +260,8 @@
                         android:textColor="?attr/primaryColor" />
                 </FrameLayout>
 
-                <app.olauncher.ui.WeeklyChartView
-                    android:id="@+id/weeklyChart"
+                <app.olauncher.ui.StatChartView
+                    android:id="@+id/statChart"
                     android:layout_width="match_parent"
                     android:layout_height="200dp" />
 
@@ -275,7 +278,7 @@
 
                 <!-- The tapped week's totals -->
                 <TextView
-                    android:id="@+id/weekDetails"
+                    android:id="@+id/pointDetails"
                     style="@style/TextSmall"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

@@ -354,11 +354,14 @@ class MoodStore(context: Context) {
         fun sanitizeName(name: String?): String =
             sanitizeNote(name?.replace('\n', ' '))?.take(MAX_NAME_LENGTH)?.trim().orEmpty()
 
-        /** The faces a scale offers: happy and sad, plus neutral for 3, plus the mild ones for 5. */
+        /**
+         * The faces a scale offers, sad to happy as shown left to right: sad and happy, plus neutral
+         * for 3, plus the mild ones for 5.
+         */
         fun facesFor(scale: Int): List<Int> = when (scale) {
-            2 -> listOf(HAPPY, SAD)
-            3 -> listOf(HAPPY, NEUTRAL, SAD)
-            else -> listOf(HAPPY, MILDLY_HAPPY, NEUTRAL, MILDLY_SAD, SAD)
+            2 -> listOf(SAD, HAPPY)
+            3 -> listOf(SAD, NEUTRAL, HAPPY)
+            else -> listOf(SAD, MILDLY_SAD, NEUTRAL, MILDLY_HAPPY, HAPPY)
         }
 
         /** Happy scores 5 and sad 1, whatever the scale. */
