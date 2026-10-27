@@ -94,7 +94,7 @@ class PauseScreen(
         binding.pauseOpen.alpha = 1f
     }
 
-    /** Shows the app's share of today's screen time. Reading the usage log is slow, so it runs off the main thread. */
+    /** Shows the app's share of the day so far (time since midnight). Reading the usage log is slow, so it runs off the main thread. */
     private fun showShareOfToday() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !context.appUsagePermissionGranted()) return
         thread {
@@ -105,13 +105,14 @@ class PauseScreen(
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }.timeInMillis
+                val now = System.currentTimeMillis()
                 val events = EventLogWrapper(context)
                 val stats = events.aggregateForegroundStats(
-                    events.getForegroundStatsByTimestamps(startOfDay, System.currentTimeMillis())
+                    events.getForegroundStatsByTimestamps(startOfDay, now)
                 )
-                val total = events.aggregateSimpleUsageStats(stats)
                 val app = stats.filter { it.applicationId == packageName }.sumOf { it.timeUsed }
-                if (total > 0) (app * 100f / total).roundToInt() else 0
+                val sinceMidnight = now - startOfDay
+                if (sinceMidnight > 0) (app * 100f / sinceMidnight).roundToInt() else 0
             } catch (e: Exception) {
                 e.printStackTrace()
                 return@thread
