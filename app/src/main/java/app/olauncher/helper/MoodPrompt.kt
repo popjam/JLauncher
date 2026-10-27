@@ -3,54 +3,114 @@ package app.olauncher.helper
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import app.olauncher.R
+import app.olauncher.data.MoodStore
 import app.olauncher.ui.PixelFaceView
 
 object MoodPrompt {
 
+    private const val ADVANCE_DELAY_MS = 250L
+
     /**
-     * Fills a view_mood_prompt layout with the five faces. Tapping a face only selects it, so the
-     * thoughts box isn't skipped by accident; Confirm (enabled once a face is picked) passes the
-     * mood and note to [onResult]. Closing the prompt passes null for both.
+     * Fills a view_mood_prompt layout with the mood and each daily stat, one at a time. Tapping a face
+     * only selects it, then moves on to the next unanswered stat, so the thoughts box isn't skipped by
+     * accident. Confirm (enabled once every stat has a face) passes the faces by stat id and the note to
+     * [onResult]. Closing the prompt passes null for both. Answers already in [today] are filled in.
      */
-    fun bind(root: View, onResult: (mood: Int?, note: String?) -> Unit) {
+    fun bind(
+        root: View,
+        data: MoodStore.Data,
+        today: MoodStore.Day?,
+        onResult: (faces: Map<String, Int>?, note: String?) -> Unit,
+    ) {
         val context = root.context
         val names = context.resources.getStringArray(R.array.mood_names)
         val row = root.findViewById<LinearLayout>(R.id.moodPromptFaces)
         val note = root.findViewById<EditText>(R.id.moodPromptNote)
         val confirm = root.findViewById<View>(R.id.moodPromptConfirm)
-        var selected: Int? = null
+        val nav = root.findViewById<View>(R.id.moodPromptNav)
+        val label = root.findViewById<TextView>(R.id.moodPromptStat)
+        val prev = root.findViewById<View>(R.id.moodPromptPrev)
+        val next = root.findViewById<View>(R.id.moodPromptNext)
+
+        val stats = context.dailyStats(data)
+        val answers = mutableMapOf<String, Int>()
+        stats.forEach { stat -> today?.face(stat.id)?.let { answers[stat.id] = it } }
+        var index = stats.indexOfFirst { it.id !in answers }.coerceAtLeast(0)
+
+        val multiple = stats.size > 1
+        nav.isVisible = multiple
+        root.findViewById<TextView>(R.id.moodPromptTitle)
+            .setText(if (multiple) R.string.how_was_today else R.string.how_are_you_feeling)
+        row.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = (if (multiple) 8 else 24).dpToPx() }
+
+        lateinit var onFace: (statId: String, face: Int) -> Unit
+        var advance: Runnable? = null
+
+        fun nextUnanswered(): Int? = (1..stats.size).map { (index + it) % stats.size }.firstOrNull { stats[it].id !in answers }
 
         fun render() {
-            for (i in 0 until row.childCount) {
-                row.getChildAt(i).alpha = if (selected == null || selected == i) 1f else 0.3f
+            val stat = stats[index]
+            val selected = answers[stat.id]
+            label.text = context.getString(R.string.stat_step, stat.name, index + 1, stats.size)
+            label.setStatDot(stat.color)
+
+            val faces = MoodStore.facesFor(stat.scale)
+            if (row.childCount != faces.size || row.tag != stat.id) {
+                row.removeAllViews()
+                row.tag = stat.id
+                faces.forEach { face ->
+                    row.addView(PixelFaceView(context).apply {
+                        mood = face
+                        contentDescription = names[face]
+                        setPadding(6.dpToPx())
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener { onFace(stat.id, face) }
+                    }, LinearLayout.LayoutParams(0, 52.dpToPx(), 1f))
+                }
             }
-            confirm.isEnabled = selected != null
-            confirm.alpha = if (selected != null) 1f else 0.3f
+            faces.forEachIndexed { i, face ->
+                row.getChildAt(i).alpha = if (selected == null || selected == face) 1f else 0.3f
+            }
+            listOf(prev, next).forEach {
+                it.isEnabled = multiple
+                it.alpha = 0.6f
+            }
+            val done = stats.all { it.id in answers }
+            confirm.isEnabled = done
+            confirm.alpha = if (done) 1f else 0.3f
         }
 
-        fun finish(mood: Int?, text: String?) {
+        fun finish(faces: Map<String, Int>?, text: String?) {
+            advance?.let { row.removeCallbacks(it) }
             note.clearFocus()
             note.hideKeyboard()
-            onResult(mood, text)
+            onResult(faces, text)
         }
 
-        row.removeAllViews()
-        for (mood in 0..4) {
-            row.addView(PixelFaceView(context).apply {
-                this.mood = mood
-                contentDescription = names[mood]
-                setPadding(6.dpToPx())
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    selected = mood
-                    render()
-                }
-            }, LinearLayout.LayoutParams(0, 52.dpToPx(), 1f))
+        onFace = { statId, face ->
+            answers[statId] = face
+            render()
+            nextUnanswered()?.let { target ->
+                advance?.let { row.removeCallbacks(it) }
+                advance = Runnable {
+                    // Skip if another stat was picked in the meantime
+                    if (stats[index].id == statId) {
+                        index = target
+                        render()
+                    }
+                }.also { row.postDelayed(it, ADVANCE_DELAY_MS) }
+            }
         }
+        prev.setOnClickListener { index = (index - 1 + stats.size) % stats.size; render() }
+        next.setOnClickListener { index = (index + 1) % stats.size; render() }
+
         note.setText("")
-        confirm.setOnClickListener { selected?.let { finish(it, note.text?.toString()) } }
+        confirm.setOnClickListener { if (stats.all { it.id in answers }) finish(answers.toMap(), note.text?.toString()) }
         root.findViewById<View>(R.id.moodPromptClose).setOnClickListener { finish(null, null) }
         render()
     }

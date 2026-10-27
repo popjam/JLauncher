@@ -1,13 +1,14 @@
 package app.olauncher.data
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
- * Mood + daily usage history, stored as a single JSON file in app storage.
+ * Mood, daily usage and custom stat history, stored as a single JSON file in app storage.
  *
  * [BackupManager] bundles this file with the launcher settings.
  */
@@ -16,15 +17,55 @@ class MoodStore(context: Context) {
     private val appContext = context.applicationContext
     private val file = File(File(appContext.filesDir, DIR), FILE_NAME)
 
-    data class Day(val mood: Int?, val usageMs: Long?, val note: String? = null)
+    /** Custom stat values are faces, like [mood]: 0 (happy) to 4 (sad), keyed by [Stat.id]. */
+    data class Day(
+        val mood: Int?,
+        val usageMs: Long?,
+        val note: String? = null,
+        val values: Map<String, Int> = emptyMap(),
+    ) {
+        val isEmpty get() = mood == null && usageMs == null && note == null && values.isEmpty()
+
+        /** The face for [MOOD], [USAGE] or a custom stat's id. */
+        fun face(statId: String): Int? = when (statId) {
+            MOOD -> mood
+            USAGE -> usageMs?.let { moodForUsage(it) }
+            else -> values[statId]
+        }
+    }
+
+    /** A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. */
+    data class Stat(val id: String, val name: String, val color: Int, val daily: Boolean, val scale: Int)
 
     class Data(
         val days: MutableMap<String, Day> = sortedMapOf(),
+        val stats: MutableList<Stat> = mutableListOf(),
+        var moodColor: Int = DEFAULT_MOOD_COLOR,
+        var usageColor: Int = DEFAULT_USAGE_COLOR,
+        /** Stat ids whose lines are switched off in the All graph */
+        val hiddenInGraph: MutableSet<String> = mutableSetOf(),
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
         var promptSnoozedUntil: String = "",
         var backupFolder: String = "",
-    )
+    ) {
+        fun stat(id: String): Stat? = stats.firstOrNull { it.id == id }
+
+        fun colorOf(statId: String): Int = when (statId) {
+            MOOD -> moodColor
+            USAGE -> usageColor
+            else -> stat(statId)?.color ?: DEFAULT_MOOD_COLOR
+        }
+
+        /** Custom stats asked in the daily prompt, after the mood. */
+        val dailyStats get() = stats.filter { it.daily }
+
+        /** A day is done when its mood and every daily stat are in. */
+        fun isComplete(date: LocalDate): Boolean {
+            val day = days[date.toString()] ?: return false
+            return day.mood != null && dailyStats.all { day.values[it.id] != null }
+        }
+    }
 
     fun load(): Data = synchronized(LOCK) {
         if (!file.exists()) return Data()
@@ -51,17 +92,23 @@ class MoodStore(context: Context) {
 
     fun getDay(date: LocalDate): Day? = load().days[date.toString()]
 
-    fun setMood(date: LocalDate, mood: Int?) = update { data ->
-        val key = date.toString()
-        val old = data.days[key]
-        data.days[key] = Day(mood, old?.usageMs, old?.note)
+    /** Days left with nothing in them are removed. */
+    private fun Data.editDay(key: String, block: (Day) -> Day) {
+        val day = block(days[key] ?: Day(null, null))
+        if (day.isEmpty) days.remove(key) else days[key] = day
+    }
+
+    /** Sets [MOOD] or a custom stat; null clears it. */
+    fun setFace(date: LocalDate, statId: String, face: Int?) = update { data ->
+        data.editDay(date.toString()) { day ->
+            if (statId == MOOD) day.copy(mood = face)
+            else day.copy(values = if (face == null) day.values - statId else day.values + (statId to face))
+        }
     }
 
     /** Cleaned with [sanitizeNote]; a blank note removes it. */
     fun setNote(date: LocalDate, note: String?) = update { data ->
-        val key = date.toString()
-        val old = data.days[key]
-        data.days[key] = Day(old?.mood, old?.usageMs, sanitizeNote(note))
+        data.editDay(date.toString()) { it.copy(note = sanitizeNote(note)) }
     }
 
     /**
@@ -72,10 +119,43 @@ class MoodStore(context: Context) {
         val old = getDay(date)?.usageMs
         if (old != null && old >= usageMs) return
         update(sync = false) { data ->
-            val key = date.toString()
-            val day = data.days[key]
-            data.days[key] = Day(day?.mood, maxOf(usageMs, day?.usageMs ?: 0L), day?.note)
+            data.editDay(date.toString()) { it.copy(usageMs = maxOf(usageMs, it.usageMs ?: 0L)) }
         }
+    }
+
+    // --- Stats ---
+
+    fun addStat(name: String, color: Int, daily: Boolean, scale: Int): Stat {
+        val stat = Stat("s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale)
+        update { it.stats.add(stat) }
+        return stat
+    }
+
+    /** The scale stays as it was. */
+    fun editStat(id: String, name: String, color: Int, daily: Boolean) = update { data ->
+        val index = data.stats.indexOfFirst { it.id == id }
+        if (index >= 0) data.stats[index] = data.stats[index].copy(name = sanitizeName(name), color = color, daily = daily)
+    }
+
+    fun setBuiltInColor(id: String, color: Int) = update { data ->
+        when (id) {
+            MOOD -> data.moodColor = color
+            USAGE -> data.usageColor = color
+        }
+    }
+
+    /** Removes the stat and all its history. */
+    fun deleteStat(id: String) = update { data ->
+        data.stats.removeAll { it.id == id }
+        data.hiddenInGraph.remove(id)
+        data.days.keys.toList().forEach { key -> data.editDay(key) { it.copy(values = it.values - id) } }
+    }
+
+    fun setHiddenInGraph(ids: Set<String>) = update { it.setHidden(ids) }
+
+    private fun Data.setHidden(ids: Set<String>) {
+        hiddenInGraph.clear()
+        hiddenInGraph.addAll(ids)
     }
 
     // --- Daily prompt ---
@@ -84,27 +164,34 @@ class MoodStore(context: Context) {
 
     /**
      * When the prompt is next due today: the prompt time, or [PROMPT_SNOOZE_MINUTES] after it was
-     * last dismissed. Null when it's off or today's mood is already in; it stops at midnight.
+     * last dismissed. Null when it's off or today's mood and daily stats are all in; it stops at midnight.
      */
     fun nextPromptAt(now: LocalDateTime = LocalDateTime.now()): LocalDateTime? {
         val data = load()
         if (!data.promptEnabled) return null
         val today = now.toLocalDate()
-        if (data.days[today.toString()]?.mood != null) return null
+        if (data.isComplete(today)) return null
         val promptTime = today.atStartOfDay().plusMinutes(data.promptMinutes.toLong())
         val snoozedUntil = data.promptSnoozedUntil.takeIf { it.isNotEmpty() }
             ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
         return listOfNotNull(promptTime, snoozedUntil).max()
     }
 
-    /** A null [mood] means the prompt was dismissed, so it comes back after [PROMPT_SNOOZE_MINUTES]. */
-    fun answerPrompt(mood: Int?, note: String? = null) = update { data ->
-        val today = LocalDate.now().toString()
-        if (mood == null) {
+    /**
+     * [faces] maps [MOOD] and the daily stat ids to faces. Null means the prompt was dismissed,
+     * so it comes back after [PROMPT_SNOOZE_MINUTES].
+     */
+    fun answerPrompt(faces: Map<String, Int>?, note: String? = null) = update { data ->
+        if (faces == null) {
             data.promptSnoozedUntil = LocalDateTime.now().plusMinutes(PROMPT_SNOOZE_MINUTES).withNano(0).toString()
         } else {
-            val old = data.days[today]
-            data.days[today] = Day(mood, old?.usageMs, sanitizeNote(note) ?: old?.note)
+            data.editDay(LocalDate.now().toString()) { day ->
+                day.copy(
+                    mood = faces[MOOD] ?: day.mood,
+                    note = sanitizeNote(note) ?: day.note,
+                    values = day.values + (faces - MOOD),
+                )
+            }
         }
     }
 
@@ -116,17 +203,25 @@ class MoodStore(context: Context) {
     }
 
     /**
-     * Merges a backup into local data: moods and notes from the backup win, usage keeps the larger value,
-     * and the prompt settings are taken from the backup. Returns the number of days in the backup.
+     * Merges a backup into local data: stats, moods, stat values and notes from the backup win, usage
+     * keeps the larger value, and the prompt and graph settings are taken from the backup.
+     * Returns the number of days in the backup.
      */
     fun restoreFrom(json: JSONObject): Int {
         val backup = fromJson(json)
         update { data ->
+            backup.stats.forEach { stat ->
+                val index = data.stats.indexOfFirst { it.id == stat.id }
+                if (index >= 0) data.stats[index] = stat else data.stats.add(stat)
+            }
             backup.days.forEach { (key, day) ->
                 val local = data.days[key]
                 val usage = listOfNotNull(local?.usageMs, day.usageMs).maxOrNull()
-                data.days[key] = Day(day.mood ?: local?.mood, usage, day.note ?: local?.note)
+                data.days[key] = Day(day.mood ?: local?.mood, usage, day.note ?: local?.note, local?.values.orEmpty() + day.values)
             }
+            if (json.has("moodColor")) data.moodColor = backup.moodColor
+            if (json.has("usageColor")) data.usageColor = backup.usageColor
+            if (json.has("hiddenInGraph")) data.setHidden(backup.hiddenInGraph)
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
         }
@@ -134,17 +229,32 @@ class MoodStore(context: Context) {
     }
 
     private fun toJson(data: Data) = JSONObject().apply {
-        put("version", 1)
+        put("version", 2)
         put("promptEnabled", data.promptEnabled)
         put("promptMinutes", data.promptMinutes)
         put("promptSnoozedUntil", data.promptSnoozedUntil)
         put("backupFolder", data.backupFolder)
+        put("moodColor", data.moodColor)
+        put("usageColor", data.usageColor)
+        put("hiddenInGraph", JSONArray(data.hiddenInGraph.toList()))
+        put("stats", JSONArray().apply {
+            data.stats.forEach { stat ->
+                put(JSONObject().apply {
+                    put("id", stat.id)
+                    put("name", stat.name)
+                    put("color", stat.color)
+                    put("daily", stat.daily)
+                    put("scale", stat.scale)
+                })
+            }
+        })
         put("days", JSONObject().apply {
             data.days.forEach { (key, day) ->
                 put(key, JSONObject().apply {
                     day.mood?.let { put("mood", it) }
                     day.usageMs?.let { put("usageMs", it) }
                     day.note?.let { put("note", it) }
+                    if (day.values.isNotEmpty()) put("values", JSONObject().apply { day.values.forEach { (id, face) -> put(id, face) } })
                 })
             }
         })
@@ -152,18 +262,38 @@ class MoodStore(context: Context) {
 
     private fun fromJson(json: JSONObject): Data {
         val data = Data(
+            moodColor = json.optInt("moodColor", DEFAULT_MOOD_COLOR),
+            usageColor = json.optInt("usageColor", DEFAULT_USAGE_COLOR),
             promptEnabled = json.optBoolean("promptEnabled", false),
             promptMinutes = json.optInt("promptMinutes", DEFAULT_PROMPT_MINUTES),
             promptSnoozedUntil = json.optString("promptSnoozedUntil", ""),
             backupFolder = json.optString("backupFolder", ""),
         )
+        json.optJSONArray("stats")?.let { stats ->
+            for (i in 0 until stats.length()) {
+                val stat = stats.optJSONObject(i) ?: continue
+                val id = stat.optString("id").takeIf { it.isNotEmpty() && it != MOOD && it != USAGE && it != ALL } ?: continue
+                if (data.stat(id) != null) continue
+                val scale = stat.optInt("scale", 5).takeIf { it in SCALES } ?: 5
+                val name = sanitizeName(stat.optString("name")).ifEmpty { "?" }
+                data.stats.add(Stat(id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale))
+            }
+        }
+        json.optJSONArray("hiddenInGraph")?.let { hidden ->
+            for (i in 0 until hidden.length()) hidden.optString(i).takeIf { it.isNotEmpty() }?.let { data.hiddenInGraph.add(it) }
+        }
         val days = json.optJSONObject("days") ?: return data
         days.keys().forEach { key ->
             val day = days.optJSONObject(key) ?: return@forEach
             val mood = if (day.has("mood")) day.getInt("mood").coerceIn(0, 4) else null
             val usage = if (day.has("usageMs")) day.getLong("usageMs") else null
             val note = sanitizeNote(day.optString("note"))
-            if (mood != null || usage != null || note != null) data.days[key] = Day(mood, usage, note)
+            val values = mutableMapOf<String, Int>()
+            day.optJSONObject("values")?.let { obj ->
+                obj.keys().forEach { id -> values[id] = obj.optInt(id, NEUTRAL).coerceIn(0, 4) }
+            }
+            val parsed = Day(mood, usage, note, values)
+            if (!parsed.isEmpty) data.days[key] = parsed
         }
         return data
     }
@@ -173,6 +303,7 @@ class MoodStore(context: Context) {
         const val FILE_NAME = "mood_data.json"
         const val DEFAULT_PROMPT_MINUTES = 21 * 60
         const val MAX_NOTE_LENGTH = 2000
+        const val MAX_NAME_LENGTH = 24
         const val PROMPT_SNOOZE_MINUTES = 30L
 
         const val HAPPY = 0
@@ -180,6 +311,21 @@ class MoodStore(context: Context) {
         const val NEUTRAL = 2
         const val MILDLY_SAD = 3
         const val SAD = 4
+
+        /** The built-in stats' ids, and [ALL] for the graph of every stat */
+        const val ALL = "all"
+        const val MOOD = "mood"
+        const val USAGE = "usage"
+
+        val SCALES = listOf(2, 3, 5)
+        const val DEFAULT_MOOD_COLOR = 0xFFF2B33D.toInt()
+        const val DEFAULT_USAGE_COLOR = 0xFFB388FF.toInt()
+
+        /** New stats start with the next of these; any colour can be picked */
+        val NEW_STAT_COLORS = intArrayOf(
+            0xFF5B8DEF.toInt(), 0xFF4FC3A1.toInt(), 0xFFE05FA8.toInt(),
+            0xFF4DD0E1.toInt(), 0xFFFF8A65.toInt(), 0xFFAED581.toInt(),
+        )
 
         private val LOCK = Any()
 
@@ -203,6 +349,20 @@ class MoodStore(context: Context) {
             ?.take(MAX_NOTE_LENGTH)
             ?.trim()
             ?.ifEmpty { null }
+
+        /** One line, capped at [MAX_NAME_LENGTH]. */
+        fun sanitizeName(name: String?): String =
+            sanitizeNote(name?.replace('\n', ' '))?.take(MAX_NAME_LENGTH)?.trim().orEmpty()
+
+        /** The faces a scale offers: happy and sad, plus neutral for 3, plus the mild ones for 5. */
+        fun facesFor(scale: Int): List<Int> = when (scale) {
+            2 -> listOf(HAPPY, SAD)
+            3 -> listOf(HAPPY, NEUTRAL, SAD)
+            else -> listOf(HAPPY, MILDLY_HAPPY, NEUTRAL, MILDLY_SAD, SAD)
+        }
+
+        /** Happy scores 5 and sad 1, whatever the scale. */
+        fun score(face: Int): Int = 5 - face
 
         fun moodForUsage(usageMs: Long): Int {
             val minutes = usageMs / 60_000

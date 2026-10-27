@@ -19,39 +19,51 @@
             android:orientation="vertical"
             android:paddingVertical="48dp">
 
-            <!-- Tabs -->
+            <!-- Tabs scroll sideways when there are many stats; + stays put. Long-press a tab to edit it. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="12dp"
                 android:background="@drawable/rounded_rect_shade_color"
-                android:gravity="center"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:padding="8dp">
 
-                <TextView
-                    android:id="@+id/tabMood"
-                    style="@style/TextSmall"
-                    android:layout_width="wrap_content"
+                <HorizontalScrollView
+                    android:id="@+id/tabScroll"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:paddingHorizontal="24dp"
-                    android:paddingVertical="8dp"
-                    android:text="@string/mood"
-                    android:textColor="?attr/primaryColor" />
+                    android:layout_weight="1"
+                    android:fadingEdgeLength="24dp"
+                    android:overScrollMode="never"
+                    android:requiresFadingEdge="horizontal"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/tabRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
 
                 <TextView
-                    android:id="@+id/tabUsage"
-                    style="@style/TextSmall"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="24dp"
-                    android:paddingVertical="8dp"
-                    android:text="@string/usage"
-                    android:textColor="?attr/primaryColor" />
+                    android:id="@+id/addStat"
+                    style="@style/TextLarge"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/bg_add_stat"
+                    android:contentDescription="@string/new_stat"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:text="+"
+                    android:textColor="?attr/primaryColor"
+                    android:textSize="22sp" />
             </LinearLayout>
 
             <!-- Selected day -->
             <LinearLayout
+                android:id="@+id/dayCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="12dp"
@@ -103,32 +115,6 @@
                         tools:text="4h 37m" />
                 </LinearLayout>
 
-                <!-- The other metric for the same day, for comparison -->
-                <LinearLayout
-                    android:id="@+id/compareRow"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:alpha="0.6"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/compareText"
-                        style="@style/TextSmall"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="?attr/primaryColor"
-                        android:textSize="13sp"
-                        tools:text="Usage 48m" />
-
-                    <app.olauncher.ui.PixelFaceView
-                        android:id="@+id/compareFace"
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
-                        android:layout_marginStart="6dp" />
-                </LinearLayout>
-
                 <TextView
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
@@ -163,6 +149,7 @@
 
             <!-- Calendar -->
             <LinearLayout
+                android:id="@+id/calendarCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="12dp"
@@ -219,6 +206,142 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
+            </LinearLayout>
+
+            <!-- All: weekly totals of every stat over a year -->
+            <LinearLayout
+                android:id="@+id/graphCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:orientation="vertical"
+                android:padding="12dp"
+                android:visibility="gone">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/prevYear"
+                        style="@style/TextLarge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="start|center_vertical"
+                        android:contentDescription="@string/previous_year"
+                        android:paddingHorizontal="16dp"
+                        android:text="‹"
+                        android:textColor="?attr/primaryColor" />
+
+                    <TextView
+                        android:id="@+id/yearTitle"
+                        style="@style/TextSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:textColor="?attr/primaryColor"
+                        tools:text="2026 · weekly total" />
+
+                    <TextView
+                        android:id="@+id/nextYear"
+                        style="@style/TextLarge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end|center_vertical"
+                        android:contentDescription="@string/next_year"
+                        android:paddingHorizontal="16dp"
+                        android:text="›"
+                        android:textColor="?attr/primaryColor" />
+                </FrameLayout>
+
+                <app.olauncher.ui.WeeklyChartView
+                    android:id="@+id/weeklyChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp" />
+
+                <TextView
+                    android:id="@+id/graphEmpty"
+                    style="@style/TextSmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:alpha="0.6"
+                    android:gravity="center"
+                    android:text="@string/no_data"
+                    android:textColor="?attr/primaryColor"
+                    android:visibility="gone" />
+
+                <!-- The tapped week's totals -->
+                <TextView
+                    android:id="@+id/weekDetails"
+                    style="@style/TextSmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="4dp"
+                    android:textColor="?attr/primaryColor"
+                    android:textSize="13sp"
+                    android:visibility="gone"
+                    tools:text="Week 31" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/graphToggles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/TextSmall"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:alpha="0.7"
+                        android:text="@string/show"
+                        android:textColor="?attr/primaryColor"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/selectAllStats"
+                        style="@style/TextSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:padding="6dp"
+                        android:text="@string/select_all"
+                        android:textColor="?attr/primaryColor"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/clearStats"
+                        style="@style/TextSmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:padding="6dp"
+                        android:text="@string/clear"
+                        android:textColor="?attr/primaryColor"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <app.olauncher.ui.FlowLayout
+                    android:id="@+id/graphChips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
             </LinearLayout>
 
         </LinearLayout>

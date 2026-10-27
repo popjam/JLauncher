@@ -4,6 +4,9 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -16,15 +19,19 @@ import androidx.fragment.app.Fragment
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentMoodBinding
+import app.olauncher.helper.StatInfo
+import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.hideKeyboard
+import app.olauncher.helper.setStatDot
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.WeekFields
 import java.util.Locale
 
 class MoodFragment : Fragment() {
@@ -34,13 +41,19 @@ class MoodFragment : Fragment() {
 
     private lateinit var moodStore: MoodStore
     private var data = MoodStore.Data()
-    private var showUsage = false
+    private var stats = emptyList<StatInfo>()
+
+    /** [MoodStore.ALL] for the graph, otherwise the stat whose days are shown */
+    private var selectedStat = MoodStore.MOOD
     private var selectedDate: LocalDate = LocalDate.now()
     private var shownMonth: YearMonth = YearMonth.now()
+    private var graphYear = LocalDate.now().get(WEEKS.weekBasedYear())
 
-    private val moodFaces = mutableListOf<PixelFaceView>()
     private val dayCells = mutableListOf<DayCell>()
     private val weekRows = mutableListOf<LinearLayout>()
+
+    /** What the tabs were built from, so they're only rebuilt (losing their scroll) when it changes */
+    private var tabsKey: List<StatInfo>? = null
 
     /** The date whose note is in the input, so re-renders don't overwrite unsaved typing. */
     private var noteDate: LocalDate? = null
@@ -55,11 +68,9 @@ class MoodFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         moodStore = MoodStore(requireContext())
-        buildMoodFaces()
         buildCalendar()
 
-        binding.tabMood.setOnClickListener { showUsage = false; render() }
-        binding.tabUsage.setOnClickListener { showUsage = true; render() }
+        binding.addStat.setOnClickListener { editStat(null) }
         binding.prevMonth.setOnClickListener {
             shownMonth = shownMonth.minusMonths(1)
             render()
@@ -68,13 +79,24 @@ class MoodFragment : Fragment() {
             if (shownMonth < YearMonth.now()) shownMonth = shownMonth.plusMonths(1)
             render()
         }
+        binding.prevYear.setOnClickListener {
+            graphYear--
+            renderGraph(yearChanged = true)
+        }
+        binding.nextYear.setOnClickListener {
+            graphYear++
+            renderGraph(yearChanged = true)
+        }
+        binding.selectAllStats.setOnClickListener { setHidden(emptySet()) }
+        binding.clearStats.setOnClickListener { setHidden(stats.map { it.id }.toSet()) }
+        binding.weeklyChart.onWeekSelected = { renderWeekDetails(it) }
         binding.noteInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
     }
 
     override fun onResume() {
         super.onResume()
         // Data can change while away, e.g. today's usage was refreshed or the prompt added a note
-        data = moodStore.load()
+        reload()
         noteDate = null
         render()
     }
@@ -84,12 +106,20 @@ class MoodFragment : Fragment() {
         super.onPause()
     }
 
+    private fun reload() {
+        data = moodStore.load()
+        stats = requireContext().allStats(data)
+        if (selectedStat != MoodStore.ALL && stats.none { it.id == selectedStat }) selectedStat = MoodStore.MOOD
+    }
+
+    private val selected: StatInfo? get() = stats.firstOrNull { it.id == selectedStat }
+
     private fun saveNote() {
         val date = noteDate ?: return
         val note = MoodStore.sanitizeNote(binding.noteInput.text?.toString())
         if (note != data.days[date.toString()]?.note) {
             moodStore.setNote(date, note)
-            data = moodStore.load()
+            reload()
             renderCalendar()
         }
         // Show the cleaned-up text, unless still typing
@@ -97,20 +127,37 @@ class MoodFragment : Fragment() {
             binding.noteInput.setText(note.orEmpty())
     }
 
-    private fun buildMoodFaces() {
-        val names = resources.getStringArray(R.array.mood_names)
-        for (mood in 0..4) {
-            val face = PixelFaceView(requireContext()).apply {
-                this.mood = mood
-                contentDescription = names[mood]
-                val padding = 6.dpToPx()
-                setPadding(padding, padding, padding, padding)
-                setOnClickListener { onMoodTapped(mood) }
-            }
-            moodFaces.add(face)
-            binding.moodFaces.addView(face, LinearLayout.LayoutParams(0, 48.dpToPx(), 1f))
+    private fun leaveNote() {
+        saveNote()
+        binding.noteInput.clearFocus()
+        binding.noteInput.hideKeyboard()
+    }
+
+    private fun selectStat(id: String) {
+        if (id == selectedStat) return
+        leaveNote()
+        selectedStat = id
+        render()
+    }
+
+    /** [statId] null adds a new stat. */
+    private fun editStat(statId: String?) {
+        StatEditor.show(requireContext(), moodStore, statId) { id ->
+            if (_binding == null) return@show
+            if (id != null) selectedStat = id
+            reload()
+            render()
+            if (id != null) scrollToTab(id)
         }
     }
+
+    private fun setHidden(ids: Set<String>) {
+        moodStore.setHiddenInGraph(ids)
+        reload()
+        renderGraph()
+    }
+
+    // --- Building ---
 
     private fun buildCalendar() {
         val context = requireContext()
@@ -154,34 +201,82 @@ class MoodFragment : Fragment() {
         }
     }
 
-    private fun onMoodTapped(mood: Int) {
-        if (showUsage) return
-        val current = data.days[selectedDate.toString()]?.mood
+    /** "All", then a tab per stat with a dot in its colour. Long-press a stat's tab to edit it. */
+    private fun buildTabs() {
+        if (tabsKey == stats) return
+        tabsKey = stats
+        val context = requireContext()
+        binding.tabRow.removeAllViews()
+        val tabs = listOf<StatInfo?>(null) + stats
+        tabs.forEach { stat ->
+            val id = stat?.id ?: MoodStore.ALL
+            binding.tabRow.addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                tag = id
+                text = stat?.name ?: getString(R.string.all)
+                setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+                setPadding(12.dpToPx(), 8.dpToPx(), 12.dpToPx(), 8.dpToPx())
+                gravity = Gravity.CENTER_VERTICAL
+                setStatDot(stat?.color)
+                setOnClickListener { selectStat(id) }
+                if (stat != null) setOnLongClickListener {
+                    leaveNote()
+                    editStat(stat.id)
+                    true
+                }
+            })
+        }
+    }
+
+    private fun scrollToTab(id: String) {
+        binding.tabScroll.post {
+            val tab = binding.tabRow.findViewWithTag<View>(id) ?: return@post
+            binding.tabScroll.smoothScrollTo(maxOf(0, tab.left - 24.dpToPx()), 0)
+        }
+    }
+
+    private fun onFaceTapped(face: Int) {
+        val stat = selected ?: return
+        if (stat.id == MoodStore.USAGE) return
+        val current = data.days[selectedDate.toString()]?.face(stat.id)
         // Tapping the chosen face again clears it
-        moodStore.setMood(selectedDate, if (current == mood) null else mood)
-        data = moodStore.load()
+        moodStore.setFace(selectedDate, stat.id, if (current == face) null else face)
+        reload()
         render()
     }
 
+    // --- Rendering ---
+
     private fun render() {
         renderTabs()
-        renderSelectedDay()
-        renderCalendar()
+        val all = selectedStat == MoodStore.ALL
+        binding.dayCard.isVisible = !all
+        binding.calendarCard.isVisible = !all
+        binding.graphCard.isVisible = all
+        binding.graphToggles.isVisible = all
+        if (all) {
+            renderGraph()
+        } else {
+            renderSelectedDay()
+            renderCalendar()
+        }
     }
 
     private fun renderTabs() {
-        listOf(binding.tabMood to !showUsage, binding.tabUsage to showUsage).forEach { (tab, selected) ->
-            tab.alpha = if (selected) 1f else 0.5f
-            tab.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
-            tab.paintFlags = if (selected) tab.paintFlags or Paint.UNDERLINE_TEXT_FLAG
+        buildTabs()
+        for (i in 0 until binding.tabRow.childCount) {
+            val tab = binding.tabRow.getChildAt(i) as TextView
+            val isSelected = tab.tag == selectedStat
+            tab.alpha = if (isSelected) 1f else 0.5f
+            tab.setTypeface(null, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
+            tab.paintFlags = if (isSelected) tab.paintFlags or Paint.UNDERLINE_TEXT_FLAG
             else tab.paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
         }
     }
 
     private fun renderSelectedDay() {
+        val stat = selected ?: return
         val day = data.days[selectedDate.toString()]
-        val mood = day?.mood
-        val usage = day?.usageMs
+        val showUsage = stat.id == MoodStore.USAGE
 
         binding.dayLabel.text = if (selectedDate == LocalDate.now()) getString(R.string.today)
         else selectedDate.format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.getDefault()))
@@ -194,25 +289,33 @@ class MoodFragment : Fragment() {
         binding.moodFaces.isVisible = !showUsage
         binding.usageRow.isVisible = showUsage
         if (showUsage) {
+            val usage = day?.usageMs
             binding.usageFace.isVisible = usage != null
             usage?.let { binding.usageFace.mood = MoodStore.moodForUsage(it) }
             binding.usageTime.text = usage?.let { requireContext().formattedTimeSpent(it) } ?: getString(R.string.no_data)
-
-            binding.compareRow.isVisible = mood != null
-            binding.compareText.text = getString(R.string.mood)
-            mood?.let { binding.compareFace.mood = it }
         } else {
-            moodFaces.forEachIndexed { index, face -> face.alpha = if (index == mood) 1f else 0.3f }
-
-            binding.compareRow.isVisible = usage != null
-            usage?.let {
-                binding.compareText.text = getString(R.string.usage_line, requireContext().formattedTimeSpent(it))
-                binding.compareFace.mood = MoodStore.moodForUsage(it)
+            val faces = MoodStore.facesFor(stat.scale)
+            if (binding.moodFaces.tag != faces) {
+                binding.moodFaces.tag = faces
+                binding.moodFaces.removeAllViews()
+                val names = resources.getStringArray(R.array.mood_names)
+                faces.forEach { face ->
+                    binding.moodFaces.addView(PixelFaceView(requireContext()).apply {
+                        mood = face
+                        contentDescription = names[face]
+                        val padding = 6.dpToPx()
+                        setPadding(padding, padding, padding, padding)
+                        setOnClickListener { onFaceTapped(face) }
+                    }, LinearLayout.LayoutParams(0, 48.dpToPx(), 1f))
+                }
             }
+            val chosen = day?.face(stat.id)
+            faces.forEachIndexed { i, face -> binding.moodFaces.getChildAt(i).alpha = if (face == chosen) 1f else 0.3f }
         }
     }
 
     private fun renderCalendar() {
+        val stat = selected ?: return
         val today = LocalDate.now()
         binding.monthTitle.text = shownMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
         val canGoForward = shownMonth < YearMonth.now()
@@ -228,7 +331,7 @@ class MoodFragment : Fragment() {
             if (!inMonth) return@forEachIndexed
 
             val day = data.days[date.toString()]
-            val value = if (showUsage) day?.usageMs?.let { MoodStore.moodForUsage(it) } else day?.mood
+            val value = day?.face(stat.id)
             val isFuture = date > today
 
             cell.face.isVisible = value != null && !isFuture
@@ -251,9 +354,7 @@ class MoodFragment : Fragment() {
                 }
             )
             cell.box.setOnClickListener {
-                saveNote()
-                binding.noteInput.clearFocus()
-                binding.noteInput.hideKeyboard()
+                leaveNote()
                 selectedDate = date
                 render()
             }
@@ -264,11 +365,103 @@ class MoodFragment : Fragment() {
         weekRows.last().isVisible = dayCells.takeLast(7).any { it.box.isVisible }
     }
 
+    /** Weekly totals for [graphYear]: each day scores 5 (happy) to 1 (sad), and days with no entry 0. */
+    private fun weeklyTotals(): Map<String, Map<Int, Int>> {
+        val totals = mutableMapOf<String, MutableMap<Int, Int>>()
+        data.days.forEach { (key, day) ->
+            val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@forEach
+            if (date.get(WEEKS.weekBasedYear()) != graphYear) return@forEach
+            val week = date.get(WEEKS.weekOfWeekBasedYear())
+            stats.forEach { stat ->
+                day.face(stat.id)?.let { face ->
+                    val weeks = totals.getOrPut(stat.id) { mutableMapOf() }
+                    weeks[week] = (weeks[week] ?: 0) + MoodStore.score(face)
+                }
+            }
+        }
+        return totals
+    }
+
+    private fun renderGraph(yearChanged: Boolean = false) {
+        val today = LocalDate.now()
+        val thisYear = today.get(WEEKS.weekBasedYear())
+        val firstYear = data.days.keys.firstOrNull()
+            ?.let { runCatching { LocalDate.parse(it).get(WEEKS.weekBasedYear()) }.getOrNull() } ?: thisYear
+        graphYear = graphYear.coerceIn(minOf(firstYear, thisYear), thisYear)
+
+        binding.yearTitle.text = getString(R.string.year_weekly_total, graphYear)
+        listOf(binding.prevYear to (graphYear > firstYear), binding.nextYear to (graphYear < thisYear)).forEach { (arrow, enabled) ->
+            arrow.isEnabled = enabled
+            arrow.alpha = if (enabled) 1f else 0.3f
+        }
+
+        val totals = weeklyTotals()
+        // From the first week with anything in it to this week, or the last week with data in past years
+        val weeksWithData = totals.values.flatMap { it.keys }
+        val firstWeek = weeksWithData.minOrNull()
+        val lastWeek = if (graphYear == thisYear) today.get(WEEKS.weekOfWeekBasedYear()) else weeksWithData.maxOrNull()
+        val hasData = firstWeek != null && lastWeek != null
+        binding.weeklyChart.isVisible = hasData
+        binding.graphEmpty.isVisible = !hasData
+        if (hasData) {
+            val visible = stats.filter { it.id !in data.hiddenInGraph }
+            binding.weeklyChart.setData(
+                visible.map { WeeklyChartView.Series(it.color, totals[it.id].orEmpty()) },
+                firstWeek!!,
+                maxOf(firstWeek, lastWeek!!),
+                clearSelection = yearChanged,
+            )
+        }
+        renderWeekDetails(if (hasData) binding.weeklyChart.selectedWeek else null)
+        renderChips()
+    }
+
+    /** The tapped week's totals, each with its stat's dot. */
+    private fun renderWeekDetails(week: Int?) {
+        binding.weekDetails.isVisible = week != null
+        if (week == null) return
+        val totals = weeklyTotals()
+        val text = SpannableStringBuilder(getString(R.string.week_number, week))
+        stats.filter { it.id !in data.hiddenInGraph }.forEachIndexed { i, stat ->
+            text.append(if (i % 3 == 0) "\n" else "     ")
+            val dotStart = text.length
+            text.append("● ")
+            text.setSpan(ForegroundColorSpan(stat.color), dotStart, dotStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.append(getString(R.string.stat_total, stat.name, totals[stat.id]?.get(week) ?: 0))
+        }
+        binding.weekDetails.text = text
+    }
+
+    /** Tap a stat to show or hide its line. */
+    private fun renderChips() {
+        val context = requireContext()
+        binding.graphChips.removeAllViews()
+        stats.forEach { stat ->
+            val shown = stat.id !in data.hiddenInGraph
+            binding.graphChips.addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                text = stat.name
+                textSize = 13f
+                setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+                setBackgroundResource(R.drawable.bg_stat_chip)
+                setPadding(10.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+                setStatDot(stat.color)
+                alpha = if (shown) 1f else 0.35f
+                setOnClickListener {
+                    setHidden(if (shown) data.hiddenInGraph + stat.id else data.hiddenInGraph - stat.id)
+                }
+            })
+        }
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
-        moodFaces.clear()
         dayCells.clear()
         weekRows.clear()
+        tabsKey = null
         _binding = null
+    }
+
+    companion object {
+        private val WEEKS = WeekFields.ISO
     }
 }

@@ -381,7 +381,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     /**
      * The daily mood prompt only appears on the home screen. Dismissing it snoozes it for half an
-     * hour, until a mood is given or the day ends; a timer brings it back while home stays open.
+     * hour, until the mood and daily stats are in or the day ends; a timer brings it back while home stays open.
      */
     private fun showMoodPromptIfDue() {
         handler.removeCallbacks(moodPromptCheck)
@@ -397,8 +397,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
         // Already showing: rebinding would wipe anything typed before leaving and coming back
         if (binding.moodPrompt.root.visibility == View.VISIBLE) return
-        MoodPrompt.bind(binding.moodPrompt.root) { mood, note ->
-            moodStore.answerPrompt(mood, note)
+        val data = moodStore.load()
+        MoodPrompt.bind(binding.moodPrompt.root, data, data.days[now.toLocalDate().toString()]) { faces, note ->
+            moodStore.answerPrompt(faces, note)
             binding.moodPrompt.root.visibility = View.GONE
             showMoodPromptIfDue()
         }

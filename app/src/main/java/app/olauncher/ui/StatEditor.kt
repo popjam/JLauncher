@@ -1,0 +1,177 @@
+package app.olauncher.ui
+
+import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.widget.LinearLayout
+import android.widget.SeekBar
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.core.view.isVisible
+import app.olauncher.R
+import app.olauncher.data.MoodStore
+import app.olauncher.databinding.DialogStatEditorBinding
+import app.olauncher.helper.dpToPx
+import app.olauncher.helper.getColorFromAttr
+
+/**
+ * The form for adding a stat (from +) or editing one (long-pressing its tab). Mood and Screen time
+ * only get the colour picker, and a custom stat's scale can't change once added.
+ */
+object StatEditor {
+
+    /** Darker than this makes lines hard to see on the dark theme */
+    private const val MIN_BRIGHTNESS = 0.2f
+
+    /**
+     * [statId] is null for a new stat. [onDone] gets the stat to show afterwards: the new or edited one,
+     * or null when it was deleted.
+     */
+    fun show(context: Context, moodStore: MoodStore, statId: String?, onDone: (statId: String?) -> Unit) {
+        val data = moodStore.load()
+        val builtIn = statId == MoodStore.MOOD || statId == MoodStore.USAGE
+        val stat = statId?.let { data.stat(it) }
+        if (statId != null && !builtIn && stat == null) return
+
+        val binding = DialogStatEditorBinding.inflate(LayoutInflater.from(context))
+        binding.statNameSection.isVisible = !builtIn
+        binding.statOptionsSection.isVisible = !builtIn
+
+        // Colour: hue and saturation on the wheel, brightness on the slider
+        val hsv = FloatArray(3)
+        Color.colorToHSV(
+            if (statId == null) MoodStore.NEW_STAT_COLORS[data.stats.size % MoodStore.NEW_STAT_COLORS.size]
+            else data.colorOf(statId),
+            hsv
+        )
+        hsv[2] = hsv[2].coerceAtLeast(MIN_BRIGHTNESS)
+        val swatch = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setStroke(2.dpToPx(), context.getColorFromAttr(R.attr.primaryColorTrans50))
+        }
+        binding.statColorSwatch.background = swatch
+        fun color() = Color.HSVToColor(hsv)
+        fun renderColor() {
+            val color = color()
+            swatch.setColor(color)
+            binding.statColorWheel.knobColor = color
+            binding.statColorHex.text = String.format("#%06X", color and 0xFFFFFF)
+        }
+        binding.statColorWheel.setColor(hsv[0], hsv[1])
+        binding.statColorWheel.onChange = { hue, saturation ->
+            hsv[0] = hue
+            hsv[1] = saturation
+            renderColor()
+        }
+        binding.statBrightness.progress = ((hsv[2] - MIN_BRIGHTNESS) / (1 - MIN_BRIGHTNESS) * 100).toInt()
+        binding.statBrightness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                hsv[2] = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * progress / 100f
+                renderColor()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+        renderColor()
+
+        // Name, daily check and scale
+        binding.statName.setText(stat?.name.orEmpty())
+        binding.statDaily.isChecked = stat?.daily ?: true
+        var scale = stat?.scale ?: 5
+        if (stat != null) binding.statScaleLabel.text = context.getString(R.string.stat_scale_locked)
+        val scaleViews = MoodStore.SCALES.associateWith { option -> scaleOption(context, option) }
+        fun renderScales() = scaleViews.forEach { (option, view) ->
+            view.setBackgroundResource(if (option == scale) R.drawable.bg_day_selected else R.drawable.rounded_box)
+            view.alpha = if (stat == null || option == scale) 1f else 0.3f
+        }
+        scaleViews.forEach { (option, view) ->
+            binding.statScales.addView(view, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = if (option == MoodStore.SCALES.last()) 0 else 6.dpToPx()
+            })
+            if (stat == null) view.setOnClickListener {
+                scale = option
+                renderScales()
+            }
+        }
+        renderScales()
+
+        val title = when {
+            statId == MoodStore.MOOD -> context.getString(R.string.mood)
+            builtIn -> context.getString(R.string.screen_time)
+            stat != null -> context.getString(R.string.edit_stat)
+            else -> context.getString(R.string.new_stat)
+        }
+        val builder = AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(binding.root)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(if (statId == null) R.string.add else R.string.save) { _, _ ->
+                val name = binding.statName.text?.toString().orEmpty()
+                when {
+                    builtIn -> moodStore.setBuiltInColor(statId!!, color())
+                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked)
+                    else -> {
+                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale)
+                        return@setPositiveButton onDone(added.id)
+                    }
+                }
+                onDone(statId)
+            }
+        if (stat != null) builder.setNeutralButton(R.string.delete_stat) { _, _ -> confirmDelete(context, moodStore, stat, onDone) }
+        val dialog = builder.show()
+
+        if (!builtIn) {
+            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun renderPositive() {
+                positive.isEnabled = MoodStore.sanitizeName(binding.statName.text?.toString()).isNotEmpty()
+            }
+            binding.statName.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) = renderPositive()
+            })
+            renderPositive()
+        }
+    }
+
+    private fun confirmDelete(context: Context, moodStore: MoodStore, stat: MoodStore.Stat, onDone: (String?) -> Unit) {
+        AlertDialog.Builder(context)
+            .setMessage(context.getString(R.string.delete_stat_message, stat.name))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete_stat) { _, _ ->
+                moodStore.deleteStat(stat.id)
+                onDone(null)
+            }
+            .show()
+    }
+
+    /** The scale's faces with "Out of N" below. */
+    private fun scaleOption(context: Context, scale: Int) = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(4.dpToPx(), 8.dpToPx(), 4.dpToPx(), 8.dpToPx())
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            MoodStore.facesFor(scale).forEach { face ->
+                addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(13.dpToPx(), 13.dpToPx()).apply {
+                    marginStart = 1.dpToPx()
+                    marginEnd = 1.dpToPx()
+                })
+            }
+        })
+        addView(TextView(context).apply {
+            text = context.getString(R.string.out_of, scale)
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 4.dpToPx()
+        })
+    }
+}
