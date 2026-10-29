@@ -3,12 +3,16 @@ package app.olauncher.ui
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.text.Editable
 import android.text.InputFilter
+import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -186,15 +190,18 @@ object StatEditor {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
         addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
-        addView(EditText(context, null, 0, R.style.TextSmall).apply {
+        // The default EditText style, which makes it focusable and brings up the keyboard
+        addView(EditText(context).apply {
             setBackgroundResource(R.drawable.rounded_box)
             setPadding(4.dpToPx(), 8.dpToPx(), 4.dpToPx(), 8.dpToPx())
             gravity = Gravity.CENTER
             textSize = 13f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            imeOptions = EditorInfo.IME_ACTION_NEXT
             isSingleLine = true
             filters = arrayOf(InputFilter.LengthFilter(MoodStore.MAX_LABEL_LENGTH))
-            setShadowLayer(0f, 0f, 0f, 0)
             setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             setText(text)
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
