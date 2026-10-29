@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
@@ -94,7 +95,8 @@ class WeatherFragment : Fragment() {
         binding.dayTemp.text = "${now?.temp ?: day.max}°"
         binding.dayCondition.text = Weather.conditionName(context, day.code)
         binding.dayHighLow.text = getString(R.string.weather_high_low, day.max, day.min)
-        binding.dayFeelsLike.isVisible = now != null
+        // Only today has one, but the line keeps its space
+        binding.dayFeelsLike.isInvisible = now == null
         now?.let { binding.dayFeelsLike.text = getString(R.string.weather_feels_like, it.feelsLike) }
 
         val sun = listOfNotNull(day.sunrise, day.sunset).joinToString(" · ") { formatTime(it) }
@@ -115,7 +117,7 @@ class WeatherFragment : Fragment() {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
                     addView(smallText(label, 12f, 0.6f))
-                    addView(smallText(value, 15f))
+                    addView(smallText(value, 15f).apply { isSingleLine = true })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
             binding.dayStats.addView(line)
@@ -126,23 +128,28 @@ class WeatherFragment : Fragment() {
         val context = requireContext()
         val hourFormat = DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h a", Locale.getDefault())
         binding.hoursRow.removeAllViews()
+        // Equal-width columns with every line centred in them, so the hours line up
+        fun line(text: String, size: Float, alpha: Float = 1f) = smallText(text, size, alpha).apply {
+            gravity = Gravity.CENTER
+            isSingleLine = true
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
         forecast.upcomingHours().forEachIndexed { i, hour ->
             binding.hoursRow.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
-                minimumWidth = 56.dpToPx()
-                addView(smallText(if (i == 0) getString(R.string.weather_now) else hour.time.format(hourFormat).lowercase(), 12f, 0.7f))
+                addView(line(if (i == 0) getString(R.string.weather_now) else hour.time.format(hourFormat).lowercase(), 12f, 0.7f))
                 addView(PixelWeatherView(context).apply {
                     code = hour.code
                     uv = hour.uv
                     isDay = hour.isDay
                     contentDescription = Weather.conditionName(context, hour.code)
                 }, LinearLayout.LayoutParams(28.dpToPx(), 28.dpToPx()).apply { topMargin = 6.dpToPx() })
-                addView(smallText("${hour.temp}°", 15f).apply { setPadding(0, 6.dpToPx(), 0, 0) })
+                addView(line("${hour.temp}°", 15f).apply { setPadding(0, 6.dpToPx(), 0, 0) })
+                addView(line(getString(R.string.uv_index, hour.uv), 11f, 0.7f).apply { setPadding(0, 2.dpToPx(), 0, 0) })
                 // Only worth a mention when rain is a real chance
-                addView(smallText(if (hour.rainChance >= 10) "${hour.rainChance}%" else " ", 11f, 0.7f))
-            })
+                addView(line(if (hour.rainChance >= 10) "${hour.rainChance}%" else " ", 11f, 0.7f))
+            }, LinearLayout.LayoutParams(60.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
         }
     }
 
@@ -173,9 +180,9 @@ class WeatherFragment : Fragment() {
                 addView(smallText(getString(R.string.uv_index, day.uv), 13f, 0.7f).apply {
                     gravity = Gravity.END
                 }, LinearLayout.LayoutParams(56.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-                addView(smallText("${day.max}° / ${day.min}°", 15f).apply {
+                addView(smallText("${day.max}°", 15f).apply {
                     gravity = Gravity.END
-                }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+                }, LinearLayout.LayoutParams(52.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             })
         }
     }

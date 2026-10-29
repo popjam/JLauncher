@@ -260,10 +260,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             val today = it?.today
             binding.weatherColumn.isVisible = today != null
             today ?: return@observe
+            // Today's conditions, coloured by the temperature now
+            val now = it.upcomingHours(1).firstOrNull()
             binding.weatherIcon.code = today.code
-            binding.weatherIcon.uv = today.uv
+            binding.weatherIcon.tint = Weather.tempColor(now?.temp ?: today.max, it.fahrenheit)
             binding.weatherIcon.contentDescription = Weather.conditionName(requireContext(), today.code)
-            binding.tvWeather.text = Weather.homeText(requireContext(), today)
+            binding.tvWeather.text = Weather.homeText(requireContext(), today, now?.uv ?: today.uv)
         }
         binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {
@@ -337,7 +339,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val showScreenTime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted()
         val showWeather = Weather.isEnabled(requireContext())
         binding.screenTimeColumn.isVisible = showScreenTime
-        binding.moodAvatar.isVisible = showScreenTime && viewModel.screenTimeMillis.value != null
+        // Holds the avatar's place beside the weather icon until there's a screen time, so the texts line up
+        binding.moodAvatar.visibility = when {
+            showScreenTime && viewModel.screenTimeMillis.value != null -> View.VISIBLE
+            showScreenTime && showWeather -> View.INVISIBLE
+            else -> View.GONE
+        }
         viewModel.getWeather()
         if (!showScreenTime && !showWeather) {
             binding.screenTimeLayout.visibility = View.GONE

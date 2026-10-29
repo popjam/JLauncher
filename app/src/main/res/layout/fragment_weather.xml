@@ -19,7 +19,8 @@
             android:orientation="vertical"
             android:paddingVertical="48dp">
 
-            <!-- Selected day: today unless another day is tapped below -->
+            <!-- Selected day: today unless another day is tapped below. Every line is always there, one line
+                 high, so the card keeps its height whichever day is picked. -->
             <LinearLayout
                 android:id="@+id/dayCard"
                 android:layout_width="match_parent"
@@ -35,6 +36,7 @@
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:singleLine="true"
                     android:layout_marginBottom="2dp"
                     android:textColor="?attr/primaryColor"
                     android:textSize="16sp"
@@ -45,6 +47,7 @@
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:singleLine="true"
                     android:alpha="0.7"
                     android:textColor="?attr/primaryColor"
                     android:textSize="14sp"
@@ -84,6 +87,7 @@
                             style="@style/TextSmall"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:singleLine="true"
                             android:textColor="?attr/primaryColor"
                             android:textSize="16sp"
                             tools:text="Partly cloudy" />
@@ -93,6 +97,7 @@
                             style="@style/TextSmall"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:singleLine="true"
                             android:alpha="0.7"
                             android:textColor="?attr/primaryColor"
                             android:textSize="13sp"
@@ -103,6 +108,7 @@
                             style="@style/TextSmall"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:singleLine="true"
                             android:alpha="0.7"
                             android:textColor="?attr/primaryColor"
                             android:textSize="13sp"
@@ -139,14 +145,14 @@
                     android:textColor="?attr/primaryColor"
                     android:textSize="14sp" />
 
+                <!-- Inset from the card's border so hours scrolling off fade out inside it -->
                 <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
                     android:layout_marginTop="8dp"
                     android:fadingEdgeLength="24dp"
                     android:overScrollMode="never"
-                    android:paddingHorizontal="8dp"
-                    android:clipToPadding="false"
                     android:requiresFadingEdge="horizontal"
                     android:scrollbars="none">
 

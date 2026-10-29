@@ -6,22 +6,29 @@ import android.widget.TextView
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 
-/** A stat to show: one of the built-ins or a custom stat, with the name and colour to use. */
-data class StatInfo(val id: String, val name: String, val color: Int, val scale: Int) {
+/**
+ * A stat to show: one of the built-ins or a custom stat, with the name and colour to use. [question] is
+ * the daily check's title for it; empty for the default.
+ */
+data class StatInfo(val id: String, val name: String, val color: Int, val scale: Int, val question: String = "") {
     val isBuiltIn get() = id == MoodStore.MOOD || id == MoodStore.USAGE
 }
 
-/** Mood, Screen time, then custom stats in the order they were added. */
-fun Context.allStats(data: MoodStore.Data): List<StatInfo> =
-    listOf(moodStat(data), StatInfo(MoodStore.USAGE, getString(R.string.screen_time), data.usageColor, 5)) +
-        data.stats.map { it.info() }
+/**
+ * Every stat in the order picked by dragging the tabs ([MoodStore.Data.order]). Stats not placed yet
+ * follow: Mood, Screen time, then custom stats in the order they were added.
+ */
+fun Context.allStats(data: MoodStore.Data): List<StatInfo> {
+    val stats = listOf(
+        StatInfo(MoodStore.MOOD, getString(R.string.mood), data.moodColor, 5, data.moodQuestion),
+        StatInfo(MoodStore.USAGE, getString(R.string.screen_time), data.usageColor, 5),
+    ) + data.stats.map { StatInfo(it.id, it.name, it.color, it.scale, it.question) }
+    return stats.sortedBy { stat -> data.order.indexOf(stat.id).takeIf { it >= 0 } ?: Int.MAX_VALUE }
+}
 
-/** Mood, then the custom stats asked every day. */
-fun Context.dailyStats(data: MoodStore.Data): List<StatInfo> = listOf(moodStat(data)) + data.dailyStats.map { it.info() }
-
-private fun Context.moodStat(data: MoodStore.Data) = StatInfo(MoodStore.MOOD, getString(R.string.mood), data.moodColor, 5)
-
-private fun MoodStore.Stat.info() = StatInfo(id, name, color, scale)
+/** The mood and the custom stats asked every day, in [allStats] order. */
+fun Context.dailyStats(data: MoodStore.Data): List<StatInfo> =
+    allStats(data).filter { it.id == MoodStore.MOOD || data.stat(it.id)?.daily == true }
 
 /** A small filled circle in a stat's colour. */
 fun statDot(color: Int, sizePx: Int = 7.dpToPx()) = GradientDrawable().apply {

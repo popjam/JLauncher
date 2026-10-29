@@ -13,7 +13,7 @@ import app.olauncher.helper.getColorFromAttr
 /**
  * One-colour 16x16 pixel weather icon, drawn like [PixelFaceView]. [code] is a WMO weather code;
  * the colour follows the [uv] index, using the mood colours from low (happy) to very high (sad).
- * At night clear skies get a moon, drawn in the text colour.
+ * At night clear skies get a moon, drawn in the text colour. [tint] overrides the colour.
  */
 class PixelWeatherView @JvmOverloads constructor(
     context: Context,
@@ -41,13 +41,19 @@ class PixelWeatherView @JvmOverloads constructor(
             update()
         }
 
+    var tint: Int? = null
+        set(value) {
+            field = value
+            update()
+        }
+
     init {
         update()
     }
 
     private fun update() {
         icon = iconFor(code, isDay)
-        paint.color = if (isDay) ContextCompat.getColor(context, uvColor(uv))
+        paint.color = tint ?: if (isDay) ContextCompat.getColor(context, uvColor(uv))
         else context.getColorFromAttr(R.attr.primaryColor)
         invalidate()
     }

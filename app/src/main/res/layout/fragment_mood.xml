@@ -19,7 +19,8 @@
             android:orientation="vertical"
             android:paddingVertical="48dp">
 
-            <!-- Tabs scroll sideways when there are many stats; + stays put. Long-press a tab to edit it. -->
+            <!-- Tabs scroll sideways when there are many stats; + stays put. Tap the open tab to edit its stat,
+                 or hold and drag a tab to move it. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -208,7 +209,7 @@
                     android:orientation="vertical" />
             </LinearLayout>
 
-            <!-- All: weekly totals of every stat over a year -->
+            <!-- All: every stat day by day over a month, or weekly totals or monthly averages over a year -->
             <LinearLayout
                 android:id="@+id/graphCard"
                 android:layout_width="match_parent"
@@ -265,6 +266,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="200dp" />
 
+                <app.olauncher.ui.StatHeatmapView
+                    android:id="@+id/statHeatmap"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/graphEmpty"
                     style="@style/TextSmall"
@@ -276,7 +283,7 @@
                     android:textColor="?attr/primaryColor"
                     android:visibility="gone" />
 
-                <!-- The tapped week's totals -->
+                <!-- The tapped point's values -->
                 <TextView
                     android:id="@+id/pointDetails"
                     style="@style/TextSmall"

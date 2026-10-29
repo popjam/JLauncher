@@ -34,14 +34,31 @@ class MoodStore(context: Context) {
         }
     }
 
-    /** A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. */
-    data class Stat(val id: String, val name: String, val color: Int, val daily: Boolean, val scale: Int)
+    /**
+     * A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. [question]
+     * replaces the daily check's usual title while it's asked; empty for the default.
+     */
+    data class Stat(
+        val id: String,
+        val name: String,
+        val color: Int,
+        val daily: Boolean,
+        val scale: Int,
+        val question: String = "",
+    )
 
     class Data(
         val days: MutableMap<String, Day> = sortedMapOf(),
         val stats: MutableList<Stat> = mutableListOf(),
         var moodColor: Int = DEFAULT_MOOD_COLOR,
         var usageColor: Int = DEFAULT_USAGE_COLOR,
+        /** Like [Stat.question], for the mood */
+        var moodQuestion: String = "",
+        /**
+         * Stat ids, built-ins included, in the order picked by dragging the tabs. Stats missing from it
+         * come after, Mood and Screen time first.
+         */
+        val order: MutableList<String> = mutableListOf(),
         /** Stat ids whose lines are switched off in the All graph */
         val hiddenInGraph: MutableSet<String> = mutableSetOf(),
         var promptEnabled: Boolean = false,
@@ -125,29 +142,43 @@ class MoodStore(context: Context) {
 
     // --- Stats ---
 
-    fun addStat(name: String, color: Int, daily: Boolean, scale: Int): Stat {
-        val stat = Stat("s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale)
+    fun addStat(name: String, color: Int, daily: Boolean, scale: Int, question: String): Stat {
+        val stat = Stat(
+            "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale, sanitizeQuestion(question)
+        )
         update { it.stats.add(stat) }
         return stat
     }
 
     /** The scale stays as it was. */
-    fun editStat(id: String, name: String, color: Int, daily: Boolean) = update { data ->
+    fun editStat(id: String, name: String, color: Int, daily: Boolean, question: String) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
-        if (index >= 0) data.stats[index] = data.stats[index].copy(name = sanitizeName(name), color = color, daily = daily)
+        if (index >= 0) data.stats[index] = data.stats[index].copy(
+            name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question)
+        )
     }
 
-    fun setBuiltInColor(id: String, color: Int) = update { data ->
+    /** Screen time isn't in the daily check, so its [question] is ignored. */
+    fun editBuiltIn(id: String, color: Int, question: String) = update { data ->
         when (id) {
-            MOOD -> data.moodColor = color
+            MOOD -> {
+                data.moodColor = color
+                data.moodQuestion = sanitizeQuestion(question)
+            }
             USAGE -> data.usageColor = color
         }
+    }
+
+    fun setOrder(ids: List<String>) = update { data ->
+        data.order.clear()
+        data.order.addAll(ids)
     }
 
     /** Removes the stat and all its history. */
     fun deleteStat(id: String) = update { data ->
         data.stats.removeAll { it.id == id }
         data.hiddenInGraph.remove(id)
+        data.order.remove(id)
         data.days.keys.toList().forEach { key -> data.editDay(key) { it.copy(values = it.values - id) } }
     }
 
@@ -221,6 +252,11 @@ class MoodStore(context: Context) {
             }
             if (json.has("moodColor")) data.moodColor = backup.moodColor
             if (json.has("usageColor")) data.usageColor = backup.usageColor
+            if (json.has("moodQuestion")) data.moodQuestion = backup.moodQuestion
+            if (json.has("order")) {
+                data.order.clear()
+                data.order.addAll(backup.order)
+            }
             if (json.has("hiddenInGraph")) data.setHidden(backup.hiddenInGraph)
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
@@ -236,7 +272,9 @@ class MoodStore(context: Context) {
         put("backupFolder", data.backupFolder)
         put("moodColor", data.moodColor)
         put("usageColor", data.usageColor)
+        put("moodQuestion", data.moodQuestion)
         put("hiddenInGraph", JSONArray(data.hiddenInGraph.toList()))
+        put("order", JSONArray(data.order))
         put("stats", JSONArray().apply {
             data.stats.forEach { stat ->
                 put(JSONObject().apply {
@@ -245,6 +283,7 @@ class MoodStore(context: Context) {
                     put("color", stat.color)
                     put("daily", stat.daily)
                     put("scale", stat.scale)
+                    put("question", stat.question)
                 })
             }
         })
@@ -264,6 +303,7 @@ class MoodStore(context: Context) {
         val data = Data(
             moodColor = json.optInt("moodColor", DEFAULT_MOOD_COLOR),
             usageColor = json.optInt("usageColor", DEFAULT_USAGE_COLOR),
+            moodQuestion = sanitizeQuestion(json.optString("moodQuestion")),
             promptEnabled = json.optBoolean("promptEnabled", false),
             promptMinutes = json.optInt("promptMinutes", DEFAULT_PROMPT_MINUTES),
             promptSnoozedUntil = json.optString("promptSnoozedUntil", ""),
@@ -276,7 +316,13 @@ class MoodStore(context: Context) {
                 if (data.stat(id) != null) continue
                 val scale = stat.optInt("scale", 5).takeIf { it in SCALES } ?: 5
                 val name = sanitizeName(stat.optString("name")).ifEmpty { "?" }
-                data.stats.add(Stat(id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale))
+                val question = sanitizeQuestion(stat.optString("question"))
+                data.stats.add(Stat(id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale, question))
+            }
+        }
+        json.optJSONArray("order")?.let { order ->
+            for (i in 0 until order.length()) {
+                order.optString(i).takeIf { it.isNotEmpty() && it !in data.order }?.let { data.order.add(it) }
             }
         }
         json.optJSONArray("hiddenInGraph")?.let { hidden ->
@@ -304,6 +350,7 @@ class MoodStore(context: Context) {
         const val DEFAULT_PROMPT_MINUTES = 21 * 60
         const val MAX_NOTE_LENGTH = 2000
         const val MAX_NAME_LENGTH = 24
+        const val MAX_QUESTION_LENGTH = 80
         const val PROMPT_SNOOZE_MINUTES = 30L
 
         const val HAPPY = 0
@@ -353,6 +400,10 @@ class MoodStore(context: Context) {
         /** One line, capped at [MAX_NAME_LENGTH]. */
         fun sanitizeName(name: String?): String =
             sanitizeNote(name?.replace('\n', ' '))?.take(MAX_NAME_LENGTH)?.trim().orEmpty()
+
+        /** One line, capped at [MAX_QUESTION_LENGTH]. */
+        fun sanitizeQuestion(question: String?): String =
+            sanitizeNote(question?.replace('\n', ' '))?.take(MAX_QUESTION_LENGTH)?.trim().orEmpty()
 
         /**
          * The faces a scale offers, sad to happy as shown left to right: sad and happy, plus neutral

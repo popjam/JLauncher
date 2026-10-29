@@ -15,7 +15,7 @@ import app.olauncher.helper.getColorFromAttr
 import kotlin.math.roundToInt
 
 /**
- * One line per stat over points [first] to [last] (weeks or days), stretched to fill the width, with
+ * One line per stat over points [first] to [last] (weeks or months), stretched to fill the width, with
  * values from 0 to [max]. Tapping picks a point, marked with a line, and reports it to [onPointSelected].
  */
 class StatChartView @JvmOverloads constructor(
@@ -24,7 +24,7 @@ class StatChartView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     /** Points missing from [values] count as 0. */
-    class Series(val color: Int, val values: Map<Int, Int>)
+    class Series(val color: Int, val values: Map<Int, Float>)
 
     private var series = emptyList<Series>()
     private var first = 1
@@ -93,13 +93,14 @@ class StatChartView @JvmOverloads constructor(
         if (last == first) (left + right) / 2
         else left + (point - first) * (right - left) / (last - first)
 
-    private fun y(value: Int): Float = top + (1 - value.toFloat() / max) * (bottom - top)
+    private fun y(value: Float): Float = top + (1 - value / max) * (bottom - top)
 
     override fun onDraw(canvas: Canvas) {
         textPaint.textAlign = Paint.Align.RIGHT
         for (value in 0..max step gridStep) {
-            canvas.drawLine(left, y(value), right, y(value), if (value == 0) axisPaint else gridPaint)
-            canvas.drawText(value.toString(), left - 5.dpToPx(), y(value) + textPaint.textSize / 3, textPaint)
+            val y = y(value.toFloat())
+            canvas.drawLine(left, y, right, y, if (value == 0) axisPaint else gridPaint)
+            canvas.drawText(value.toString(), left - 5.dpToPx(), y + textPaint.textSize / 3, textPaint)
         }
 
         // Up to about five labels, always including the first and last
@@ -129,12 +130,12 @@ class StatChartView @JvmOverloads constructor(
             dotPaint.color = s.color
             path.reset()
             for (point in first..last) {
-                val value = s.values[point] ?: 0
+                val value = s.values[point] ?: 0f
                 if (point == first) path.moveTo(x(point), y(value)) else path.lineTo(x(point), y(value))
             }
-            if (span == 0) canvas.drawCircle(x(first), y(s.values[first] ?: 0), dotRadius, dotPaint)
+            if (span == 0) canvas.drawCircle(x(first), y(s.values[first] ?: 0f), dotRadius, dotPaint)
             else canvas.drawPath(path, linePaint)
-            selected?.let { canvas.drawCircle(x(it), y(s.values[it] ?: 0), dotRadius, dotPaint) }
+            selected?.let { canvas.drawCircle(x(it), y(s.values[it] ?: 0f), dotRadius, dotPaint) }
         }
     }
 

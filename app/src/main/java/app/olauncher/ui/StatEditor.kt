@@ -7,11 +7,13 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.DialogStatEditorBinding
@@ -19,8 +21,9 @@ import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
 
 /**
- * The form for adding a stat (from +) or editing one (long-pressing its tab). Mood and Screen time
- * only get the colour picker, and a custom stat's scale can't change once added.
+ * The form for adding a stat (from +) or editing one (tapping its tab when it's already open). Mood
+ * gets the colour picker and display text, Screen time just the colour, and a custom stat's scale
+ * can't change once added.
  */
 object StatEditor {
 
@@ -40,6 +43,14 @@ object StatEditor {
         val binding = DialogStatEditorBinding.inflate(LayoutInflater.from(context))
         binding.statNameSection.isVisible = !builtIn
         binding.statOptionsSection.isVisible = !builtIn
+
+        // Display text: empty keeps the daily check's usual title, shown as the hint
+        binding.statQuestionSection.isVisible = statId != MoodStore.USAGE
+        if (builtIn) binding.statQuestionLabel.updateLayoutParams<ViewGroup.MarginLayoutParams> { topMargin = 0 }
+        binding.statQuestion.setText(if (statId == MoodStore.MOOD) data.moodQuestion else stat?.question.orEmpty())
+        binding.statQuestion.hint = context.getString(
+            if (statId == MoodStore.MOOD && data.dailyStats.isEmpty()) R.string.how_are_you_feeling else R.string.how_was_today
+        )
 
         // Colour: hue and saturation on the wheel, brightness on the slider
         val hsv = FloatArray(3)
@@ -112,11 +123,12 @@ object StatEditor {
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(if (statId == null) R.string.add else R.string.save) { _, _ ->
                 val name = binding.statName.text?.toString().orEmpty()
+                val question = binding.statQuestion.text?.toString().orEmpty()
                 when {
-                    builtIn -> moodStore.setBuiltInColor(statId!!, color())
-                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked)
+                    builtIn -> moodStore.editBuiltIn(statId!!, color(), question)
+                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question)
                     else -> {
-                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale)
+                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question)
                         return@setPositiveButton onDone(added.id)
                     }
                 }

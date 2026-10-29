@@ -10,6 +10,7 @@ import android.location.LocationManager
 import android.os.CancellationSignal
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.location.LocationManagerCompat
 import androidx.core.text.util.LocalePreferences
 import app.olauncher.R
@@ -90,8 +91,33 @@ object Weather {
             else String.format(Locale.getDefault(), "%.1f mm", amount)
     }
 
-    /** What the home screen shows under the icon. */
-    fun homeText(context: Context, day: Day) = "${day.max}° / ${day.min}°\n${context.getString(R.string.uv_index, day.uv)}"
+    /** What the home screen shows under the icon: today's high and the UV index now. */
+    fun homeText(context: Context, day: Day, uv: Int) = "${day.max}° / ${context.getString(R.string.uv_index, uv)}"
+
+    /** Colours from cold to hot, at temperatures in °C */
+    private val TEMP_COLORS = listOf(
+        0f to 0xFF2F4FC4.toInt(),  // dark blue
+        10f to 0xFF4A9BE8.toInt(), // light blue
+        17f to 0xFF56C7A8.toInt(), // teal
+        22f to 0xFFF2C84B.toInt(), // yellow
+        28f to 0xFFF2843A.toInt(), // orange
+        34f to 0xFFE53935.toInt(), // red
+    )
+
+    /** Dark blue for cold through to red for hot. */
+    fun tempColor(temp: Int, fahrenheit: Boolean): Int {
+        val celsius = if (fahrenheit) (temp - 32) * 5 / 9f else temp.toFloat()
+        val upper = TEMP_COLORS.indexOfFirst { celsius <= it.first }
+        return when (upper) {
+            0 -> TEMP_COLORS.first().second
+            -1 -> TEMP_COLORS.last().second
+            else -> {
+                val (fromTemp, fromColor) = TEMP_COLORS[upper - 1]
+                val (toTemp, toColor) = TEMP_COLORS[upper]
+                ColorUtils.blendARGB(fromColor, toColor, (celsius - fromTemp) / (toTemp - fromTemp))
+            }
+        }
+    }
 
     fun conditionName(context: Context, code: Int) = context.getString(
         when (code) {

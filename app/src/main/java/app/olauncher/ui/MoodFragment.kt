@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.view.DragEvent
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -28,6 +29,7 @@ import app.olauncher.helper.hideKeyboard
 import app.olauncher.helper.setStatDot
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.Month
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -48,8 +50,8 @@ class MoodFragment : Fragment() {
     private var selectedDate: LocalDate = LocalDate.now()
     private var shownMonth: YearMonth = YearMonth.now()
 
-    /** The All graph shows weekly totals over [graphYear], or daily scores over [graphMonth] */
-    private var graphDaily = false
+    /** The All graph shows each day of [graphMonth], or weekly totals or monthly averages over [graphYear] */
+    private var graphMode = GraphMode.WEEKLY
     private var graphYear = LocalDate.now().get(WEEKS.weekBasedYear())
     private var graphMonth: YearMonth = YearMonth.now()
 
@@ -61,6 +63,12 @@ class MoodFragment : Fragment() {
 
     /** The date whose note is in the input, so re-renders don't overwrite unsaved typing. */
     private var noteDate: LocalDate? = null
+
+    /** The tab being dragged to a new place, and where the finger is in [FragmentMoodBinding.tabScroll] */
+    private var draggedTab: View? = null
+    private var dragX = 0f
+
+    private enum class GraphMode { DAILY, WEEKLY, MONTHLY }
 
     private class DayCell(val box: FrameLayout, val number: TextView, val face: PixelFaceView, val noteDot: View)
 
@@ -89,6 +97,8 @@ class MoodFragment : Fragment() {
         binding.selectAllStats.setOnClickListener { setHidden(emptySet()) }
         binding.clearStats.setOnClickListener { setHidden(stats.map { it.id }.toSet()) }
         binding.statChart.onPointSelected = { renderPointDetails(it) }
+        binding.statHeatmap.onPointSelected = { renderPointDetails(it) }
+        binding.tabScroll.setOnDragListener { _, event -> onTabDrag(event) }
         binding.noteInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
     }
 
@@ -200,7 +210,10 @@ class MoodFragment : Fragment() {
         }
     }
 
-    /** "All", then a tab per stat with a dot in its colour. Long-press a stat's tab to edit it. */
+    /**
+     * "All", then a tab per stat with a dot in its colour. Tapping the open stat's tab edits it; holding
+     * a stat's tab picks it up to drag somewhere else.
+     */
     private fun buildTabs() {
         if (tabsKey == stats) return
         tabsKey = stats
@@ -216,14 +229,91 @@ class MoodFragment : Fragment() {
                 setPadding(12.dpToPx(), 8.dpToPx(), 12.dpToPx(), 8.dpToPx())
                 gravity = Gravity.CENTER_VERTICAL
                 setStatDot(stat?.color)
-                setOnClickListener { selectStat(id) }
-                if (stat != null) setOnLongClickListener {
-                    leaveNote()
-                    editStat(stat.id)
-                    true
+                setOnClickListener {
+                    if (stat != null && id == selectedStat) {
+                        leaveNote()
+                        editStat(id)
+                    } else selectStat(id)
                 }
+                if (stat != null) setOnLongClickListener { startTabDrag(it) }
             })
         }
+    }
+
+    private fun startTabDrag(tab: View): Boolean {
+        leaveNote()
+        // Set first, in case the drag's start reaches the listener straight away
+        draggedTab = tab
+        if (!tab.startDragAndDrop(null, View.DragShadowBuilder(tab), tab, 0)) {
+            draggedTab = null
+            return false
+        }
+        tab.alpha = 0.15f
+        return true
+    }
+
+    private fun onTabDrag(event: DragEvent): Boolean {
+        val tab = draggedTab ?: return false
+        when (event.action) {
+            DragEvent.ACTION_DRAG_LOCATION -> {
+                dragX = event.x
+                moveDraggedTab(tab)
+                // Scrolls while the finger is held near either end
+                val edge = 48.dpToPx()
+                val wasScrolling = tabScrollSpeed != 0
+                tabScrollSpeed = when {
+                    dragX < edge -> -6.dpToPx()
+                    dragX > binding.tabScroll.width - edge -> 6.dpToPx()
+                    else -> 0
+                }
+                if (tabScrollSpeed != 0 && !wasScrolling) binding.tabScroll.postOnAnimation(autoScrollTabs)
+            }
+            DragEvent.ACTION_DRAG_EXITED -> tabScrollSpeed = 0
+            DragEvent.ACTION_DRAG_ENDED -> finishTabDrag()
+        }
+        return true
+    }
+
+    private var tabScrollSpeed = 0
+    private val autoScrollTabs = object : Runnable {
+        override fun run() {
+            val tab = draggedTab ?: return
+            if (_binding == null || tabScrollSpeed == 0) return
+            binding.tabScroll.scrollBy(tabScrollSpeed, 0)
+            moveDraggedTab(tab)
+            binding.tabScroll.postOnAnimation(this)
+        }
+    }
+
+    /** Puts the dragged tab after every other stat tab whose middle is left of the finger. */
+    private fun moveDraggedTab(tab: View) {
+        val row = binding.tabRow
+        val x = dragX + binding.tabScroll.scrollX
+        var target = 1 // After All
+        for (i in 1 until row.childCount) {
+            val other = row.getChildAt(i)
+            if (other != tab && (other.left + other.right) / 2 < x) target++
+        }
+        if (row.indexOfChild(tab) != target) {
+            row.removeView(tab)
+            row.addView(tab, target)
+        }
+    }
+
+    /** Saves the new order, which the daily check and the All graph follow too. */
+    private fun finishTabDrag() {
+        draggedTab ?: return
+        draggedTab = null
+        tabScrollSpeed = 0
+        if (_binding == null) return
+        val ids = (1 until binding.tabRow.childCount).map { binding.tabRow.getChildAt(it).tag as String }
+        if (ids != stats.map { it.id }) {
+            moodStore.setOrder(ids)
+            reload()
+            // The tabs are already in this order
+            tabsKey = stats
+        }
+        render()
     }
 
     private fun scrollToTab(id: String) {
@@ -364,56 +454,67 @@ class MoodFragment : Fragment() {
         weekRows.last().isVisible = dayCells.takeLast(7).any { it.box.isVisible }
     }
 
-    /** Where a date falls on the graph shown (its week or day of the month), or null when it's off it. */
-    private fun graphPoint(date: LocalDate): Int? =
-        if (graphDaily) date.dayOfMonth.takeIf { YearMonth.from(date) == graphMonth }
-        else date.get(WEEKS.weekOfWeekBasedYear()).takeIf { date.get(WEEKS.weekBasedYear()) == graphYear }
+    /** Where a date falls on the graph shown (its day, week or month), or null when it's off it. */
+    private fun graphPoint(date: LocalDate): Int? = when (graphMode) {
+        GraphMode.DAILY -> date.dayOfMonth.takeIf { YearMonth.from(date) == graphMonth }
+        GraphMode.WEEKLY -> date.get(WEEKS.weekOfWeekBasedYear()).takeIf { date.get(WEEKS.weekBasedYear()) == graphYear }
+        GraphMode.MONTHLY -> date.monthValue.takeIf { date.year == graphYear }
+    }
 
     /**
-     * Each stat's value at each point on the graph: a day scores 5 (happy) to 1 (sad), and a day with
-     * no entry 0. Weekly points add up their days.
+     * Each stat's value at each point on the graph: a day scores 5 (happy) to 1 (sad). Weekly points add
+     * up their days, with a day with no entry counting 0; monthly points average the days with entries.
      */
-    private fun graphValues(): Map<String, Map<Int, Int>> {
-        val values = mutableMapOf<String, MutableMap<Int, Int>>()
+    private fun graphValues(): Map<String, Map<Int, Float>> {
+        val totals = mutableMapOf<String, MutableMap<Int, Int>>()
+        val counts = mutableMapOf<String, MutableMap<Int, Int>>()
         data.days.forEach { (key, day) ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@forEach
             val point = graphPoint(date) ?: return@forEach
             stats.forEach { stat ->
                 day.face(stat.id)?.let { face ->
-                    val points = values.getOrPut(stat.id) { mutableMapOf() }
-                    points[point] = (points[point] ?: 0) + MoodStore.score(face)
+                    totals.getOrPut(stat.id) { mutableMapOf() }.merge(point, MoodStore.score(face), Int::plus)
+                    counts.getOrPut(stat.id) { mutableMapOf() }.merge(point, 1, Int::plus)
                 }
             }
         }
-        return values
+        return totals.mapValues { (id, points) ->
+            points.mapValues { (point, total) ->
+                if (graphMode == GraphMode.MONTHLY) total.toFloat() / counts.getValue(id).getValue(point) else total.toFloat()
+            }
+        }
     }
 
-    /** Steps the year (weekly) or month (daily) shown. */
+    private val graphSelected: Int?
+        get() = if (graphMode == GraphMode.DAILY) binding.statHeatmap.selected else binding.statChart.selected
+
+    /** Steps the month (daily) or year (weekly, monthly) shown. */
     private fun moveGraph(by: Int) {
-        if (graphDaily) graphMonth = graphMonth.plusMonths(by.toLong()) else graphYear += by
+        if (graphMode == GraphMode.DAILY) graphMonth = graphMonth.plusMonths(by.toLong()) else graphYear += by
         renderGraph(rangeChanged = true)
     }
 
-    /** Switches between weekly totals and daily scores, keeping to the period that was being looked at. */
+    /** Daily, then weekly, then monthly and round again, keeping to the period that was being looked at. */
     private fun toggleGraphMode() {
-        val picked = binding.statChart.selected
+        val picked = graphSelected
         val today = LocalDate.now()
-        if (graphDaily) {
-            val date = picked?.let { graphMonth.atDay(it) } ?: graphMonth.atDay(minOf(15, graphMonth.lengthOfMonth()))
-            graphYear = date.get(WEEKS.weekBasedYear())
-        } else {
-            graphMonth = when {
-                // The month most of the picked week is in
-                picked != null -> YearMonth.from(
-                    today.with(WEEKS.weekBasedYear(), graphYear.toLong())
-                        .with(WEEKS.weekOfWeekBasedYear(), picked.toLong())
-                        .with(DayOfWeek.THURSDAY)
-                )
-                graphYear == today.get(WEEKS.weekBasedYear()) -> YearMonth.from(today)
-                else -> YearMonth.of(graphYear, 12)
+        graphMode = when (graphMode) {
+            GraphMode.DAILY -> {
+                val date = picked?.let { graphMonth.atDay(it) } ?: graphMonth.atDay(minOf(15, graphMonth.lengthOfMonth()))
+                graphYear = date.get(WEEKS.weekBasedYear())
+                GraphMode.WEEKLY
+            }
+            // Week-based years start within a few days of calendar years
+            GraphMode.WEEKLY -> GraphMode.MONTHLY
+            GraphMode.MONTHLY -> {
+                graphMonth = when {
+                    picked != null -> YearMonth.of(graphYear, picked)
+                    graphYear == today.year -> YearMonth.from(today)
+                    else -> YearMonth.of(graphYear, 12)
+                }
+                GraphMode.DAILY
             }
         }
-        graphDaily = !graphDaily
         renderGraph(rangeChanged = true)
     }
 
@@ -422,7 +523,7 @@ class MoodFragment : Fragment() {
         val firstDate = data.days.keys.firstOrNull()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
         val canGoBack: Boolean
         val canGoForward: Boolean
-        if (graphDaily) {
+        if (graphMode == GraphMode.DAILY) {
             val thisMonth = YearMonth.from(today)
             val firstMonth = minOf(YearMonth.from(firstDate), thisMonth)
             graphMonth = graphMonth.coerceIn(firstMonth, thisMonth)
@@ -434,10 +535,11 @@ class MoodFragment : Fragment() {
             binding.prevGraph.contentDescription = getString(R.string.previous_month)
             binding.nextGraph.contentDescription = getString(R.string.next_month)
         } else {
-            val thisYear = today.get(WEEKS.weekBasedYear())
-            val firstYear = minOf(firstDate.get(WEEKS.weekBasedYear()), thisYear)
+            val weekly = graphMode == GraphMode.WEEKLY
+            val thisYear = if (weekly) today.get(WEEKS.weekBasedYear()) else today.year
+            val firstYear = minOf(if (weekly) firstDate.get(WEEKS.weekBasedYear()) else firstDate.year, thisYear)
             graphYear = graphYear.coerceIn(firstYear, thisYear)
-            binding.graphTitle.text = getString(R.string.graph_weekly_title, graphYear)
+            binding.graphTitle.text = getString(if (weekly) R.string.graph_weekly_title else R.string.graph_monthly_title, graphYear)
             canGoBack = graphYear > firstYear
             canGoForward = graphYear < thisYear
             binding.prevGraph.contentDescription = getString(R.string.previous_year)
@@ -454,38 +556,64 @@ class MoodFragment : Fragment() {
         val first = pointsWithData.minOrNull()
         val last = graphPoint(today) ?: pointsWithData.maxOrNull()
         val hasData = first != null && last != null
-        binding.statChart.isVisible = hasData
+        val daily = graphMode == GraphMode.DAILY
+        binding.statChart.isVisible = hasData && !daily
+        binding.statHeatmap.isVisible = hasData && daily
         binding.graphEmpty.isVisible = !hasData
         if (hasData) {
             val visible = stats.filter { it.id !in data.hiddenInGraph }
-            binding.statChart.setData(
-                visible.map { StatChartView.Series(it.color, values[it.id].orEmpty()) },
-                first!!,
-                maxOf(first, last!!),
-                max = if (graphDaily) 5 else 35,
-                gridStep = if (graphDaily) 1 else 7,
-                label = if (graphDaily) { day -> day.toString() } else { week -> getString(R.string.week_short, week) },
-                clearSelection = rangeChanged,
-            )
+            if (daily) {
+                // A day's score is its face's
+                binding.statHeatmap.setData(
+                    visible.map { stat ->
+                        StatHeatmapView.Row(stat.name, stat.color, values[stat.id].orEmpty().mapValues { (_, score) -> 5 - score.toInt() })
+                    },
+                    first!!,
+                    maxOf(first, last!!),
+                    label = { day -> day.toString() },
+                    clearSelection = rangeChanged,
+                )
+            } else {
+                val weekly = graphMode == GraphMode.WEEKLY
+                binding.statChart.setData(
+                    visible.map { StatChartView.Series(it.color, values[it.id].orEmpty()) },
+                    first!!,
+                    maxOf(first, last!!),
+                    max = if (weekly) 35 else 5,
+                    gridStep = if (weekly) 7 else 1,
+                    label = if (weekly) { week -> getString(R.string.week_short, week) }
+                    else { month -> Month.of(month).getDisplayName(TextStyle.SHORT, Locale.getDefault()) },
+                    clearSelection = rangeChanged,
+                )
+            }
         }
-        renderPointDetails(if (hasData) binding.statChart.selected else null)
+        renderPointDetails(if (hasData) graphSelected else null)
         renderChips()
     }
 
-    /** The tapped week's or day's values, each with its stat's dot. */
+    /** The tapped day's, week's or month's values, each with its stat's dot. */
     private fun renderPointDetails(point: Int?) {
         binding.pointDetails.isVisible = point != null
         if (point == null) return
         val values = graphValues()
-        val title = if (graphDaily) graphMonth.atDay(point).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
-        else getString(R.string.week_number, point)
+        val title = when (graphMode) {
+            GraphMode.DAILY -> graphMonth.atDay(point).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+            GraphMode.WEEKLY -> getString(R.string.week_number, point)
+            GraphMode.MONTHLY -> YearMonth.of(graphYear, point).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+        }
         val text = SpannableStringBuilder(title)
         stats.filter { it.id !in data.hiddenInGraph }.forEachIndexed { i, stat ->
             text.append(if (i % 3 == 0) "\n" else "     ")
             val dotStart = text.length
             text.append("● ")
             text.setSpan(ForegroundColorSpan(stat.color), dotStart, dotStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            text.append(getString(R.string.stat_total, stat.name, values[stat.id]?.get(point) ?: 0))
+            val value = values[stat.id]?.get(point)
+            val valueText = when {
+                value == null -> "–"
+                graphMode == GraphMode.MONTHLY -> String.format(Locale.getDefault(), "%.1f", value)
+                else -> value.toInt().toString()
+            }
+            text.append(getString(R.string.stat_total, stat.name, valueText))
         }
         binding.pointDetails.text = text
     }
@@ -516,6 +644,8 @@ class MoodFragment : Fragment() {
         dayCells.clear()
         weekRows.clear()
         tabsKey = null
+        draggedTab = null
+        tabScrollSpeed = 0
         _binding = null
     }
 

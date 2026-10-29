@@ -19,6 +19,7 @@ object MoodPrompt {
      * only selects it, then moves on to the next unanswered stat, so the thoughts box isn't skipped by
      * accident. Confirm (enabled once every stat has a face) passes the faces by stat id and the note to
      * [onResult]. Closing the prompt passes null for both. Answers already in [today] are filled in.
+     * The title is the shown stat's display text, if it has one.
      */
     fun bind(
         root: View,
@@ -43,8 +44,8 @@ object MoodPrompt {
 
         val multiple = stats.size > 1
         nav.isVisible = multiple
-        root.findViewById<TextView>(R.id.moodPromptTitle)
-            .setText(if (multiple) R.string.how_was_today else R.string.how_are_you_feeling)
+        val title = root.findViewById<TextView>(R.id.moodPromptTitle)
+        val defaultTitle = context.getString(if (multiple) R.string.how_was_today else R.string.how_are_you_feeling)
         row.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = (if (multiple) 8 else 24).dpToPx() }
 
         lateinit var onFace: (statId: String, face: Int) -> Unit
@@ -55,6 +56,7 @@ object MoodPrompt {
         fun render() {
             val stat = stats[index]
             val selected = answers[stat.id]
+            title.text = stat.question.ifEmpty { defaultTitle }
             label.text = context.getString(R.string.stat_step, stat.name, index + 1, stats.size)
             label.setStatDot(stat.color)
 

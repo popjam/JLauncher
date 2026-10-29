@@ -264,6 +264,7 @@
     <string name="stat_colour">Colour</string>
     <string name="stat_brightness">Brightness</string>
     <string name="stat_daily_check">Add to daily check</string>
+    <string name="stat_display_text">Display text</string>
     <string name="stat_scale">Scale</string>
     <string name="stat_scale_locked">Scale · can\'t be changed</string>
     <string name="out_of">Out of %1$d</string>
@@ -273,12 +274,13 @@
     <string name="delete_stat_message">Delete %1$s and all its history?</string>
     <string name="graph_weekly_title">%1$d · weekly  ⇄</string>
     <string name="graph_daily_title">%1$s · daily  ⇄</string>
-    <string name="switch_graph">Switch between weekly and daily</string>
+    <string name="graph_monthly_title">%1$d · monthly  ⇄</string>
+    <string name="switch_graph">Switch between daily, weekly and monthly</string>
     <string name="previous_year">Previous year</string>
     <string name="next_year">Next year</string>
     <string name="week_short">W%1$d</string>
     <string name="week_number">Week %1$d</string>
-    <string name="stat_total">%1$s %2$d</string>
+    <string name="stat_total">%1$s %2$s</string>
     <string name="show">Show</string>
     <string name="select_all">Select all</string>
     <string name="clear">Clear</string>
