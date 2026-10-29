@@ -41,7 +41,6 @@ object BackupManager {
         "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone
         "SCREEN_TIME_LAST_UPDATED",
         "WEATHER_DATA",                 // cached forecast and location for this phone
-        "WEATHER_DATE",
         "WEATHER_LAST_UPDATED",
         "WEATHER_LATITUDE",
         "WEATHER_LONGITUDE",

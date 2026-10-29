@@ -62,6 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val screenTimeValue = MutableLiveData<String>()
     val screenTimeMillis = MutableLiveData<Long>()
     val weather = MutableLiveData<Weather.Forecast?>()
+    val weatherLoading = MutableLiveData(false)
     private val moodStore by lazy { MoodStore(appContext) }
 
     val privateSpaceApps = MutableLiveData<List<AppModel>?>()
@@ -475,7 +476,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         homeAppAlignment.value = prefs.homeAlignment
     }
 
-    private val weatherLoading = AtomicBoolean(false)
+    private val weatherFetching = AtomicBoolean(false)
 
     /** Shows today's cached forecast straight away, then refreshes it at most hourly unless [force]d. */
     fun getWeather(force: Boolean = false) {
@@ -486,7 +487,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cached = Weather.cached(appContext)
         weather.value = cached
         if (!force && cached != null && prefs.weatherLastUpdated.hasBeenMinutes(60).not()) return
-        if (!weatherLoading.compareAndSet(false, true)) return
+        if (!weatherFetching.compareAndSet(false, true)) return
+        weatherLoading.value = true
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -494,7 +496,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
-                weatherLoading.set(false)
+                weatherFetching.set(false)
+                weatherLoading.postValue(false)
             }
         }
     }

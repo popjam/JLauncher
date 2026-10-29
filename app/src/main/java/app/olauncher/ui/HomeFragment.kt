@@ -139,7 +139,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
             R.id.moodAvatar -> openMoodTracker()
-            R.id.weatherIcon, R.id.tvWeather -> viewModel.getWeather(force = true)
+            R.id.weatherIcon, R.id.tvWeather -> openWeather()
 
             else -> {
                 try { // Launch app
@@ -257,12 +257,13 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             binding.moodAvatar.visibility = View.VISIBLE
         }
         viewModel.weather.observe(viewLifecycleOwner) {
-            binding.weatherColumn.isVisible = it != null
-            it ?: return@observe
-            binding.weatherIcon.code = it.code
-            binding.weatherIcon.uv = it.uv
-            binding.weatherIcon.contentDescription = it.conditionName(requireContext())
-            binding.tvWeather.text = it.text(requireContext())
+            val today = it?.today
+            binding.weatherColumn.isVisible = today != null
+            today ?: return@observe
+            binding.weatherIcon.code = today.code
+            binding.weatherIcon.uv = today.uv
+            binding.weatherIcon.contentDescription = Weather.conditionName(requireContext(), today.code)
+            binding.tvWeather.text = Weather.homeText(requireContext(), today)
         }
         binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {
@@ -381,6 +382,14 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         if (params.topMargin != top) {
             params.topMargin = top
             screenTime.layoutParams = params
+        }
+    }
+
+    private fun openWeather() {
+        try {
+            findNavController().navigate(R.id.action_mainFragment_to_weatherFragment)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

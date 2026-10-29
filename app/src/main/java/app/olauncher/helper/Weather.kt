@@ -19,59 +19,107 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 
-/** Today's forecast from Open-Meteo (free, no API key), for the home screen. */
+/** Forecasts from Open-Meteo (free, no API key), for the home screen and the weather screen. */
 object Weather {
 
     private const val LOCATION_TIMEOUT_MS = 10_000L
+
+    // Added to Open-Meteo's response before it's cached
+    private const val KEY_FAHRENHEIT = "jlauncher_fahrenheit"
+    private const val KEY_FETCHED_AT = "jlauncher_fetched_at"
 
     fun hasLocationPermission(context: Context) =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     fun isEnabled(context: Context) = Prefs(context).weatherOn && hasLocationPermission(context)
 
-    /** One day's forecast. [code] is a WMO weather code, temperatures are in the unit requested. */
-    data class Forecast(val code: Int, val max: Int, val min: Int, val uv: Int, val fahrenheit: Boolean) {
-        fun text(context: Context) = "$max° / $min°\n${context.getString(R.string.uv_index, uv)}"
+    /** [code]s are WMO weather codes; temperatures, rain and wind are in the units the forecast was asked for. */
+    data class Day(
+        val date: LocalDate,
+        val code: Int,
+        val max: Int,
+        val min: Int,
+        val uv: Int,
+        val rainChance: Int,
+        val rain: Double,
+        val windMax: Int,
+        val sunrise: LocalTime?,
+        val sunset: LocalTime?,
+    )
 
-        fun conditionName(context: Context) = context.getString(
-            when (code) {
-                0 -> R.string.weather_clear
-                1 -> R.string.weather_mostly_clear
-                2 -> R.string.weather_partly_cloudy
-                3 -> R.string.weather_cloudy
-                45, 48 -> R.string.weather_fog
-                in 51..57 -> R.string.weather_drizzle
-                in 61..67 -> R.string.weather_rain
-                in 71..77, 85, 86 -> R.string.weather_snow
-                in 80..82 -> R.string.weather_showers
-                in 95..99 -> R.string.weather_storms
-                else -> R.string.weather_cloudy
-            }
-        )
+    data class Hour(
+        val time: LocalDateTime,
+        val code: Int,
+        val temp: Int,
+        val feelsLike: Int,
+        val rainChance: Int,
+        val uv: Int,
+        val isDay: Boolean,
+    )
 
-        fun toCache() = "$code,$max,$min,$uv,${if (fahrenheit) 'F' else 'C'}"
+    data class Forecast(val fahrenheit: Boolean, val fetchedAt: Long, val days: List<Day>, val hours: List<Hour>) {
+        val today: Day? get() = days.firstOrNull { it.date == LocalDate.now() }
 
-        companion object {
-            fun fromCache(value: String): Forecast? {
-                val parts = value.split(",")
-                if (parts.size != 5) return null
-                val numbers = parts.take(4).mapNotNull { it.toIntOrNull() }
-                if (numbers.size != 4) return null
-                return Forecast(numbers[0], numbers[1], numbers[2], numbers[3], parts[4] == "F")
-            }
+        fun upcomingDays() = days.filter { it.date >= LocalDate.now() }
+
+        /** From the start of this hour, so the first is "now". */
+        fun upcomingHours(count: Int = 24): List<Hour> {
+            val thisHour = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS)
+            return hours.filter { it.time >= thisHour }.take(count)
         }
+
+        val windUnit get() = if (fahrenheit) "mph" else "km/h"
+
+        fun rainText(amount: Double) =
+            if (fahrenheit) String.format(Locale.getDefault(), "%.2f in", amount)
+            else String.format(Locale.getDefault(), "%.1f mm", amount)
     }
 
-    /** Cached forecast if it's for today, else null. */
+    /** What the home screen shows under the icon. */
+    fun homeText(context: Context, day: Day) = "${day.max}° / ${day.min}°\n${context.getString(R.string.uv_index, day.uv)}"
+
+    fun conditionName(context: Context, code: Int) = context.getString(
+        when (code) {
+            0 -> R.string.weather_clear
+            1 -> R.string.weather_mostly_clear
+            2 -> R.string.weather_partly_cloudy
+            3 -> R.string.weather_cloudy
+            45, 48 -> R.string.weather_fog
+            in 51..57 -> R.string.weather_drizzle
+            in 61..67 -> R.string.weather_rain
+            in 71..77, 85, 86 -> R.string.weather_snow
+            in 80..82 -> R.string.weather_showers
+            in 95..99 -> R.string.weather_storms
+            else -> R.string.weather_cloudy
+        }
+    )
+
+    fun uvLevel(context: Context, uv: Int) = context.getString(
+        when {
+            uv <= 2 -> R.string.uv_low
+            uv <= 5 -> R.string.uv_moderate
+            uv <= 7 -> R.string.uv_high
+            uv <= 10 -> R.string.uv_very_high
+            else -> R.string.uv_extreme
+        }
+    )
+
+    /** The last forecast fetched, if it still covers today and is in the unit wanted now. */
     fun cached(context: Context): Forecast? {
-        val prefs = Prefs(context)
-        if (prefs.weatherDate != LocalDate.now().toString()) return null
-        // Dropped if the unit setting changed since, so it's fetched again
-        return Forecast.fromCache(prefs.weatherData)?.takeIf { it.fahrenheit == useFahrenheit(context) }
+        val forecast = try {
+            parse(Prefs(context).weatherData)
+        } catch (e: Exception) {
+            null
+        } ?: return null
+        if (forecast.today == null || forecast.fahrenheit != useFahrenheit(context)) return null
+        return forecast
     }
 
     /** Network call, run off the main thread. Returns null on failure. */
@@ -89,9 +137,12 @@ object Weather {
         val url = URL(
             "https://api.open-meteo.com/v1/forecast" +
                     "?latitude=${prefs.weatherLatitude}&longitude=${prefs.weatherLongitude}" +
-                    "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max" +
-                    "&timezone=auto&forecast_days=1" +
-                    if (fahrenheit) "&temperature_unit=fahrenheit" else ""
+                    "&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,uv_index,is_day" +
+                    "&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max," +
+                    "precipitation_sum,wind_speed_10m_max,sunrise,sunset" +
+                    // Two days of hours, so a cached forecast still has the next 24 hours later on
+                    "&timezone=auto&forecast_days=7&forecast_hours=48" +
+                    if (fahrenheit) "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch" else ""
         )
         val connection = url.openConnection() as HttpURLConnection
         val body = try {
@@ -103,18 +154,59 @@ object Weather {
             connection.disconnect()
         }
 
-        val daily = JSONObject(body).getJSONObject("daily")
-        val forecast = Forecast(
-            code = daily.getJSONArray("weather_code").getInt(0),
-            max = daily.getJSONArray("temperature_2m_max").getDouble(0).roundToInt(),
-            min = daily.getJSONArray("temperature_2m_min").getDouble(0).roundToInt(),
-            uv = daily.getJSONArray("uv_index_max").optDouble(0, 0.0).roundToInt(),
-            fahrenheit = fahrenheit,
-        )
-        prefs.weatherData = forecast.toCache()
-        prefs.weatherDate = LocalDate.now().toString()
-        prefs.weatherLastUpdated = System.currentTimeMillis()
+        val json = JSONObject(body)
+            .put(KEY_FAHRENHEIT, fahrenheit)
+            .put(KEY_FETCHED_AT, System.currentTimeMillis())
+            .toString()
+        val forecast = parse(json) ?: return null
+        prefs.weatherData = json
+        prefs.weatherLastUpdated = forecast.fetchedAt
         return forecast
+    }
+
+    private fun parse(value: String): Forecast? {
+        if (value.isBlank()) return null
+        val json = JSONObject(value)
+        if (!json.has(KEY_FAHRENHEIT)) return null
+        val daily = json.getJSONObject("daily")
+        val hourly = json.getJSONObject("hourly")
+
+        // Open-Meteo gives null for anything a model doesn't cover
+        fun JSONObject.double(name: String, i: Int) =
+            optJSONArray(name)?.optDouble(i)?.takeUnless { it.isNaN() } ?: 0.0
+        fun JSONObject.int(name: String, i: Int) = double(name, i).roundToInt()
+        fun JSONObject.time(name: String, i: Int) =
+            optJSONArray(name)?.optString(i)?.takeIf { it.isNotBlank() && it != "null" }
+                ?.let { LocalDateTime.parse(it).toLocalTime() }
+
+        val dates = daily.getJSONArray("time")
+        val days = (0 until dates.length()).map { i ->
+            Day(
+                date = LocalDate.parse(dates.getString(i)),
+                code = daily.int("weather_code", i),
+                max = daily.int("temperature_2m_max", i),
+                min = daily.int("temperature_2m_min", i),
+                uv = daily.int("uv_index_max", i),
+                rainChance = daily.int("precipitation_probability_max", i),
+                rain = daily.double("precipitation_sum", i),
+                windMax = daily.int("wind_speed_10m_max", i),
+                sunrise = daily.time("sunrise", i),
+                sunset = daily.time("sunset", i),
+            )
+        }
+        val times = hourly.getJSONArray("time")
+        val hours = (0 until times.length()).map { i ->
+            Hour(
+                time = LocalDateTime.parse(times.getString(i)),
+                code = hourly.int("weather_code", i),
+                temp = hourly.int("temperature_2m", i),
+                feelsLike = hourly.int("apparent_temperature", i),
+                rainChance = hourly.int("precipitation_probability", i),
+                uv = hourly.int("uv_index", i),
+                isDay = hourly.int("is_day", i) == 1,
+            )
+        }
+        return Forecast(json.getBoolean(KEY_FAHRENHEIT), json.optLong(KEY_FETCHED_AT), days, hours)
     }
 
     /**

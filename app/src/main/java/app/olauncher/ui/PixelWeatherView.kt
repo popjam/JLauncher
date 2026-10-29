@@ -8,10 +8,12 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import app.olauncher.R
 import app.olauncher.helper.dpToPx
+import app.olauncher.helper.getColorFromAttr
 
 /**
  * One-colour 16x16 pixel weather icon, drawn like [PixelFaceView]. [code] is a WMO weather code;
- * the colour follows the day's [uv] index, using the mood colours from low (happy) to very high (sad).
+ * the colour follows the [uv] index, using the mood colours from low (happy) to very high (sad).
+ * At night clear skies get a moon, drawn in the text colour.
  */
 class PixelWeatherView @JvmOverloads constructor(
     context: Context,
@@ -24,19 +26,30 @@ class PixelWeatherView @JvmOverloads constructor(
     var code: Int = 3
         set(value) {
             field = value
-            icon = iconFor(value)
-            invalidate()
+            update()
         }
 
     var uv: Int = 0
         set(value) {
             field = value
-            paint.color = ContextCompat.getColor(context, uvColor(value))
-            invalidate()
+            update()
+        }
+
+    var isDay: Boolean = true
+        set(value) {
+            field = value
+            update()
         }
 
     init {
-        uv = 0
+        update()
+    }
+
+    private fun update() {
+        icon = iconFor(code, isDay)
+        paint.color = if (isDay) ContextCompat.getColor(context, uvColor(uv))
+        else context.getColorFromAttr(R.attr.primaryColor)
+        invalidate()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -113,6 +126,34 @@ class PixelWeatherView @JvmOverloads constructor(
             "#..#..#.",
         )
 
+        private val MOON = listOf(
+            "................",
+            ".....##.........",
+            "...##o#.........",
+            "..#oo#..........",
+            "..#oo#..........",
+            ".#ooo#..........",
+            ".#oooo#.........",
+            ".#oooo#.........",
+            ".#ooooo#........",
+            ".#oooooo#.......",
+            ".#ooooooo##...#.",
+            "..#oooooooo###..",
+            "..#oooooooooo#..",
+            "...##oooooo##...",
+            ".....######.....",
+            "................",
+        )
+
+        private val SMALL_MOON = listOf(
+            ".##.....",
+            "#.......",
+            "#.......",
+            "#.......",
+            ".#...#..",
+            "..###...",
+        )
+
         private val FOG_LINES = listOf(
             "................",
             "................",
@@ -150,6 +191,8 @@ class PixelWeatherView @JvmOverloads constructor(
 
         private val CLEAR = icon { stamp(SUN) }
         private val PARTLY_CLOUDY = icon { stamp(SMALL_SUN, 1, 1); stamp(CLOUD, 0, 7) }
+        private val CLEAR_NIGHT = icon { stamp(MOON) }
+        private val PARTLY_CLOUDY_NIGHT = icon { stamp(SMALL_MOON, 2, 1); stamp(CLOUD, 0, 7) }
         private val CLOUDY = icon { stamp(CLOUD, 0, 4) }
         private val RAIN = icon {
             stamp(CLOUD, 0, 1)
@@ -171,9 +214,9 @@ class PixelWeatherView @JvmOverloads constructor(
         private val FOG = icon { stamp(FOG_LINES) }
 
         /** WMO weather interpretation codes, as used by Open-Meteo. */
-        private fun iconFor(code: Int) = when (code) {
-            0, 1 -> CLEAR
-            2 -> PARTLY_CLOUDY
+        private fun iconFor(code: Int, isDay: Boolean) = when (code) {
+            0, 1 -> if (isDay) CLEAR else CLEAR_NIGHT
+            2 -> if (isDay) PARTLY_CLOUDY else PARTLY_CLOUDY_NIGHT
             45, 48 -> FOG
             in 51..67 -> RAIN
             in 71..77, 85, 86 -> SNOW

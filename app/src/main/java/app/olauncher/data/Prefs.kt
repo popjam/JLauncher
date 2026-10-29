@@ -55,7 +55,6 @@ class Prefs(context: Context) {
     private val SCREEN_TIME_LAST_UPDATED = "SCREEN_TIME_LAST_UPDATED"
     private val WEATHER_ON = "WEATHER_ON"
     private val WEATHER_DATA = "WEATHER_DATA"
-    private val WEATHER_DATE = "WEATHER_DATE"
     private val WEATHER_LAST_UPDATED = "WEATHER_LAST_UPDATED"
     private val WEATHER_LATITUDE = "WEATHER_LATITUDE"
     private val WEATHER_LONGITUDE = "WEATHER_LONGITUDE"
@@ -268,15 +267,10 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(WEATHER_ON, false)
         set(value) = prefs.edit { putBoolean(WEATHER_ON, value).apply() }
 
-    /** Cached forecast, see Weather.Forecast.toCache. */
+    /** Open-Meteo response for the last forecast fetched, see Weather.cached. */
     var weatherData: String
         get() = prefs.getString(WEATHER_DATA, "").toString()
         set(value) = prefs.edit { putString(WEATHER_DATA, value).apply() }
-
-    /** ISO date the cached [weatherData] is for. */
-    var weatherDate: String
-        get() = prefs.getString(WEATHER_DATE, "").toString()
-        set(value) = prefs.edit { putString(WEATHER_DATE, value).apply() }
 
     var weatherLastUpdated: Long
         get() = prefs.getLong(WEATHER_LAST_UPDATED, 0L)

@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/primaryShadeDarkColor"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingVertical="48dp">
+
+            <!-- Selected day: today unless another day is tapped below -->
+            <LinearLayout
+                android:id="@+id/dayCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/dayLabel"
+                    style="@style/TextSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.7"
+                    android:textColor="?attr/primaryColor"
+                    android:textSize="14sp"
+                    tools:text="Today · Thu 29 Oct" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <app.olauncher.ui.PixelWeatherView
+                        android:id="@+id/dayIcon"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp" />
+
+                    <TextView
+                        android:id="@+id/dayTemp"
+                        style="@style/TextLarge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:includeFontPadding="false"
+                        android:textColor="?attr/primaryColor"
+                        android:textSize="44sp"
+                        tools:text="19°" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/dayCondition"
+                            style="@style/TextSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="?attr/primaryColor"
+                            android:textSize="16sp"
+                            tools:text="Partly cloudy" />
+
+                        <TextView
+                            android:id="@+id/dayHighLow"
+                            style="@style/TextSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:alpha="0.7"
+                            android:textColor="?attr/primaryColor"
+                            android:textSize="13sp"
+                            tools:text="High 21° · low 11°" />
+
+                        <TextView
+                            android:id="@+id/dayFeelsLike"
+                            style="@style/TextSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:alpha="0.7"
+                            android:textColor="?attr/primaryColor"
+                            android:textSize="13sp"
+                            tools:text="Feels like 17°" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- UV, rain, wind and sun, two to a row -->
+                <LinearLayout
+                    android:id="@+id/dayStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/hoursCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:orientation="vertical"
+                android:paddingVertical="12dp">
+
+                <TextView
+                    style="@style/TextSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:alpha="0.7"
+                    android:text="@string/weather_next_hours"
+                    android:textColor="?attr/primaryColor"
+                    android:textSize="14sp" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fadingEdgeLength="24dp"
+                    android:overScrollMode="never"
+                    android:paddingHorizontal="8dp"
+                    android:clipToPadding="false"
+                    android:requiresFadingEdge="horizontal"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/hoursRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/rounded_rect_shade_color"
+                android:orientation="vertical"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="12dp">
+
+                <TextView
+                    style="@style/TextSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
+                    android:alpha="0.7"
+                    android:text="@string/weather_next_days"
+                    android:textColor="?attr/primaryColor"
+                    android:textSize="14sp" />
+
+                <LinearLayout
+                    android:id="@+id/daysList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/status"
+                style="@style/TextSmall"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:alpha="0.6"
+                android:gravity="center"
+                android:padding="16dp"
+                android:textColor="?attr/primaryColor"
+                android:textSize="12sp"
+                tools:text="Updated 3:12 pm · Open-Meteo · tap to refresh" />
+
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

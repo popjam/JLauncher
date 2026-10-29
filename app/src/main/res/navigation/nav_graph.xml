@@ -31,7 +31,20 @@
             app:exitAnim="@anim/fade_exit"
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
+        <action
+            android:id="@+id/action_mainFragment_to_weatherFragment"
+            app:destination="@id/weatherFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
     </fragment>
+
+    <fragment
+        android:id="@+id/weatherFragment"
+        android:name="app.olauncher.ui.WeatherFragment"
+        android:label="WeatherFragment"
+        tools:layout="@layout/fragment_weather" />
 
     <fragment
         android:id="@+id/moodFragment"
