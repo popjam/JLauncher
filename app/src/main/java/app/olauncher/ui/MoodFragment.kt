@@ -385,7 +385,7 @@ class MoodFragment : Fragment() {
             usage?.let { binding.usageFace.mood = MoodStore.moodForUsage(it) }
             binding.usageTime.text = usage?.let { requireContext().formattedTimeSpent(it) } ?: getString(R.string.no_data)
         } else {
-            val faces = MoodStore.facesFor(stat.scale)
+            val faces = stat.faces
             if (binding.moodFaces.tag != faces) {
                 binding.moodFaces.tag = faces
                 binding.moodFaces.removeAllViews()
@@ -403,7 +403,7 @@ class MoodFragment : Fragment() {
             val chosen = day?.face(stat.id)
             val alphas = faces.map { face -> if (face == chosen) 1f else 0.3f }
             alphas.forEachIndexed { i, alpha -> binding.moodFaces.getChildAt(i).alpha = alpha }
-            if (stat.labels.isNotEmpty()) bindFaceLabels(binding.faceLabels, stat.labels, alphas)
+            if (stat.labels.isNotEmpty()) bindFaceLabels(binding.faceLabels, stat.faceLabels, alphas)
         }
     }
 
@@ -477,7 +477,7 @@ class MoodFragment : Fragment() {
             val point = graphPoint(date) ?: return@forEach
             stats.forEach { stat ->
                 day.face(stat.id)?.let { face ->
-                    totals.getOrPut(stat.id) { mutableMapOf() }.merge(point, MoodStore.score(face), Int::plus)
+                    totals.getOrPut(stat.id) { mutableMapOf() }.merge(point, MoodStore.score(face, stat.inverted), Int::plus)
                     counts.getOrPut(stat.id) { mutableMapOf() }.merge(point, 1, Int::plus)
                 }
             }
@@ -567,10 +567,10 @@ class MoodFragment : Fragment() {
         if (hasData) {
             val visible = stats.filter { it.id !in data.hiddenInGraph }
             if (daily) {
-                // A day's score is its face's
+                // Coloured by the day's face, whichever way round the stat scores
                 binding.statHeatmap.setData(
                     visible.map { stat ->
-                        StatHeatmapView.Row(stat.name, stat.color, values[stat.id].orEmpty().mapValues { (_, score) -> 5 - score.toInt() })
+                        StatHeatmapView.Row(stat.name, stat.color, values[stat.id].orEmpty().mapValues { (_, score) -> MoodStore.faceForScore(score.toInt(), stat.inverted) })
                     },
                     first!!,
                     maxOf(first, last!!),

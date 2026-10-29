@@ -37,7 +37,8 @@ class MoodStore(context: Context) {
     /**
      * A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. [question]
      * replaces the daily check's usual title while it's asked; empty for the default. [labels] go under
-     * the faces, in [facesFor] order; empty when there are none.
+     * the faces, in [facesFor] order; empty when there are none. [inverted] stats show happy on the
+     * left and score sad highest (see [score]).
      */
     data class Stat(
         val id: String,
@@ -47,6 +48,7 @@ class MoodStore(context: Context) {
         val scale: Int,
         val question: String = "",
         val labels: List<String> = emptyList(),
+        val inverted: Boolean = false,
     )
 
     class Data(
@@ -56,6 +58,9 @@ class MoodStore(context: Context) {
         var usageColor: Int = DEFAULT_USAGE_COLOR,
         /** Like [Stat.question], for the mood */
         var moodQuestion: String = "",
+        /** Like [Stat.inverted], for the built-in stats */
+        var moodInverted: Boolean = false,
+        var usageInverted: Boolean = false,
         /**
          * Stat ids, built-ins included, in the order picked by dragging the tabs. Stats missing from it
          * come after, Mood and Screen time first.
@@ -69,6 +74,12 @@ class MoodStore(context: Context) {
         var backupFolder: String = "",
     ) {
         fun stat(id: String): Stat? = stats.firstOrNull { it.id == id }
+
+        fun isInverted(statId: String): Boolean = when (statId) {
+            MOOD -> moodInverted
+            USAGE -> usageInverted
+            else -> stat(statId)?.inverted ?: false
+        }
 
         fun colorOf(statId: String): Int = when (statId) {
             MOOD -> moodColor
@@ -144,34 +155,42 @@ class MoodStore(context: Context) {
 
     // --- Stats ---
 
-    fun addStat(name: String, color: Int, daily: Boolean, scale: Int, question: String, labels: List<String>): Stat {
+    fun addStat(
+        name: String, color: Int, daily: Boolean, scale: Int, question: String, labels: List<String>, inverted: Boolean,
+    ): Stat {
         val stat = Stat(
             "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale,
-            sanitizeQuestion(question), sanitizeLabels(labels, scale)
+            sanitizeQuestion(question), sanitizeLabels(labels, scale), inverted,
         )
         update { it.stats.add(stat) }
         return stat
     }
 
     /** The scale stays as it was. */
-    fun editStat(id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>) = update { data ->
+    fun editStat(
+        id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>, inverted: Boolean,
+    ) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
         if (index >= 0) data.stats[index] = data.stats[index].let {
             it.copy(
                 name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question),
-                labels = sanitizeLabels(labels, it.scale),
+                labels = sanitizeLabels(labels, it.scale), inverted = inverted,
             )
         }
     }
 
     /** Screen time isn't in the daily check, so its [question] is ignored. */
-    fun editBuiltIn(id: String, color: Int, question: String) = update { data ->
+    fun editBuiltIn(id: String, color: Int, question: String, inverted: Boolean) = update { data ->
         when (id) {
             MOOD -> {
                 data.moodColor = color
                 data.moodQuestion = sanitizeQuestion(question)
+                data.moodInverted = inverted
             }
-            USAGE -> data.usageColor = color
+            USAGE -> {
+                data.usageColor = color
+                data.usageInverted = inverted
+            }
         }
     }
 
@@ -259,6 +278,8 @@ class MoodStore(context: Context) {
             if (json.has("moodColor")) data.moodColor = backup.moodColor
             if (json.has("usageColor")) data.usageColor = backup.usageColor
             if (json.has("moodQuestion")) data.moodQuestion = backup.moodQuestion
+            if (json.has("moodInverted")) data.moodInverted = backup.moodInverted
+            if (json.has("usageInverted")) data.usageInverted = backup.usageInverted
             if (json.has("order")) {
                 data.order.clear()
                 data.order.addAll(backup.order)
@@ -279,6 +300,8 @@ class MoodStore(context: Context) {
         put("moodColor", data.moodColor)
         put("usageColor", data.usageColor)
         put("moodQuestion", data.moodQuestion)
+        put("moodInverted", data.moodInverted)
+        put("usageInverted", data.usageInverted)
         put("hiddenInGraph", JSONArray(data.hiddenInGraph.toList()))
         put("order", JSONArray(data.order))
         put("stats", JSONArray().apply {
@@ -291,6 +314,7 @@ class MoodStore(context: Context) {
                     put("scale", stat.scale)
                     put("question", stat.question)
                     if (stat.labels.isNotEmpty()) put("labels", JSONArray(stat.labels))
+                    put("inverted", stat.inverted)
                 })
             }
         })
@@ -311,6 +335,8 @@ class MoodStore(context: Context) {
             moodColor = json.optInt("moodColor", DEFAULT_MOOD_COLOR),
             usageColor = json.optInt("usageColor", DEFAULT_USAGE_COLOR),
             moodQuestion = sanitizeQuestion(json.optString("moodQuestion")),
+            moodInverted = json.optBoolean("moodInverted"),
+            usageInverted = json.optBoolean("usageInverted"),
             promptEnabled = json.optBoolean("promptEnabled", false),
             promptMinutes = json.optInt("promptMinutes", DEFAULT_PROMPT_MINUTES),
             promptSnoozedUntil = json.optString("promptSnoozedUntil", ""),
@@ -328,7 +354,7 @@ class MoodStore(context: Context) {
                 data.stats.add(
                     Stat(
                         id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale,
-                        question, sanitizeLabels(labels, scale),
+                        question, sanitizeLabels(labels, scale), stat.optBoolean("inverted"),
                     )
                 )
             }
@@ -438,7 +464,10 @@ class MoodStore(context: Context) {
         }
 
         /** Happy scores 5 and sad 1, whatever the scale. */
-        fun score(face: Int): Int = 5 - face
+        fun score(face: Int, inverted: Boolean = false): Int = if (inverted) face + 1 else 5 - face
+
+        /** The face that gets [score]. */
+        fun faceForScore(score: Int, inverted: Boolean = false): Int = if (inverted) score - 1 else 5 - score
 
         fun moodForUsage(usageMs: Long): Int {
             val minutes = usageMs / 60_000

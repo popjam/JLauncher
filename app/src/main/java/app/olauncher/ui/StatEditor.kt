@@ -97,6 +97,8 @@ object StatEditor {
         })
         renderColor()
 
+        binding.statInverted.isChecked = statId != null && data.isInverted(statId)
+
         // Name, daily check and scale
         binding.statName.setText(stat?.name.orEmpty())
         binding.statDaily.isChecked = stat?.daily ?: true
@@ -106,9 +108,11 @@ object StatEditor {
         // Face labels, kept by face so switching scale while adding keeps what's typed
         val labels = mutableMapOf<Int, String>()
         stat?.labels?.forEachIndexed { i, label -> labels[MoodStore.facesFor(stat.scale)[i]] = label }
+        // In the order the faces will show
         fun renderLabels() {
             binding.statFaceLabels.removeAllViews()
-            MoodStore.facesFor(scale).forEachIndexed { i, face ->
+            val faces = MoodStore.facesFor(scale).let { if (binding.statInverted.isChecked) it.reversed() else it }
+            faces.forEachIndexed { i, face ->
                 binding.statFaceLabels.addView(faceLabelInput(context, face, labels[face].orEmpty()) { labels[face] = it },
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                         if (i > 0) marginStart = 4.dpToPx()
@@ -118,6 +122,11 @@ object StatEditor {
         fun faceLabels() = MoodStore.facesFor(scale).map { labels[it].orEmpty() }
         binding.statClearLabels.setOnClickListener {
             labels.clear()
+            binding.statFaceLabels.findFocus()?.hideKeyboard()
+            renderLabels()
+        }
+
+        binding.statInverted.setOnCheckedChangeListener { _, _ ->
             binding.statFaceLabels.findFocus()?.hideKeyboard()
             renderLabels()
         }
@@ -153,11 +162,12 @@ object StatEditor {
             .setPositiveButton(if (statId == null) R.string.add else R.string.save) { _, _ ->
                 val name = binding.statName.text?.toString().orEmpty()
                 val question = binding.statQuestion.text?.toString().orEmpty()
+                val inverted = binding.statInverted.isChecked
                 when {
-                    builtIn -> moodStore.editBuiltIn(statId!!, color(), question)
-                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels())
+                    builtIn -> moodStore.editBuiltIn(statId!!, color(), question, inverted)
+                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels(), inverted)
                     else -> {
-                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels())
+                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels(), inverted)
                         return@setPositiveButton onDone(added.id)
                     }
                 }
