@@ -7,8 +7,10 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.CancellationSignal
+import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
+import androidx.core.text.util.LocalePreferences
 import app.olauncher.R
 import app.olauncher.data.Prefs
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -32,7 +34,7 @@ object Weather {
     fun isEnabled(context: Context) = Prefs(context).weatherOn && hasLocationPermission(context)
 
     /** One day's forecast. [code] is a WMO weather code, temperatures are in the unit requested. */
-    data class Forecast(val code: Int, val max: Int, val min: Int, val uv: Int) {
+    data class Forecast(val code: Int, val max: Int, val min: Int, val uv: Int, val fahrenheit: Boolean) {
         fun text(context: Context) = "$max° / $min°\n${context.getString(R.string.uv_index, uv)}"
 
         fun conditionName(context: Context) = context.getString(
@@ -51,12 +53,15 @@ object Weather {
             }
         )
 
-        fun toCache() = "$code,$max,$min,$uv"
+        fun toCache() = "$code,$max,$min,$uv,${if (fahrenheit) 'F' else 'C'}"
 
         companion object {
             fun fromCache(value: String): Forecast? {
-                val parts = value.split(",").mapNotNull { it.toIntOrNull() }
-                return if (parts.size == 4) Forecast(parts[0], parts[1], parts[2], parts[3]) else null
+                val parts = value.split(",")
+                if (parts.size != 5) return null
+                val numbers = parts.take(4).mapNotNull { it.toIntOrNull() }
+                if (numbers.size != 4) return null
+                return Forecast(numbers[0], numbers[1], numbers[2], numbers[3], parts[4] == "F")
             }
         }
     }
@@ -65,7 +70,8 @@ object Weather {
     fun cached(context: Context): Forecast? {
         val prefs = Prefs(context)
         if (prefs.weatherDate != LocalDate.now().toString()) return null
-        return Forecast.fromCache(prefs.weatherData)
+        // Dropped if the unit setting changed since, so it's fetched again
+        return Forecast.fromCache(prefs.weatherData)?.takeIf { it.fahrenheit == useFahrenheit(context) }
     }
 
     /** Network call, run off the main thread. Returns null on failure. */
@@ -79,7 +85,7 @@ object Weather {
         // Fall back to where we last were, e.g. location services briefly off
         if (prefs.weatherLatitude.isNaN()) return null
 
-        val fahrenheit = Locale.getDefault().country in setOf("US", "LR", "MM")
+        val fahrenheit = useFahrenheit(context)
         val url = URL(
             "https://api.open-meteo.com/v1/forecast" +
                     "?latitude=${prefs.weatherLatitude}&longitude=${prefs.weatherLongitude}" +
@@ -103,11 +109,29 @@ object Weather {
             max = daily.getJSONArray("temperature_2m_max").getDouble(0).roundToInt(),
             min = daily.getJSONArray("temperature_2m_min").getDouble(0).roundToInt(),
             uv = daily.getJSONArray("uv_index_max").optDouble(0, 0.0).roundToInt(),
+            fahrenheit = fahrenheit,
         )
         prefs.weatherData = forecast.toCache()
         prefs.weatherDate = LocalDate.now().toString()
         prefs.weatherLastUpdated = System.currentTimeMillis()
         return forecast
+    }
+
+    /**
+     * The temperature unit from Android's regional preferences (Android 14+) if one is picked, else
+     * the country of the SIM or mobile network. The phone's language is no guide: plenty of phones
+     * outside the US are set to English (United States).
+     */
+    private fun useFahrenheit(context: Context): Boolean {
+        when (LocalePreferences.getTemperatureUnit(false)) {
+            LocalePreferences.TemperatureUnit.FAHRENHEIT -> return true
+            LocalePreferences.TemperatureUnit.CELSIUS, LocalePreferences.TemperatureUnit.KELVIN -> return false
+        }
+        val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        val country = telephony?.simCountryIso?.takeIf { it.isNotBlank() }
+            ?: telephony?.networkCountryIso?.takeIf { it.isNotBlank() }
+            ?: Locale.getDefault().country
+        return country.uppercase(Locale.ROOT) in setOf("US", "LR", "MM")
     }
 
     /** Coarse location is plenty for a forecast: the freshest last-known fix, else ask for one. */
