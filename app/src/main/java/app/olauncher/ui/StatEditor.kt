@@ -25,6 +25,7 @@ import app.olauncher.data.MoodStore
 import app.olauncher.databinding.DialogStatEditorBinding
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
+import app.olauncher.helper.hideKeyboard
 
 /**
  * The form for adding a stat (from +) or editing one (tapping its tab when it's already open). Mood
@@ -115,6 +116,11 @@ object StatEditor {
             }
         }
         fun faceLabels() = MoodStore.facesFor(scale).map { labels[it].orEmpty() }
+        binding.statClearLabels.setOnClickListener {
+            labels.clear()
+            binding.statFaceLabels.findFocus()?.hideKeyboard()
+            renderLabels()
+        }
 
         fun renderScales() {
             scaleViews.forEach { (option, view) ->
