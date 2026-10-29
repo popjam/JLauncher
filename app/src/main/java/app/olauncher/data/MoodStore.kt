@@ -36,7 +36,8 @@ class MoodStore(context: Context) {
 
     /**
      * A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. [question]
-     * replaces the daily check's usual title while it's asked; empty for the default.
+     * replaces the daily check's usual title while it's asked; empty for the default. [labels] go under
+     * the faces, in [facesFor] order; empty when there are none.
      */
     data class Stat(
         val id: String,
@@ -45,6 +46,7 @@ class MoodStore(context: Context) {
         val daily: Boolean,
         val scale: Int,
         val question: String = "",
+        val labels: List<String> = emptyList(),
     )
 
     class Data(
@@ -142,20 +144,24 @@ class MoodStore(context: Context) {
 
     // --- Stats ---
 
-    fun addStat(name: String, color: Int, daily: Boolean, scale: Int, question: String): Stat {
+    fun addStat(name: String, color: Int, daily: Boolean, scale: Int, question: String, labels: List<String>): Stat {
         val stat = Stat(
-            "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale, sanitizeQuestion(question)
+            "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale,
+            sanitizeQuestion(question), sanitizeLabels(labels, scale)
         )
         update { it.stats.add(stat) }
         return stat
     }
 
     /** The scale stays as it was. */
-    fun editStat(id: String, name: String, color: Int, daily: Boolean, question: String) = update { data ->
+    fun editStat(id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
-        if (index >= 0) data.stats[index] = data.stats[index].copy(
-            name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question)
-        )
+        if (index >= 0) data.stats[index] = data.stats[index].let {
+            it.copy(
+                name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question),
+                labels = sanitizeLabels(labels, it.scale),
+            )
+        }
     }
 
     /** Screen time isn't in the daily check, so its [question] is ignored. */
@@ -284,6 +290,7 @@ class MoodStore(context: Context) {
                     put("daily", stat.daily)
                     put("scale", stat.scale)
                     put("question", stat.question)
+                    if (stat.labels.isNotEmpty()) put("labels", JSONArray(stat.labels))
                 })
             }
         })
@@ -317,7 +324,13 @@ class MoodStore(context: Context) {
                 val scale = stat.optInt("scale", 5).takeIf { it in SCALES } ?: 5
                 val name = sanitizeName(stat.optString("name")).ifEmpty { "?" }
                 val question = sanitizeQuestion(stat.optString("question"))
-                data.stats.add(Stat(id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale, question))
+                val labels = stat.optJSONArray("labels")?.let { array -> List(array.length()) { array.optString(it) } }.orEmpty()
+                data.stats.add(
+                    Stat(
+                        id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale,
+                        question, sanitizeLabels(labels, scale),
+                    )
+                )
             }
         }
         json.optJSONArray("order")?.let { order ->
@@ -351,6 +364,7 @@ class MoodStore(context: Context) {
         const val MAX_NOTE_LENGTH = 2000
         const val MAX_NAME_LENGTH = 24
         const val MAX_QUESTION_LENGTH = 80
+        const val MAX_LABEL_LENGTH = 10
         const val PROMPT_SNOOZE_MINUTES = 30L
 
         const val HAPPY = 0
@@ -404,6 +418,14 @@ class MoodStore(context: Context) {
         /** One line, capped at [MAX_QUESTION_LENGTH]. */
         fun sanitizeQuestion(question: String?): String =
             sanitizeNote(question?.replace('\n', ' '))?.take(MAX_QUESTION_LENGTH)?.trim().orEmpty()
+
+        /** One per face of [scale], each one line capped at [MAX_LABEL_LENGTH]; empty when all are blank. */
+        fun sanitizeLabels(labels: List<String>, scale: Int): List<String> {
+            val cleaned = List(scale) { i ->
+                sanitizeNote(labels.getOrNull(i)?.replace('\n', ' '))?.take(MAX_LABEL_LENGTH)?.trim().orEmpty()
+            }
+            return if (cleaned.all { it.isEmpty() }) emptyList() else cleaned
+        }
 
         /**
          * The faces a scale offers, sad to happy as shown left to right: sad and happy, plus neutral

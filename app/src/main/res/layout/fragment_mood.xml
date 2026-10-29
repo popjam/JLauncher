@@ -92,6 +92,14 @@
                     android:layout_marginTop="8dp"
                     android:orientation="horizontal" />
 
+                <!-- The stat's face labels, if it has any -->
+                <LinearLayout
+                    android:id="@+id/faceLabels"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone" />
+
                 <LinearLayout
                     android:id="@+id/usageRow"
                     android:layout_width="wrap_content"

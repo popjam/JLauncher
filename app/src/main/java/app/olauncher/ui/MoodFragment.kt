@@ -22,6 +22,7 @@ import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentMoodBinding
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.allStats
+import app.olauncher.helper.bindFaceLabels
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getColorFromAttr
@@ -376,6 +377,7 @@ class MoodFragment : Fragment() {
         }
 
         binding.moodFaces.isVisible = !showUsage
+        binding.faceLabels.isVisible = !showUsage && stat.labels.isNotEmpty()
         binding.usageRow.isVisible = showUsage
         if (showUsage) {
             val usage = day?.usageMs
@@ -399,7 +401,9 @@ class MoodFragment : Fragment() {
                 }
             }
             val chosen = day?.face(stat.id)
-            faces.forEachIndexed { i, face -> binding.moodFaces.getChildAt(i).alpha = if (face == chosen) 1f else 0.3f }
+            val alphas = faces.map { face -> if (face == chosen) 1f else 0.3f }
+            alphas.forEachIndexed { i, alpha -> binding.moodFaces.getChildAt(i).alpha = alpha }
+            if (stat.labels.isNotEmpty()) bindFaceLabels(binding.faceLabels, stat.labels, alphas)
         }
     }
 

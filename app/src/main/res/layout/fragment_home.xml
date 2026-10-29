@@ -92,7 +92,7 @@
                 android:paddingTop="4dp"
                 android:paddingBottom="10dp"
                 android:textSize="@dimen/date_size"
-                tools:text="26° / UV 8" />
+                tools:text="26° / 8" />
         </LinearLayout>
 
         <LinearLayout

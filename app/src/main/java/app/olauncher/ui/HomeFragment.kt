@@ -265,7 +265,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             binding.weatherIcon.code = today.code
             binding.weatherIcon.tint = Weather.tempColor(now?.temp ?: today.max, it.fahrenheit)
             binding.weatherIcon.contentDescription = Weather.conditionName(requireContext(), today.code)
-            binding.tvWeather.text = Weather.homeText(requireContext(), today, now?.uv ?: today.uv)
+            binding.tvWeather.text = Weather.homeText(today, now?.uv ?: today.uv)
         }
         binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {

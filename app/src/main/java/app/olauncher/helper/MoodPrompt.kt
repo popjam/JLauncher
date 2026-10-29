@@ -30,6 +30,7 @@ object MoodPrompt {
         val context = root.context
         val names = context.resources.getStringArray(R.array.mood_names)
         val row = root.findViewById<LinearLayout>(R.id.moodPromptFaces)
+        val labelRow = root.findViewById<LinearLayout>(R.id.moodPromptLabels)
         val note = root.findViewById<EditText>(R.id.moodPromptNote)
         val confirm = root.findViewById<View>(R.id.moodPromptConfirm)
         val nav = root.findViewById<View>(R.id.moodPromptNav)
@@ -43,6 +44,8 @@ object MoodPrompt {
         var index = stats.indexOfFirst { it.id !in answers }.coerceAtLeast(0)
 
         val multiple = stats.size > 1
+        val anyLabels = stats.any { it.labels.isNotEmpty() }
+        labelRow.isVisible = anyLabels
         nav.isVisible = multiple
         val title = root.findViewById<TextView>(R.id.moodPromptTitle)
         val defaultTitle = context.getString(if (multiple) R.string.how_was_today else R.string.how_are_you_feeling)
@@ -75,9 +78,9 @@ object MoodPrompt {
                     }, LinearLayout.LayoutParams(0, 52.dpToPx(), 1f))
                 }
             }
-            faces.forEachIndexed { i, face ->
-                row.getChildAt(i).alpha = if (selected == null || selected == face) 1f else 0.3f
-            }
+            val alphas = faces.map { face -> if (selected == null || selected == face) 1f else 0.3f }
+            alphas.forEachIndexed { i, alpha -> row.getChildAt(i).alpha = alpha }
+            if (anyLabels) bindFaceLabels(labelRow, stat.labels.ifEmpty { List(faces.size) { "" } }, alphas)
             listOf(prev, next).forEach {
                 it.isEnabled = multiple
                 it.alpha = 0.6f

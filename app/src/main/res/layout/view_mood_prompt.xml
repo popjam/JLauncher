@@ -119,6 +119,16 @@
             android:layout_marginEnd="8dp"
             android:orientation="horizontal" />
 
+        <!-- Labels under the faces. Shown (blank if need be) for every stat when any daily stat has
+             them, so moving between stats doesn't change the prompt's height. -->
+        <LinearLayout
+            android:id="@+id/moodPromptLabels"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:orientation="horizontal"
+            android:visibility="gone" />
+
         <TextView
             style="@style/TextSmall"
             android:layout_width="wrap_content"

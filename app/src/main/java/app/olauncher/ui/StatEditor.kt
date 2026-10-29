@@ -4,10 +4,12 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
+import android.text.InputFilter
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -96,9 +98,26 @@ object StatEditor {
         var scale = stat?.scale ?: 5
         if (stat != null) binding.statScaleLabel.text = context.getString(R.string.stat_scale_locked)
         val scaleViews = MoodStore.SCALES.associateWith { option -> scaleOption(context, option) }
-        fun renderScales() = scaleViews.forEach { (option, view) ->
-            view.setBackgroundResource(if (option == scale) R.drawable.bg_day_selected else R.drawable.rounded_box)
-            view.alpha = if (stat == null || option == scale) 1f else 0.3f
+        // Face labels, kept by face so switching scale while adding keeps what's typed
+        val labels = mutableMapOf<Int, String>()
+        stat?.labels?.forEachIndexed { i, label -> labels[MoodStore.facesFor(stat.scale)[i]] = label }
+        fun renderLabels() {
+            binding.statFaceLabels.removeAllViews()
+            MoodStore.facesFor(scale).forEachIndexed { i, face ->
+                binding.statFaceLabels.addView(faceLabelInput(context, face, labels[face].orEmpty()) { labels[face] = it },
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (i > 0) marginStart = 4.dpToPx()
+                    })
+            }
+        }
+        fun faceLabels() = MoodStore.facesFor(scale).map { labels[it].orEmpty() }
+
+        fun renderScales() {
+            scaleViews.forEach { (option, view) ->
+                view.setBackgroundResource(if (option == scale) R.drawable.bg_day_selected else R.drawable.rounded_box)
+                view.alpha = if (stat == null || option == scale) 1f else 0.3f
+            }
+            if (binding.statFaceLabels.childCount != scale) renderLabels()
         }
         scaleViews.forEach { (option, view) ->
             binding.statScales.addView(view, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -126,9 +145,9 @@ object StatEditor {
                 val question = binding.statQuestion.text?.toString().orEmpty()
                 when {
                     builtIn -> moodStore.editBuiltIn(statId!!, color(), question)
-                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question)
+                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels())
                     else -> {
-                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question)
+                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels())
                         return@setPositiveButton onDone(added.id)
                     }
                 }
@@ -160,6 +179,31 @@ object StatEditor {
                 onDone(null)
             }
             .show()
+    }
+
+    /** A face with a box below for its label. */
+    private fun faceLabelInput(context: Context, face: Int, text: String, onChange: (String) -> Unit) = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
+        addView(EditText(context, null, 0, R.style.TextSmall).apply {
+            setBackgroundResource(R.drawable.rounded_box)
+            setPadding(4.dpToPx(), 8.dpToPx(), 4.dpToPx(), 8.dpToPx())
+            gravity = Gravity.CENTER
+            textSize = 13f
+            isSingleLine = true
+            filters = arrayOf(InputFilter.LengthFilter(MoodStore.MAX_LABEL_LENGTH))
+            setShadowLayer(0f, 0f, 0f, 0)
+            setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+            setText(text)
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) = onChange(s?.toString().orEmpty())
+            })
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 4.dpToPx()
+        })
     }
 
     /** The scale's faces with "Out of N" below. */

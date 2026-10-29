@@ -265,6 +265,7 @@
     <string name="stat_brightness">Brightness</string>
     <string name="stat_daily_check">Add to daily check</string>
     <string name="stat_display_text">Display text</string>
+    <string name="stat_face_labels">Face labels · optional</string>
     <string name="stat_scale">Scale</string>
     <string name="stat_scale_locked">Scale · can\'t be changed</string>
     <string name="out_of">Out of %1$d</string>

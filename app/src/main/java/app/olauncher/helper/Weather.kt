@@ -92,7 +92,7 @@ object Weather {
     }
 
     /** What the home screen shows under the icon: today's high and the UV index now. */
-    fun homeText(context: Context, day: Day, uv: Int) = "${day.max}° / ${context.getString(R.string.uv_index, uv)}"
+    fun homeText(day: Day, uv: Int) = "${day.max}° / $uv"
 
     /** Colours from cold to hot, at temperatures in °C */
     private val TEMP_COLORS = listOf(
