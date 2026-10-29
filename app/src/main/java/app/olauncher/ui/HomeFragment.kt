@@ -20,7 +20,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
@@ -37,6 +36,7 @@ import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
 import app.olauncher.helper.MoodPrompt
+import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.expandNotificationDrawer
@@ -116,6 +116,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         showMoodPromptIfDue()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted())
             viewModel.getTodaysScreenTime(force = true)
+        viewModel.getWeather(force = true)
         scheduleMidnightRefresh()
     }
 
@@ -138,6 +139,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
             R.id.moodAvatar -> openMoodTracker()
+            R.id.tvWeather -> viewModel.getWeather(force = true)
 
             else -> {
                 try { // Launch app
@@ -252,7 +254,11 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         viewModel.screenTimeMillis.observe(viewLifecycleOwner) {
             it ?: return@observe
             binding.moodAvatar.mood = MoodStore.moodForUsage(it)
-            binding.moodAvatar.visibility = View.VISIBLE
+            binding.moodAvatar.isVisible = binding.tvScreenTime.isVisible
+        }
+        viewModel.weatherText.observe(viewLifecycleOwner) {
+            binding.tvWeather.text = it
+            binding.tvWeather.isVisible = it != null
         }
         binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {
@@ -285,6 +291,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.tvScreenTime.setOnClickListener(this)
         binding.tvScreenTime.setOnLongClickListener(this)
         binding.moodAvatar.setOnClickListener(this)
+        binding.tvWeather.setOnClickListener(this)
     }
 
     private fun setHomeAlignment(horizontalGravity: Int = prefs.homeAlignment) {
@@ -319,14 +326,19 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.date.text = dateText.replace(".,", ",")
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
+    /** The column beside the clock: mood avatar and screen time, with today's weather below. */
     private fun populateScreenTime() {
-        if (requireContext().appUsagePermissionGranted().not()) {
+        val showScreenTime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted()
+        val showWeather = Weather.isEnabled(requireContext())
+        binding.tvScreenTime.isVisible = showScreenTime
+        binding.moodAvatar.isVisible = showScreenTime && viewModel.screenTimeMillis.value != null
+        viewModel.getWeather()
+        if (!showScreenTime && !showWeather) {
             binding.screenTimeLayout.visibility = View.GONE
             return
         }
 
-        viewModel.getTodaysScreenTime()
+        if (showScreenTime) viewModel.getTodaysScreenTime()
         binding.screenTimeLayout.visibility = View.VISIBLE
 
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -411,8 +423,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         populateDateTime()
         populatePageIndicator()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-            populateScreenTime()
+        populateScreenTime()
 
         populateHomeApps()
     }

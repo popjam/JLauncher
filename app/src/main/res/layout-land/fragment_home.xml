@@ -56,7 +56,7 @@
             tools:text="Thu, 30 Dec" />
     </LinearLayout>
 
-    <!-- Mood avatar and screen time-->
+    <!-- Mood avatar, screen time and weather-->
     <LinearLayout
         android:id="@+id/screenTimeLayout"
         android:layout_width="wrap_content"
@@ -87,6 +87,20 @@
             android:padding="10dp"
             android:textSize="@dimen/date_size"
             tools:text="2h 11m" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tvWeather"
+            style="@style/TextSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingHorizontal="10dp"
+            android:paddingBottom="10dp"
+            android:visibility="gone"
+            tools:text="Partly cloudy
+18° / 9°
+UV 4"
+            tools:visibility="visible" />
     </LinearLayout>
 
     <!-- Home apps-->

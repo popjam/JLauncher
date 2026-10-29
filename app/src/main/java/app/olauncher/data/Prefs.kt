@@ -53,6 +53,12 @@ class Prefs(context: Context) {
     private val PRO_MESSAGE_SHOWN = "PRO_MESSAGE_SHOWN"
     private val HIDE_SET_DEFAULT_LAUNCHER = "HIDE_SET_DEFAULT_LAUNCHER"
     private val SCREEN_TIME_LAST_UPDATED = "SCREEN_TIME_LAST_UPDATED"
+    private val WEATHER_ON = "WEATHER_ON"
+    private val WEATHER_TEXT = "WEATHER_TEXT"
+    private val WEATHER_DATE = "WEATHER_DATE"
+    private val WEATHER_LAST_UPDATED = "WEATHER_LAST_UPDATED"
+    private val WEATHER_LATITUDE = "WEATHER_LATITUDE"
+    private val WEATHER_LONGITUDE = "WEATHER_LONGITUDE"
     private val USAGE_HISTORY_LAST_UPDATED = "USAGE_HISTORY_LAST_UPDATED"
     private val LAUNCHER_RESTART_TIMESTAMP = "LAUNCHER_RECREATE_TIMESTAMP"
     private val SHOWN_ON_DAY_OF_YEAR = "SHOWN_ON_DAY_OF_YEAR"
@@ -257,6 +263,32 @@ class Prefs(context: Context) {
     var screenTimeLastUpdated: Long
         get() = prefs.getLong(SCREEN_TIME_LAST_UPDATED, 0L)
         set(value) = prefs.edit { putLong(SCREEN_TIME_LAST_UPDATED, value).apply() }
+
+    var weatherOn: Boolean
+        get() = prefs.getBoolean(WEATHER_ON, false)
+        set(value) = prefs.edit { putBoolean(WEATHER_ON, value).apply() }
+
+    var weatherText: String
+        get() = prefs.getString(WEATHER_TEXT, "").toString()
+        set(value) = prefs.edit { putString(WEATHER_TEXT, value).apply() }
+
+    /** ISO date the cached [weatherText] is for. */
+    var weatherDate: String
+        get() = prefs.getString(WEATHER_DATE, "").toString()
+        set(value) = prefs.edit { putString(WEATHER_DATE, value).apply() }
+
+    var weatherLastUpdated: Long
+        get() = prefs.getLong(WEATHER_LAST_UPDATED, 0L)
+        set(value) = prefs.edit { putLong(WEATHER_LAST_UPDATED, value).apply() }
+
+    /** Last known position, NaN until the first fix. */
+    var weatherLatitude: Float
+        get() = prefs.getFloat(WEATHER_LATITUDE, Float.NaN)
+        set(value) = prefs.edit { putFloat(WEATHER_LATITUDE, value).apply() }
+
+    var weatherLongitude: Float
+        get() = prefs.getFloat(WEATHER_LONGITUDE, Float.NaN)
+        set(value) = prefs.edit { putFloat(WEATHER_LONGITUDE, value).apply() }
 
     var usageHistoryLastUpdated: Long
         get() = prefs.getLong(USAGE_HISTORY_LAST_UPDATED, 0L)

@@ -23,6 +23,7 @@ import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.WallpaperWorker
+import app.olauncher.helper.Weather
 import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getAppsList
 import app.olauncher.helper.getPrivateSpaceApps
@@ -60,6 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val homeAppAlignment = MutableLiveData<Int>()
     val screenTimeValue = MutableLiveData<String>()
     val screenTimeMillis = MutableLiveData<Long>()
+    val weatherText = MutableLiveData<String?>()
     private val moodStore by lazy { MoodStore(appContext) }
 
     val privateSpaceApps = MutableLiveData<List<AppModel>?>()
@@ -471,6 +473,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateHomeAlignment(gravity: Int) {
         prefs.homeAlignment = gravity
         homeAppAlignment.value = prefs.homeAlignment
+    }
+
+    private val weatherLoading = AtomicBoolean(false)
+
+    /** Shows today's cached forecast straight away, then refreshes it at most hourly unless [force]d. */
+    fun getWeather(force: Boolean = false) {
+        if (!Weather.isEnabled(appContext)) {
+            weatherText.value = null
+            return
+        }
+        val cached = Weather.cachedText(appContext)
+        weatherText.value = cached
+        if (!force && cached != null && prefs.weatherLastUpdated.hasBeenMinutes(60).not()) return
+        if (!weatherLoading.compareAndSet(false, true)) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Weather.fetch(appContext)?.let { weatherText.postValue(it) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                weatherLoading.set(false)
+            }
+        }
     }
 
     private val screenTimeLoading = AtomicBoolean(false)

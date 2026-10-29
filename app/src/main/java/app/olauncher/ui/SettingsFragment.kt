@@ -58,6 +58,7 @@ import app.olauncher.helper.rateApp
 import app.olauncher.helper.setPlainWallpaper
 import app.olauncher.helper.shareApp
 import app.olauncher.helper.showToast
+import app.olauncher.helper.Weather
 import app.olauncher.listener.DeviceAdmin
 
 class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListener {
@@ -72,6 +73,19 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private val showPentastic = System.currentTimeMillis() % 2 == 0L
     private var recoveryTapCount = 0
     private val moodStore by lazy { MoodStore(requireContext()) }
+
+    private val requestLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            prefs.weatherOn = true
+            viewModel.getWeather(force = true)
+        } else {
+            requireContext().showToast(getString(R.string.weather_location_denied))
+            // Android won't ask again, so the permission has to be granted from app info
+            if (!shouldShowRequestPermissionRationale(android.Manifest.permission.ACCESS_COARSE_LOCATION))
+                openAppInfo(requireContext(), Process.myUserHandle(), BuildConfig.APPLICATION_ID)
+        }
+        populateWeatherOnOff()
+    }
 
     private val exportBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@registerForActivityResult
@@ -147,6 +161,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateProMessage()
         populateKeyboardText()
         populateScreenTimeOnOff()
+        populateWeatherOnOff()
         populateLockSettings()
         populateHomeButtonRecents()
         populateWallpaperText()
@@ -191,6 +206,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             }
             R.id.moreFeatures -> viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
             R.id.screenTimeOnOff -> viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
+            R.id.weatherOnOff -> toggleWeather()
             R.id.appInfo -> openAppInfo(requireContext(), Process.myUserHandle(), BuildConfig.APPLICATION_ID)
             R.id.setLauncher -> {
                 if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
@@ -361,6 +377,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.homeButtonRecents.setOnClickListener(this)
         binding.homeAppsNum.setOnClickListener(this)
         binding.screenTimeOnOff.setOnClickListener(this)
+        binding.weatherOnOff.setOnClickListener(this)
         binding.dailyWallpaperUrl.setOnClickListener(this)
         binding.dailyWallpaper.setOnClickListener(this)
         binding.alignment.setOnClickListener(this)
@@ -714,6 +731,22 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             if (requireContext().appUsagePermissionGranted()) binding.screenTimeOnOff.text = getString(R.string.on)
             else binding.screenTimeOnOff.text = getString(R.string.off)
         } else binding.screenTimeLayout.visibility = View.GONE
+    }
+
+    private fun toggleWeather() {
+        if (Weather.isEnabled(requireContext())) {
+            prefs.weatherOn = false
+            viewModel.getWeather()
+            populateWeatherOnOff()
+        } else if (Weather.hasLocationPermission(requireContext())) {
+            prefs.weatherOn = true
+            viewModel.getWeather(force = true)
+            populateWeatherOnOff()
+        } else requestLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+    }
+
+    private fun populateWeatherOnOff() {
+        binding.weatherOnOff.text = getString(if (Weather.isEnabled(requireContext())) R.string.on else R.string.off)
     }
 
     private fun populateKeyboardText() {

@@ -40,6 +40,11 @@ object BackupManager {
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
         "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone
         "SCREEN_TIME_LAST_UPDATED",
+        "WEATHER_TEXT",                 // cached forecast and location for this phone
+        "WEATHER_DATE",
+        "WEATHER_LAST_UPDATED",
+        "WEATHER_LATITUDE",
+        "WEATHER_LONGITUDE",
         "USAGE_HISTORY_LAST_UPDATED",
         "LAUNCHER_RECREATE_TIMESTAMP",
     )
