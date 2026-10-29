@@ -25,6 +25,7 @@ object MoodPrompt {
         root: View,
         data: MoodStore.Data,
         today: MoodStore.Day?,
+        yesterday: Boolean = false,
         onResult: (faces: Map<String, Int>?, note: String?) -> Unit,
     ) {
         val context = root.context
@@ -48,7 +49,13 @@ object MoodPrompt {
         labelRow.isVisible = anyLabels
         nav.isVisible = multiple
         val title = root.findViewById<TextView>(R.id.moodPromptTitle)
-        val defaultTitle = context.getString(if (multiple) R.string.how_was_today else R.string.how_are_you_feeling)
+        val defaultTitle = context.getString(
+            when {
+                yesterday -> R.string.how_was_yesterday
+                multiple -> R.string.how_was_today
+                else -> R.string.how_are_you_feeling
+            }
+        )
         row.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = (if (multiple) 8 else 24).dpToPx() }
 
         lateinit var onFace: (statId: String, face: Int) -> Unit

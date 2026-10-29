@@ -254,6 +254,9 @@
     <string name="no_data">No data</string>
     <string name="all">All</string>
     <string name="how_was_today">How was today?</string>
+    <string name="how_was_yesterday">How was yesterday?</string>
+    <string name="ask_missed_day">Ask about a missed day</string>
+    <string name="ask_missed_day_until">Next morning until</string>
     <string name="stat_step">%1$s  %2$d/%3$d</string>
     <string name="previous_stat">Previous stat</string>
     <string name="next_stat">Next stat</string>

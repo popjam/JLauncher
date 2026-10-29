@@ -412,28 +412,36 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         if (_binding != null) showMoodPromptIfDue()
     }
 
+    /** The day the shown mood prompt asks about */
+    private var moodPromptDate: LocalDate? = null
+
     /**
      * The daily mood prompt only appears on the home screen. Dismissing it snoozes it for half an
-     * hour, until the mood and daily stats are in or the day ends; a timer brings it back while home stays open.
+     * hour, until the mood and daily stats are in or the day ends; a timer brings it back while home
+     * stays open. A missed day can be asked about the next morning (see [MoodStore.nextPrompt]).
      */
     private fun showMoodPromptIfDue() {
         handler.removeCallbacks(moodPromptCheck)
         val moodStore = MoodStore(requireContext())
         val now = LocalDateTime.now()
-        val next = moodStore.nextPromptAt(now)
-        if (next == null || next > now) {
+        val next = moodStore.nextPrompt(now)
+        if (next == null || next.at > now) {
             // E.g. today's mood was set from the mood tracker instead
             binding.moodPrompt.root.visibility = View.GONE
+            moodPromptDate = null
             // Midnight is covered by midnightRefresh
-            if (next != null) handler.postDelayed(moodPromptCheck, Duration.between(now, next).toMillis() + 1000)
+            if (next != null) handler.postDelayed(moodPromptCheck, Duration.between(now, next.at).toMillis() + 1000)
             return
         }
         // Already showing: rebinding would wipe anything typed before leaving and coming back
-        if (binding.moodPrompt.root.visibility == View.VISIBLE) return
+        if (binding.moodPrompt.root.visibility == View.VISIBLE && moodPromptDate == next.date) return
         val data = moodStore.load()
-        MoodPrompt.bind(binding.moodPrompt.root, data, data.days[now.toLocalDate().toString()]) { faces, note ->
-            moodStore.answerPrompt(faces, note)
+        val date = next.date
+        moodPromptDate = date
+        MoodPrompt.bind(binding.moodPrompt.root, data, data.days[date.toString()], yesterday = date < now.toLocalDate()) { faces, note ->
+            moodStore.answerPrompt(date, faces, note)
             binding.moodPrompt.root.visibility = View.GONE
+            moodPromptDate = null
             showMoodPromptIfDue()
         }
         binding.moodPrompt.root.visibility = View.VISIBLE

@@ -219,6 +219,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             R.id.pausedAppsCount -> loosenLockdown { findNavController().navigate(R.id.action_settingsFragment_to_pausedAppsFragment) }
             R.id.moodPromptStatus -> toggleMoodPrompt()
             R.id.moodPromptTime -> pickMoodPromptTime()
+            R.id.moodCatchUpStatus -> toggleMoodCatchUp()
+            R.id.moodCatchUpTime -> pickMoodCatchUpTime()
             R.id.backupFolder -> onBackupFolderClicked()
             R.id.backupExport -> {
                 viewModel.isPickingFile = true
@@ -348,6 +350,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         binding.pausedAppsCount.setOnClickListener(this)
         binding.moodPromptStatus.setOnClickListener(this)
         binding.moodPromptTime.setOnClickListener(this)
+        binding.moodCatchUpStatus.setOnClickListener(this)
+        binding.moodCatchUpTime.setOnClickListener(this)
         binding.backupFolder.setOnClickListener(this)
         binding.backupExport.setOnClickListener(this)
         binding.backupImport.setOnClickListener(this)
@@ -955,6 +959,10 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         val time = LocalTime.of(data.promptMinutes / 60, data.promptMinutes % 60)
         val pattern = if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a"
         binding.moodPromptTime.text = time.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        binding.moodCatchUpStatus.text = getString(if (data.catchUpEnabled) R.string.on else R.string.off)
+        binding.moodCatchUpTime.text = LocalTime.of(data.catchUpMinutes / 60, data.catchUpMinutes % 60)
+            .format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        binding.moodCatchUpTimeRow.alpha = if (data.catchUpEnabled) 1f else 0.4f
     }
 
     // --- Backup ---
@@ -988,7 +996,10 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
 
     private fun toggleMoodPrompt() {
         val enable = !moodStore.load().promptEnabled
-        moodStore.update { it.promptEnabled = enable }
+        moodStore.update {
+            it.promptEnabled = enable
+            it.promptSnoozedUntil = ""
+        }
         populateMoodSettings()
         if (!enable) return
 
@@ -996,12 +1007,21 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
     }
 
-    private fun pickMoodPromptTime() {
-        val minutes = moodStore.load().promptMinutes
+    private fun pickMoodPromptTime() = pickTime(moodStore.load().promptMinutes) { moodStore.setPromptTimes(promptMinutes = it) }
+
+    private fun toggleMoodCatchUp() {
+        moodStore.setPromptTimes(catchUpEnabled = !moodStore.load().catchUpEnabled)
+        populateMoodSettings()
+    }
+
+    private fun pickMoodCatchUpTime() = pickTime(moodStore.load().catchUpMinutes) { moodStore.setPromptTimes(catchUpMinutes = it) }
+
+    /** [onPicked] gets minutes past midnight. */
+    private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
         TimePickerDialog(
             requireContext(),
             { _, hour, minute ->
-                moodStore.update { it.promptMinutes = hour * 60 + minute }
+                onPicked(hour * 60 + minute)
                 populateMoodSettings()
             },
             minutes / 60,

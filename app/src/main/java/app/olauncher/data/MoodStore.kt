@@ -71,6 +71,9 @@ class MoodStore(context: Context) {
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
         var promptSnoozedUntil: String = "",
+        /** Ask about a missed day the next morning, until [catchUpMinutes] past midnight */
+        var catchUpEnabled: Boolean = true,
+        var catchUpMinutes: Int = DEFAULT_CATCH_UP_MINUTES,
         var backupFolder: String = "",
     ) {
         fun stat(id: String): Stat? = stats.firstOrNull { it.id == id }
@@ -216,32 +219,51 @@ class MoodStore(context: Context) {
 
     // --- Daily prompt ---
 
-    fun isPromptDue(now: LocalDateTime = LocalDateTime.now()): Boolean = nextPromptAt(now)?.let { it <= now } ?: false
+    /** The prompt for [date] is due [at]. */
+    data class PromptDue(val date: LocalDate, val at: LocalDateTime)
 
     /**
-     * When the prompt is next due today: the prompt time, or [PROMPT_SNOOZE_MINUTES] after it was
-     * last dismissed. Null when it's off or today's mood and daily stats are all in; it stops at midnight.
+     * When the prompt is next due, and for which day. Yesterday comes first: if it was missed and
+     * [Data.catchUpEnabled], it's asked from midnight until [Data.catchUpMinutes]. Then today, from the
+     * prompt time. Either way not until [PROMPT_SNOOZE_MINUTES] after it was last dismissed. Null when
+     * it's off or both days are in; today's stops at midnight.
      */
-    fun nextPromptAt(now: LocalDateTime = LocalDateTime.now()): LocalDateTime? {
+    fun nextPrompt(now: LocalDateTime = LocalDateTime.now()): PromptDue? {
         val data = load()
         if (!data.promptEnabled) return null
         val today = now.toLocalDate()
-        if (data.isComplete(today)) return null
-        val promptTime = today.atStartOfDay().plusMinutes(data.promptMinutes.toLong())
         val snoozedUntil = data.promptSnoozedUntil.takeIf { it.isNotEmpty() }
             ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
-        return listOfNotNull(promptTime, snoozedUntil).max()
+        fun due(from: LocalDateTime) = listOfNotNull(from, snoozedUntil).max()
+
+        val yesterday = today.minusDays(1)
+        val catchUpEnd = today.atStartOfDay().plusMinutes(data.catchUpMinutes.toLong())
+        if (data.catchUpEnabled && !data.isComplete(yesterday)) {
+            val at = due(today.atStartOfDay())
+            if (at < catchUpEnd && now < catchUpEnd) return PromptDue(yesterday, at)
+        }
+        if (data.isComplete(today)) return null
+        return PromptDue(today, due(today.atStartOfDay().plusMinutes(data.promptMinutes.toLong())))
     }
 
+    /** Changing when it's asked starts afresh, rather than waiting out an earlier dismissal. */
+    fun setPromptTimes(promptMinutes: Int? = null, catchUpEnabled: Boolean? = null, catchUpMinutes: Int? = null) =
+        update { data ->
+            promptMinutes?.let { data.promptMinutes = it }
+            catchUpEnabled?.let { data.catchUpEnabled = it }
+            catchUpMinutes?.let { data.catchUpMinutes = it }
+            data.promptSnoozedUntil = ""
+        }
+
     /**
-     * [faces] maps [MOOD] and the daily stat ids to faces. Null means the prompt was dismissed,
-     * so it comes back after [PROMPT_SNOOZE_MINUTES].
+     * Saves the prompt's answers for [date]. [faces] maps [MOOD] and the daily stat ids to faces. Null
+     * means the prompt was dismissed, so it comes back after [PROMPT_SNOOZE_MINUTES].
      */
-    fun answerPrompt(faces: Map<String, Int>?, note: String? = null) = update { data ->
+    fun answerPrompt(date: LocalDate, faces: Map<String, Int>?, note: String? = null) = update { data ->
         if (faces == null) {
             data.promptSnoozedUntil = LocalDateTime.now().plusMinutes(PROMPT_SNOOZE_MINUTES).withNano(0).toString()
         } else {
-            data.editDay(LocalDate.now().toString()) { day ->
+            data.editDay(date.toString()) { day ->
                 day.copy(
                     mood = faces[MOOD] ?: day.mood,
                     note = sanitizeNote(note) ?: day.note,
@@ -287,6 +309,8 @@ class MoodStore(context: Context) {
             if (json.has("hiddenInGraph")) data.setHidden(backup.hiddenInGraph)
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
+            if (json.has("catchUpEnabled")) data.catchUpEnabled = backup.catchUpEnabled
+            if (json.has("catchUpMinutes")) data.catchUpMinutes = backup.catchUpMinutes
         }
         return backup.days.size
     }
@@ -296,6 +320,8 @@ class MoodStore(context: Context) {
         put("promptEnabled", data.promptEnabled)
         put("promptMinutes", data.promptMinutes)
         put("promptSnoozedUntil", data.promptSnoozedUntil)
+        put("catchUpEnabled", data.catchUpEnabled)
+        put("catchUpMinutes", data.catchUpMinutes)
         put("backupFolder", data.backupFolder)
         put("moodColor", data.moodColor)
         put("usageColor", data.usageColor)
@@ -340,6 +366,8 @@ class MoodStore(context: Context) {
             promptEnabled = json.optBoolean("promptEnabled", false),
             promptMinutes = json.optInt("promptMinutes", DEFAULT_PROMPT_MINUTES),
             promptSnoozedUntil = json.optString("promptSnoozedUntil", ""),
+            catchUpEnabled = json.optBoolean("catchUpEnabled", true),
+            catchUpMinutes = json.optInt("catchUpMinutes", DEFAULT_CATCH_UP_MINUTES).coerceIn(0, 24 * 60 - 1),
             backupFolder = json.optString("backupFolder", ""),
         )
         json.optJSONArray("stats")?.let { stats ->
@@ -387,6 +415,7 @@ class MoodStore(context: Context) {
         const val DIR = "mood"
         const val FILE_NAME = "mood_data.json"
         const val DEFAULT_PROMPT_MINUTES = 21 * 60
+        const val DEFAULT_CATCH_UP_MINUTES = 12 * 60
         const val MAX_NOTE_LENGTH = 2000
         const val MAX_NAME_LENGTH = 24
         const val MAX_QUESTION_LENGTH = 80
