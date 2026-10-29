@@ -44,6 +44,7 @@ object BackupManager {
         "WEATHER_LAST_UPDATED",
         "WEATHER_LATITUDE",
         "WEATHER_LONGITUDE",
+        "WEATHER_PLACE",
         "USAGE_HISTORY_LAST_UPDATED",
         "LAUNCHER_RECREATE_TIMESTAMP",
     )

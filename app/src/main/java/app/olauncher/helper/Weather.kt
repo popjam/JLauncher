@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.os.CancellationSignal
@@ -64,7 +65,14 @@ object Weather {
         val isDay: Boolean,
     )
 
-    data class Forecast(val fahrenheit: Boolean, val fetchedAt: Long, val days: List<Day>, val hours: List<Hour>) {
+    /** [place] is the suburb or town the forecast is for, if it could be looked up. */
+    data class Forecast(
+        val fahrenheit: Boolean,
+        val fetchedAt: Long,
+        val days: List<Day>,
+        val hours: List<Hour>,
+        val place: String = "",
+    ) {
         val today: Day? get() = days.firstOrNull { it.date == LocalDate.now() }
 
         fun upcomingDays() = days.filter { it.date >= LocalDate.now() }
@@ -113,13 +121,14 @@ object Weather {
 
     /** The last forecast fetched, if it still covers today and is in the unit wanted now. */
     fun cached(context: Context): Forecast? {
+        val prefs = Prefs(context)
         val forecast = try {
-            parse(Prefs(context).weatherData)
+            parse(prefs.weatherData)
         } catch (e: Exception) {
             null
         } ?: return null
         if (forecast.today == null || forecast.fahrenheit != useFahrenheit(context)) return null
-        return forecast
+        return forecast.copy(place = prefs.weatherPlace)
     }
 
     /** Network call, run off the main thread. Returns null on failure. */
@@ -129,6 +138,8 @@ object Weather {
         if (location != null) {
             prefs.weatherLatitude = location.latitude.toFloat()
             prefs.weatherLongitude = location.longitude.toFloat()
+            // Keeps the last name found if the lookup fails, e.g. offline
+            placeName(context, location)?.let { prefs.weatherPlace = it }
         }
         // Fall back to where we last were, e.g. location services briefly off
         if (prefs.weatherLatitude.isNaN()) return null
@@ -158,7 +169,7 @@ object Weather {
             .put(KEY_FAHRENHEIT, fahrenheit)
             .put(KEY_FETCHED_AT, System.currentTimeMillis())
             .toString()
-        val forecast = parse(json) ?: return null
+        val forecast = parse(json)?.copy(place = prefs.weatherPlace) ?: return null
         prefs.weatherData = json
         prefs.weatherLastUpdated = forecast.fetchedAt
         return forecast
@@ -224,6 +235,19 @@ object Weather {
             ?: telephony?.networkCountryIso?.takeIf { it.isNotBlank() }
             ?: Locale.getDefault().country
         return country.uppercase(Locale.ROOT) in setOf("US", "LR", "MM")
+    }
+
+    /** Suburb, else town, from Android's geocoder. Blocking; null if it isn't available or finds nothing. */
+    @Suppress("DEPRECATION")
+    private fun placeName(context: Context, location: Location): String? {
+        if (!Geocoder.isPresent()) return null
+        return try {
+            Geocoder(context).getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()?.let {
+                it.subLocality ?: it.locality ?: it.subAdminArea
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /** Coarse location is plenty for a forecast: the freshest last-known fix, else ask for one. */

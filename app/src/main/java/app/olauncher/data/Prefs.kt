@@ -57,6 +57,7 @@ class Prefs(context: Context) {
     private val WEATHER_DATA = "WEATHER_DATA"
     private val WEATHER_LAST_UPDATED = "WEATHER_LAST_UPDATED"
     private val WEATHER_LATITUDE = "WEATHER_LATITUDE"
+    private val WEATHER_PLACE = "WEATHER_PLACE"
     private val WEATHER_LONGITUDE = "WEATHER_LONGITUDE"
     private val USAGE_HISTORY_LAST_UPDATED = "USAGE_HISTORY_LAST_UPDATED"
     private val LAUNCHER_RESTART_TIMESTAMP = "LAUNCHER_RECREATE_TIMESTAMP"
@@ -275,6 +276,11 @@ class Prefs(context: Context) {
     var weatherLastUpdated: Long
         get() = prefs.getLong(WEATHER_LAST_UPDATED, 0L)
         set(value) = prefs.edit { putLong(WEATHER_LAST_UPDATED, value).apply() }
+
+    /** Suburb or town of the last known position. */
+    var weatherPlace: String
+        get() = prefs.getString(WEATHER_PLACE, "").toString()
+        set(value) = prefs.edit { putString(WEATHER_PLACE, value).apply() }
 
     /** Last known position, NaN until the first fix. */
     var weatherLatitude: Float

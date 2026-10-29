@@ -81,6 +81,8 @@ class WeatherFragment : Fragment() {
         val context = requireContext()
         val isToday = day.date == LocalDate.now()
         val dateText = day.date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+        binding.place.text = forecast.place
+        binding.place.isVisible = forecast.place.isNotBlank()
         binding.dayLabel.text = if (isToday) "${getString(R.string.today)} · $dateText" else dateText
 
         // Today shows the temperature now; other days their high
