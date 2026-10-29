@@ -61,7 +61,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val homeAppAlignment = MutableLiveData<Int>()
     val screenTimeValue = MutableLiveData<String>()
     val screenTimeMillis = MutableLiveData<Long>()
-    val weatherText = MutableLiveData<String?>()
+    val weather = MutableLiveData<Weather.Forecast?>()
     private val moodStore by lazy { MoodStore(appContext) }
 
     val privateSpaceApps = MutableLiveData<List<AppModel>?>()
@@ -480,17 +480,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Shows today's cached forecast straight away, then refreshes it at most hourly unless [force]d. */
     fun getWeather(force: Boolean = false) {
         if (!Weather.isEnabled(appContext)) {
-            weatherText.value = null
+            weather.value = null
             return
         }
-        val cached = Weather.cachedText(appContext)
-        weatherText.value = cached
+        val cached = Weather.cached(appContext)
+        weather.value = cached
         if (!force && cached != null && prefs.weatherLastUpdated.hasBeenMinutes(60).not()) return
         if (!weatherLoading.compareAndSet(false, true)) return
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Weather.fetch(appContext)?.let { weatherText.postValue(it) }
+                Weather.fetch(appContext)?.let { weather.postValue(it) }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

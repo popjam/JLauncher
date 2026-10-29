@@ -56,7 +56,7 @@
             tools:text="Thu, 30 Dec" />
     </LinearLayout>
 
-    <!-- Mood avatar, screen time and weather-->
+    <!-- Weather, then mood avatar and screen time-->
     <LinearLayout
         android:id="@+id/screenTimeLayout"
         android:layout_width="wrap_content"
@@ -64,43 +64,64 @@
         android:layout_gravity="end"
         android:layout_marginHorizontal="74dp"
         android:layout_marginTop="72dp"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:visibility="gone"
         tools:visibility="visible">
 
-        <app.olauncher.ui.PixelFaceView
-            android:id="@+id/moodAvatar"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="10dp"
-            android:contentDescription="@string/mood_tracker"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tvScreenTime"
-            style="@style/TextSmall"
+        <LinearLayout
+            android:id="@+id/weatherColumn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:padding="10dp"
-            android:textSize="@dimen/date_size"
-            tools:text="2h 11m" />
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone"
+            tools:visibility="visible">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tvWeather"
-            style="@style/TextSmall"
+            <app.olauncher.ui.PixelWeatherView
+                android:id="@+id/weatherIcon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginTop="10dp" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tvWeather"
+                style="@style/TextSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingHorizontal="10dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="10dp"
+                android:textSize="@dimen/date_size"
+                tools:text="21° / 11°\nUV 8" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/screenTimeColumn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingHorizontal="10dp"
-            android:paddingBottom="10dp"
-            android:visibility="gone"
-            tools:text="Partly cloudy
-18° / 9°
-UV 4"
-            tools:visibility="visible" />
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <app.olauncher.ui.PixelFaceView
+                android:id="@+id/moodAvatar"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginTop="10dp"
+                android:contentDescription="@string/mood_tracker"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tvScreenTime"
+                style="@style/TextSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="10dp"
+                android:textSize="@dimen/date_size"
+                tools:text="2h 11m" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Home apps-->

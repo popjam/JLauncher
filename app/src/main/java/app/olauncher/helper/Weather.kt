@@ -31,15 +31,45 @@ object Weather {
 
     fun isEnabled(context: Context) = Prefs(context).weatherOn && hasLocationPermission(context)
 
-    /** Cached forecast text if it's for today, else null. */
-    fun cachedText(context: Context): String? {
-        val prefs = Prefs(context)
-        if (prefs.weatherDate != LocalDate.now().toString()) return null
-        return prefs.weatherText.takeIf { it.isNotBlank() }
+    /** One day's forecast. [code] is a WMO weather code, temperatures are in the unit requested. */
+    data class Forecast(val code: Int, val max: Int, val min: Int, val uv: Int) {
+        fun text(context: Context) = "$max° / $min°\n${context.getString(R.string.uv_index, uv)}"
+
+        fun conditionName(context: Context) = context.getString(
+            when (code) {
+                0 -> R.string.weather_clear
+                1 -> R.string.weather_mostly_clear
+                2 -> R.string.weather_partly_cloudy
+                3 -> R.string.weather_cloudy
+                45, 48 -> R.string.weather_fog
+                in 51..57 -> R.string.weather_drizzle
+                in 61..67 -> R.string.weather_rain
+                in 71..77, 85, 86 -> R.string.weather_snow
+                in 80..82 -> R.string.weather_showers
+                in 95..99 -> R.string.weather_storms
+                else -> R.string.weather_cloudy
+            }
+        )
+
+        fun toCache() = "$code,$max,$min,$uv"
+
+        companion object {
+            fun fromCache(value: String): Forecast? {
+                val parts = value.split(",").mapNotNull { it.toIntOrNull() }
+                return if (parts.size == 4) Forecast(parts[0], parts[1], parts[2], parts[3]) else null
+            }
+        }
     }
 
-    /** Blocking network call; run off the main thread. Returns the text to show, or null on failure. */
-    suspend fun fetch(context: Context): String? {
+    /** Cached forecast if it's for today, else null. */
+    fun cached(context: Context): Forecast? {
+        val prefs = Prefs(context)
+        if (prefs.weatherDate != LocalDate.now().toString()) return null
+        return Forecast.fromCache(prefs.weatherData)
+    }
+
+    /** Network call, run off the main thread. Returns null on failure. */
+    suspend fun fetch(context: Context): Forecast? {
         val prefs = Prefs(context)
         val location = currentLocation(context)
         if (location != null) {
@@ -68,32 +98,16 @@ object Weather {
         }
 
         val daily = JSONObject(body).getJSONObject("daily")
-        val code = daily.getJSONArray("weather_code").getInt(0)
-        val max = daily.getJSONArray("temperature_2m_max").getDouble(0).roundToInt()
-        val min = daily.getJSONArray("temperature_2m_min").getDouble(0).roundToInt()
-        val uv = daily.getJSONArray("uv_index_max").optDouble(0, 0.0).roundToInt()
-
-        val text = "${context.getString(conditionFor(code))}\n$max° / $min°\n${context.getString(R.string.uv_index, uv)}"
-        prefs.weatherText = text
+        val forecast = Forecast(
+            code = daily.getJSONArray("weather_code").getInt(0),
+            max = daily.getJSONArray("temperature_2m_max").getDouble(0).roundToInt(),
+            min = daily.getJSONArray("temperature_2m_min").getDouble(0).roundToInt(),
+            uv = daily.getJSONArray("uv_index_max").optDouble(0, 0.0).roundToInt(),
+        )
+        prefs.weatherData = forecast.toCache()
         prefs.weatherDate = LocalDate.now().toString()
         prefs.weatherLastUpdated = System.currentTimeMillis()
-        return text
-    }
-
-    /** WMO weather interpretation codes, as used by Open-Meteo. */
-    private fun conditionFor(code: Int) = when (code) {
-        0 -> R.string.weather_clear
-        1 -> R.string.weather_mostly_clear
-        2 -> R.string.weather_partly_cloudy
-        3 -> R.string.weather_cloudy
-        45, 48 -> R.string.weather_fog
-        in 51..57 -> R.string.weather_drizzle
-        in 61..67 -> R.string.weather_rain
-        in 71..77 -> R.string.weather_snow
-        in 80..82 -> R.string.weather_showers
-        85, 86 -> R.string.weather_snow
-        in 95..99 -> R.string.weather_storms
-        else -> R.string.weather_cloudy
+        return forecast
     }
 
     /** Coarse location is plenty for a forecast: the freshest last-known fix, else ask for one. */

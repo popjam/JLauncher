@@ -139,7 +139,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
             R.id.moodAvatar -> openMoodTracker()
-            R.id.tvWeather -> viewModel.getWeather(force = true)
+            R.id.weatherIcon, R.id.tvWeather -> viewModel.getWeather(force = true)
 
             else -> {
                 try { // Launch app
@@ -254,11 +254,15 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         viewModel.screenTimeMillis.observe(viewLifecycleOwner) {
             it ?: return@observe
             binding.moodAvatar.mood = MoodStore.moodForUsage(it)
-            binding.moodAvatar.isVisible = binding.tvScreenTime.isVisible
+            binding.moodAvatar.visibility = View.VISIBLE
         }
-        viewModel.weatherText.observe(viewLifecycleOwner) {
-            binding.tvWeather.text = it
-            binding.tvWeather.isVisible = it != null
+        viewModel.weather.observe(viewLifecycleOwner) {
+            binding.weatherColumn.isVisible = it != null
+            it ?: return@observe
+            binding.weatherIcon.code = it.code
+            binding.weatherIcon.uv = it.uv
+            binding.weatherIcon.contentDescription = it.conditionName(requireContext())
+            binding.tvWeather.text = it.text(requireContext())
         }
         binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {
@@ -291,6 +295,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.tvScreenTime.setOnClickListener(this)
         binding.tvScreenTime.setOnLongClickListener(this)
         binding.moodAvatar.setOnClickListener(this)
+        binding.weatherIcon.setOnClickListener(this)
         binding.tvWeather.setOnClickListener(this)
     }
 
@@ -326,11 +331,11 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.date.text = dateText.replace(".,", ",")
     }
 
-    /** The column beside the clock: mood avatar and screen time, with today's weather below. */
+    /** Beside the clock: today's weather, then the mood avatar and screen time. */
     private fun populateScreenTime() {
         val showScreenTime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted()
         val showWeather = Weather.isEnabled(requireContext())
-        binding.tvScreenTime.isVisible = showScreenTime
+        binding.screenTimeColumn.isVisible = showScreenTime
         binding.moodAvatar.isVisible = showScreenTime && viewModel.screenTimeMillis.value != null
         viewModel.getWeather()
         if (!showScreenTime && !showWeather) {
