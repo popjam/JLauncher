@@ -135,6 +135,24 @@ object Weather {
         }
     )
 
+    /** A day's weather as a sentence for the mood tracker's day summary. */
+    fun pastSentence(context: Context, code: Int) = context.getString(
+        when (code) {
+            0, 1 -> R.string.weather_was_clear
+            2 -> R.string.weather_was_partly_cloudy
+            3 -> R.string.weather_was_cloudy
+            45, 48 -> R.string.weather_was_fog
+            in 51..57 -> R.string.weather_was_drizzle
+            61, 66, 80 -> R.string.weather_was_light_rain
+            63 -> R.string.weather_was_rain
+            65, 67, 82 -> R.string.weather_was_pouring
+            81 -> R.string.weather_was_showers
+            in 71..77, 85, 86 -> R.string.weather_was_snow
+            in 95..99 -> R.string.weather_was_storms
+            else -> R.string.weather_was_cloudy
+        }
+    )
+
     fun uvLevel(context: Context, uv: Int) = context.getString(
         when {
             uv <= 2 -> R.string.uv_low

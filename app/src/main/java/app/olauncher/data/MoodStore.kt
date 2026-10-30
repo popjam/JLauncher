@@ -18,13 +18,21 @@ class MoodStore(context: Context) {
     private val file = File(File(appContext.filesDir, DIR), FILE_NAME)
 
     /** Custom stat values are faces, like [mood]: 0 (happy) to 4 (sad), keyed by [Stat.id]. */
+    /**
+     * [topApp] is the name of the app used most that day and [topAppMs] its time; [weatherCode] is the
+     * day's WMO weather code. Both are kept for the day's written summary.
+     */
     data class Day(
         val mood: Int?,
         val usageMs: Long?,
         val note: String? = null,
         val values: Map<String, Int> = emptyMap(),
+        val topApp: String? = null,
+        val topAppMs: Long? = null,
+        val weatherCode: Int? = null,
     ) {
-        val isEmpty get() = mood == null && usageMs == null && note == null && values.isEmpty()
+        val isEmpty
+            get() = mood == null && usageMs == null && note == null && values.isEmpty() && topApp == null && weatherCode == null
 
         /** The face for [MOOD], [USAGE] or a custom stat's id. */
         fun face(statId: String): Int? = when (statId) {
@@ -152,12 +160,26 @@ class MoodStore(context: Context) {
      * Keeps the larger value, so a partial snapshot never overwrites a complete day.
      * Not backed up straight away: [BackupManager.syncIfStale] and other changes pick it up.
      */
-    fun setUsage(date: LocalDate, usageMs: Long) {
-        val old = getDay(date)?.usageMs
-        if (old != null && old >= usageMs) return
+    fun setUsage(date: LocalDate, usageMs: Long, topApp: String? = null, topAppMs: Long? = null) {
+        val old = getDay(date)
+        val oldUsage = old?.usageMs
+        // Still worth saving the top app for a day that was recorded before it was kept
+        if (oldUsage != null && oldUsage >= usageMs && (old.topApp != null || topApp == null)) return
         update(sync = false) { data ->
-            data.editDay(date.toString()) { it.copy(usageMs = maxOf(usageMs, it.usageMs ?: 0L)) }
+            data.editDay(date.toString()) {
+                when {
+                    usageMs >= (it.usageMs ?: 0L) -> it.copy(usageMs = usageMs, topApp = topApp, topAppMs = topAppMs)
+                    it.topApp == null -> it.copy(topApp = topApp, topAppMs = topAppMs)
+                    else -> it
+                }
+            }
         }
+    }
+
+    /** The latest forecast's code for [date]. Not backed up straight away, like usage. */
+    fun setWeather(date: LocalDate, code: Int) {
+        if (getDay(date)?.weatherCode == code) return
+        update(sync = false) { data -> data.editDay(date.toString()) { it.copy(weatherCode = code) } }
     }
 
     // --- Stats ---
@@ -301,7 +323,13 @@ class MoodStore(context: Context) {
             backup.days.forEach { (key, day) ->
                 val local = data.days[key]
                 val usage = listOfNotNull(local?.usageMs, day.usageMs).maxOrNull()
-                data.days[key] = Day(day.mood ?: local?.mood, usage, day.note ?: local?.note, local?.values.orEmpty() + day.values)
+                // The top app goes with whichever usage was kept
+                val usageDay = if (usage == day.usageMs || local?.topApp == null) day else local
+                data.days[key] = Day(
+                    day.mood ?: local?.mood, usage, day.note ?: local?.note, local?.values.orEmpty() + day.values,
+                    usageDay.topApp ?: local?.topApp, usageDay.topAppMs ?: local?.topAppMs,
+                    day.weatherCode ?: local?.weatherCode,
+                )
             }
             if (json.has("moodColor")) data.moodColor = backup.moodColor
             if (json.has("usageColor")) data.usageColor = backup.usageColor
@@ -359,6 +387,9 @@ class MoodStore(context: Context) {
                     day.mood?.let { put("mood", it) }
                     day.usageMs?.let { put("usageMs", it) }
                     day.note?.let { put("note", it) }
+                    day.topApp?.let { put("topApp", it) }
+                    day.topAppMs?.let { put("topAppMs", it) }
+                    day.weatherCode?.let { put("weather", it) }
                     if (day.values.isNotEmpty()) put("values", JSONObject().apply { day.values.forEach { (id, face) -> put(id, face) } })
                 })
             }
@@ -417,7 +448,12 @@ class MoodStore(context: Context) {
             day.optJSONObject("values")?.let { obj ->
                 obj.keys().forEach { id -> values[id] = obj.optInt(id, NEUTRAL).coerceIn(0, 4) }
             }
-            val parsed = Day(mood, usage, note, values)
+            val parsed = Day(
+                mood, usage, note, values,
+                topApp = day.optString("topApp").takeIf { it.isNotBlank() },
+                topAppMs = if (day.has("topAppMs")) day.getLong("topAppMs") else null,
+                weatherCode = if (day.has("weather")) day.getInt("weather") else null,
+            )
             if (!parsed.isEmpty) data.days[key] = parsed
         }
         return data

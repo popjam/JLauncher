@@ -34,6 +34,7 @@ import app.olauncher.helper.isPackageInstalled
 import app.olauncher.helper.isPrivateSpaceLocked
 import app.olauncher.helper.showToast
 import app.olauncher.helper.usageStats.EventLogWrapper
+import app.olauncher.helper.usageStats.SimpleUsageStat
 import app.olauncher.data.MoodStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -492,7 +493,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Weather.fetch(appContext)?.let { weather.postValue(it) }
+                Weather.fetch(appContext)?.let { forecast ->
+                    weather.postValue(forecast)
+                    // Kept for the mood tracker's day summary
+                    forecast.today?.let { moodStore.setWeather(it.date, it.code) }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -525,15 +530,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val startTime = calendar.timeInMillis
                 val endTime = System.currentTimeMillis()
 
-                val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
-                    eventLogWrapper.aggregateForegroundStats(
-                        eventLogWrapper.getForegroundStatsByTimestamps(startTime, endTime)
-                    )
+                val appStats = eventLogWrapper.aggregateForegroundStats(
+                    eventLogWrapper.getForegroundStatsByTimestamps(startTime, endTime)
                 )
+                val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(appStats)
                 screenTimeValue.postValue(appContext.formattedTimeSpent(timeSpent))
                 screenTimeMillis.postValue(timeSpent)
                 prefs.screenTimeLastUpdated = endTime
-                moodStore.setUsage(LocalDate.now(), timeSpent)
+                saveUsage(LocalDate.now(), appStats, timeSpent)
                 refreshRecentUsage(eventLogWrapper)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -558,16 +562,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val day = LocalDate.now().minusDays(daysAgo.toLong())
                 val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
                 val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
-                val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(
-                    eventLogWrapper.aggregateForegroundStats(
-                        eventLogWrapper.getForegroundStatsByTimestamps(start, end)
-                    )
+                val appStats = eventLogWrapper.aggregateForegroundStats(
+                    eventLogWrapper.getForegroundStatsByTimestamps(start, end)
                 )
-                if (timeSpent > 0) moodStore.setUsage(day, timeSpent)
+                val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(appStats)
+                if (timeSpent > 0) saveUsage(day, appStats, timeSpent)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+    }
+
+    /** Saves a day's screen time with the app used most, by name in case it's uninstalled later. */
+    private fun saveUsage(day: LocalDate, appStats: List<SimpleUsageStat>, timeSpent: Long) {
+        val top = appStats.groupBy { it.applicationId }
+            .mapValues { (_, stats) -> stats.sumOf { it.timeUsed } }
+            .maxByOrNull { it.value }
+        val name = top?.let { (packageName, _) ->
+            try {
+                val pm = appContext.packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+            } catch (e: Exception) {
+                packageName
+            }
+        }
+        moodStore.setUsage(day, timeSpent, name, top?.value)
     }
 
     fun getPrivateSpaceAppList() {

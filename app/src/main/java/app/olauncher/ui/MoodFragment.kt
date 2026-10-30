@@ -21,6 +21,7 @@ import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentMoodBinding
 import app.olauncher.helper.StatInfo
+import app.olauncher.helper.Weather
 import app.olauncher.helper.allStats
 import app.olauncher.helper.bindFaceLabels
 import app.olauncher.helper.dpToPx
@@ -645,7 +646,8 @@ class MoodFragment : Fragment() {
 
     /**
      * A sentence per stat with a value that day, in tab order: the stat's own sentence for the face if
-     * it has one, with {} replaced by the face's label, else a plain one ("Energy was low").
+     * it has one, with {} replaced by the face's label, else a plain one ("Energy was low"). The day's
+     * weather follows the mood (or leads, without it), and the day's note ends it.
      */
     private fun daySummary(date: LocalDate, stats: List<StatInfo>): String {
         val day = data.days[date.toString()] ?: return getString(R.string.summary_nothing)
@@ -658,17 +660,29 @@ class MoodFragment : Fragment() {
             when {
                 phrase.isNotEmpty() -> phrase.replace("{}", label)
                 stat.id == MoodStore.MOOD -> getString(R.string.summary_mood, words[face])
-                stat.id == MoodStore.USAGE -> getString(R.string.summary_usage, requireContext().formattedTimeSpent(day.usageMs ?: 0))
+                stat.id == MoodStore.USAGE -> {
+                    val time = requireContext().formattedTimeSpent(day.usageMs ?: 0)
+                    // Only worth naming an app that took up a good part of the day
+                    if (day.topApp != null && (day.topAppMs ?: 0) >= TOP_APP_MIN_MS) getString(R.string.summary_usage_app, time, day.topApp)
+                    else getString(R.string.summary_usage, time)
+                }
                 label.isNotEmpty() -> getString(R.string.stat_label, stat.name, label)
                 else -> getString(R.string.summary_stat, stat.name, words[face])
             }
         }
-        if (sentences.isEmpty()) return getString(R.string.summary_nothing)
+            .toMutableList()
+        day.weatherCode?.let { code ->
+            val moodIndex = stats.filter { day.face(it.id) != null }.indexOfFirst { it.id == MoodStore.MOOD }
+            sentences.add(moodIndex + 1, Weather.pastSentence(requireContext(), code))
+        }
+        if (sentences.isEmpty() && day.note == null) return getString(R.string.summary_nothing)
         // Each a sentence: capitalised, with a full stop unless it ends in its own
-        return sentences.joinToString(" ") { sentence ->
+        val text = sentences.joinToString(" ") { sentence ->
             val text = sentence.trim().replaceFirstChar { it.uppercase() }
             if (text.last() in ".!?") text else "$text."
         }
+        val note = day.note?.let { getString(R.string.summary_note, it.replace(Regex("\\s*\\n+\\s*"), " ")) }
+        return listOfNotNull(text.ifEmpty { null }, note).joinToString(" ")
     }
 
     /** Tap a stat to show or hide its line. */
@@ -704,5 +718,6 @@ class MoodFragment : Fragment() {
 
     companion object {
         private val WEEKS = WeekFields.ISO
+        private const val TOP_APP_MIN_MS = 30 * 60 * 1000L
     }
 }
