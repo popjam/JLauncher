@@ -681,7 +681,10 @@ class MoodFragment : Fragment() {
             val text = sentence.trim().replaceFirstChar { it.uppercase() }
             if (text.last() in ".!?") text else "$text."
         }
-        val note = day.note?.let { getString(R.string.summary_note, it.replace(Regex("\\s*\\n+\\s*"), " ")) }
+        // A full stop after the quote, unless the note already ends its own sentence
+        val note = day.note?.replace(Regex("\\s*\\n+\\s*"), " ")?.let { note ->
+            getString(R.string.summary_note, note) + if (note.last() in ".!?") "" else "."
+        }
         return listOfNotNull(text.ifEmpty { null }, note).joinToString(" ")
     }
 
