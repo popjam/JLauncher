@@ -12,7 +12,8 @@ import app.olauncher.data.MoodStore
 
 /**
  * A stat to show: one of the built-ins or a custom stat, with the name and colour to use. [question] is
- * the daily check's title for it; empty for the default. [labels] go under its faces, if any.
+ * the daily check's title for it; empty for the default. [labels] go under its faces, if any, left to
+ * right whichever way round the faces are.
  */
 data class StatInfo(
     val id: String,
@@ -28,9 +29,6 @@ data class StatInfo(
 
     /** The faces left to right: sad to happy, or happy to sad when [inverted]. */
     val faces get() = MoodStore.facesFor(scale).let { if (inverted) it.reversed() else it }
-
-    /** [labels] in [faces] order. */
-    val faceLabels get() = if (inverted) labels.reversed() else labels
 }
 
 /**

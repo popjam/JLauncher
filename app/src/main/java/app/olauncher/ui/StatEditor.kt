@@ -105,15 +105,15 @@ object StatEditor {
         var scale = stat?.scale ?: 5
         if (stat != null) binding.statScaleLabel.text = context.getString(R.string.stat_scale_locked)
         val scaleViews = MoodStore.SCALES.associateWith { option -> scaleOption(context, option) }
-        // Face labels, kept by face so switching scale while adding keeps what's typed
+        // Face labels, for each place in the row. Kept by the face normally there, so switching scale
+        // while adding keeps what's typed. The faces can swap but the labels stay put.
         val labels = mutableMapOf<Int, String>()
         stat?.labels?.forEachIndexed { i, label -> labels[MoodStore.facesFor(stat.scale)[i]] = label }
-        // In the order the faces will show
+        fun rowFaces() = MoodStore.facesFor(scale).let { if (binding.statInverted.isChecked) it.reversed() else it }
         fun renderLabels() {
             binding.statFaceLabels.removeAllViews()
-            val faces = MoodStore.facesFor(scale).let { if (binding.statInverted.isChecked) it.reversed() else it }
-            faces.forEachIndexed { i, face ->
-                binding.statFaceLabels.addView(faceLabelInput(context, face, labels[face].orEmpty()) { labels[face] = it },
+            MoodStore.facesFor(scale).zip(rowFaces()).forEachIndexed { i, (place, face) ->
+                binding.statFaceLabels.addView(faceLabelInput(context, face, labels[place].orEmpty()) { labels[place] = it },
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                         if (i > 0) marginStart = 4.dpToPx()
                     })
@@ -121,18 +121,17 @@ object StatEditor {
         }
         fun faceLabels() = MoodStore.facesFor(scale).map { labels[it].orEmpty() }
 
-        // Summary sentences, kept by face like the labels
+        // Summary sentences, kept by place in the row like the labels
         val phrases = mutableMapOf<Int, String>()
         stat?.phrases?.forEachIndexed { i, phrase -> phrases[MoodStore.facesFor(stat.scale)[i]] = phrase }
         fun renderPhrases() {
             binding.statPhrases.removeAllViews()
-            val faces = MoodStore.facesFor(scale).let { if (binding.statInverted.isChecked) it.reversed() else it }
-            faces.forEach { face ->
+            MoodStore.facesFor(scale).zip(rowFaces()).forEach { (place, face) ->
                 binding.statPhrases.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
-                    addView(textInput(context, phrases[face].orEmpty(), MoodStore.MAX_PHRASE_LENGTH) { phrases[face] = it }.apply {
+                    addView(textInput(context, phrases[place].orEmpty(), MoodStore.MAX_PHRASE_LENGTH) { phrases[place] = it }.apply {
                         gravity = Gravity.CENTER_VERTICAL or Gravity.START
                         setPadding(10.dpToPx(), 8.dpToPx(), 10.dpToPx(), 8.dpToPx())
                         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES

@@ -83,7 +83,7 @@
                 android:textSize="15sp" />
         </LinearLayout>
 
-        <!-- Happy face on the left, and sad counting highest in the graphs -->
+        <!-- Swaps the faces and flips the stat's saved days -->
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/statInverted"
             style="@style/TextSmall"

@@ -87,7 +87,7 @@ object MoodPrompt {
             }
             val alphas = faces.map { face -> if (selected == null || selected == face) 1f else 0.3f }
             alphas.forEachIndexed { i, alpha -> row.getChildAt(i).alpha = alpha }
-            if (anyLabels) bindFaceLabels(labelRow, stat.faceLabels.ifEmpty { List(faces.size) { "" } }, alphas)
+            if (anyLabels) bindFaceLabels(labelRow, stat.labels.ifEmpty { List(faces.size) { "" } }, alphas)
             listOf(prev, next).forEach {
                 it.isEnabled = multiple
                 it.alpha = 0.6f

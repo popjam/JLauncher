@@ -295,7 +295,7 @@
         <item>bad</item>
     </string-array>
     <string name="stat_invert">Invert faces</string>
-    <string name="stat_invert_hint">Happy on the left; sad scores highest in the graphs</string>
+    <string name="stat_invert_hint">Swaps the faces and flips every saved day. Labels stay put.</string>
     <string name="stat_face_labels">Face labels · optional</string>
     <string name="stat_scale">Scale</string>
     <string name="stat_scale_locked">Scale · can\'t be changed</string>

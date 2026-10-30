@@ -413,7 +413,7 @@ class MoodFragment : Fragment() {
             val chosen = day?.face(stat.id)
             val alphas = faces.map { face -> if (face == chosen) 1f else 0.3f }
             alphas.forEachIndexed { i, alpha -> binding.moodFaces.getChildAt(i).alpha = alpha }
-            if (stat.labels.isNotEmpty()) bindFaceLabels(binding.faceLabels, stat.faceLabels, alphas)
+            if (stat.labels.isNotEmpty()) bindFaceLabels(binding.faceLabels, stat.labels, alphas)
         }
     }
 
@@ -632,7 +632,7 @@ class MoodFragment : Fragment() {
             // A day's face label, when the stat has one for it, says more than its score
             val label = value?.takeIf { graphMode == GraphMode.DAILY }?.let { score ->
                 val face = MoodStore.faceForScore(score.toInt(), stat.inverted)
-                stat.labels.getOrNull(MoodStore.facesFor(stat.scale).indexOf(face))?.takeIf { it.isNotEmpty() }
+                stat.labels.getOrNull(stat.faces.indexOf(face))?.takeIf { it.isNotEmpty() }
             }
             text.append(
                 when {
@@ -657,7 +657,7 @@ class MoodFragment : Fragment() {
         val words = resources.getStringArray(R.array.summary_faces)
         val sentences = stats.mapNotNull { stat ->
             val face = day.face(stat.id) ?: return@mapNotNull null
-            val index = MoodStore.facesFor(stat.scale).indexOf(face)
+            val index = stat.faces.indexOf(face)
             val label = stat.labels.getOrNull(index).orEmpty()
             val phrase = stat.phrases.getOrNull(index).orEmpty()
             when {

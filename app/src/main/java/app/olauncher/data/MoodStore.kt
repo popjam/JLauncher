@@ -45,9 +45,10 @@ class MoodStore(context: Context) {
     /**
      * A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. [question]
      * replaces the daily check's usual title while it's asked; empty for the default. [labels] go under
-     * the faces, in [facesFor] order; empty when there are none. [phrases] are the day summary's
-     * sentence for each face, in the same order, with {} standing for the face's label. [inverted] stats show happy on the
-     * left and score sad highest (see [score]).
+     * the faces, left to right; empty when there are none. [phrases] are the day summary's sentence
+     * for each place in the row, in the same order, with {} standing for that place's label. Both stay
+     * in place when the faces swap. [inverted] stats show happy on the left and score sad highest
+     * (see [score]).
      */
     data class Stat(
         val id: String,
@@ -198,13 +199,14 @@ class MoodStore(context: Context) {
         return stat
     }
 
-    /** The scale stays as it was. */
+    /** The scale stays as it was. Changing [inverted] flips the stat's history (see [flipHistory]). */
     fun editStat(
         id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>, inverted: Boolean,
         phrases: List<String>,
     ) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
         if (index >= 0) data.stats[index] = data.stats[index].let {
+            if (it.inverted != inverted) data.flipHistory(id)
             it.copy(
                 name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question),
                 labels = sanitizeLabels(labels, it.scale), inverted = inverted, phrases = sanitizePhrases(phrases, it.scale),
@@ -218,6 +220,7 @@ class MoodStore(context: Context) {
             MOOD -> {
                 data.moodColor = color
                 data.moodQuestion = sanitizeQuestion(question)
+                if (data.moodInverted != inverted) data.flipHistory(MOOD)
                 data.moodInverted = inverted
             }
             USAGE -> {
@@ -230,6 +233,19 @@ class MoodStore(context: Context) {
     fun setOrder(ids: List<String>) = update { data ->
         data.order.clear()
         data.order.addAll(ids)
+    }
+
+    /**
+     * Swaps every saved face for its opposite, so sad becomes happy and the other way round, for [MOOD]
+     * or a custom stat. With the faces swapped too, each entry keeps its place in the row and its score.
+     */
+    private fun Data.flipHistory(statId: String) {
+        days.keys.toList().forEach { key ->
+            editDay(key) { day ->
+                if (statId == MOOD) day.copy(mood = day.mood?.let { SAD - it })
+                else day.copy(values = day.values.mapValues { (id, face) -> if (id == statId) SAD - face else face })
+            }
+        }
     }
 
     /** Removes the stat and all its history. */
@@ -320,8 +336,13 @@ class MoodStore(context: Context) {
         update { data ->
             backup.stats.forEach { stat ->
                 val index = data.stats.indexOfFirst { it.id == stat.id }
-                if (index >= 0) data.stats[index] = stat else data.stats.add(stat)
+                if (index >= 0) {
+                    // Days only found here need to match the backup's way round
+                    if (data.stats[index].inverted != stat.inverted) data.flipHistory(stat.id)
+                    data.stats[index] = stat
+                } else data.stats.add(stat)
             }
+            if (json.has("moodInverted") && data.moodInverted != backup.moodInverted) data.flipHistory(MOOD)
             backup.days.forEach { (key, day) ->
                 val local = data.days[key]
                 val usage = listOfNotNull(local?.usageMs, day.usageMs).maxOrNull()
