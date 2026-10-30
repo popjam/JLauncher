@@ -268,6 +268,19 @@
     <string name="stat_brightness">Brightness</string>
     <string name="stat_daily_check">Add to daily check</string>
     <string name="stat_display_text">Display text</string>
+    <string name="stat_phrases">Summary sentences · optional</string>
+    <string name="stat_phrases_hint">Used in a day\'s written summary. {} is the face\'s label.</string>
+    <string name="summary_mood">Your mood was %1$s</string>
+    <string name="summary_usage">You spent %1$s on your phone</string>
+    <string name="summary_stat">%1$s was %2$s</string>
+    <string name="summary_nothing">Nothing recorded</string>
+    <string-array name="summary_faces">
+        <item>great</item>
+        <item>good</item>
+        <item>okay</item>
+        <item>low</item>
+        <item>bad</item>
+    </string-array>
     <string name="stat_invert">Invert faces</string>
     <string name="stat_invert_hint">Happy on the left; sad scores highest in the graphs</string>
     <string name="stat_face_labels">Face labels · optional</string>

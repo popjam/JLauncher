@@ -99,6 +99,13 @@ class MoodFragment : Fragment() {
         binding.clearStats.setOnClickListener { setHidden(stats.map { it.id }.toSet()) }
         binding.statChart.onPointSelected = { renderPointDetails(it) }
         binding.statHeatmap.onPointSelected = { renderPointDetails(it) }
+        // A day's details switch between each stat's value and a written summary, remembered for every day
+        binding.pointDetails.setOnClickListener {
+            if (graphMode != GraphMode.DAILY) return@setOnClickListener
+            moodStore.update(sync = false) { it.daySummary = !it.daySummary }
+            reload()
+            renderPointDetails(graphSelected)
+        }
         binding.tabScroll.setOnDragListener { _, event -> onTabDrag(event) }
         binding.noteInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
     }
@@ -606,6 +613,12 @@ class MoodFragment : Fragment() {
             GraphMode.MONTHLY -> YearMonth.of(graphYear, point).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
         }
         val text = SpannableStringBuilder(title)
+        val summary = graphMode == GraphMode.DAILY && data.daySummary
+        if (summary) {
+            text.append("\n").append(daySummary(graphMonth.atDay(point), stats.filter { it.id !in data.hiddenInGraph }))
+            binding.pointDetails.text = text
+            return
+        }
         stats.filter { it.id !in data.hiddenInGraph }.forEachIndexed { i, stat ->
             text.append(if (i % 3 == 0) "\n" else "     ")
             val dotStart = text.length
@@ -628,6 +641,34 @@ class MoodFragment : Fragment() {
             )
         }
         binding.pointDetails.text = text
+    }
+
+    /**
+     * A sentence per stat with a value that day, in tab order: the stat's own sentence for the face if
+     * it has one, with {} replaced by the face's label, else a plain one ("Energy was low").
+     */
+    private fun daySummary(date: LocalDate, stats: List<StatInfo>): String {
+        val day = data.days[date.toString()] ?: return getString(R.string.summary_nothing)
+        val words = resources.getStringArray(R.array.summary_faces)
+        val sentences = stats.mapNotNull { stat ->
+            val face = day.face(stat.id) ?: return@mapNotNull null
+            val index = MoodStore.facesFor(stat.scale).indexOf(face)
+            val label = stat.labels.getOrNull(index).orEmpty()
+            val phrase = stat.phrases.getOrNull(index).orEmpty()
+            when {
+                phrase.isNotEmpty() -> phrase.replace("{}", label)
+                stat.id == MoodStore.MOOD -> getString(R.string.summary_mood, words[face])
+                stat.id == MoodStore.USAGE -> getString(R.string.summary_usage, requireContext().formattedTimeSpent(day.usageMs ?: 0))
+                label.isNotEmpty() -> getString(R.string.stat_label, stat.name, label)
+                else -> getString(R.string.summary_stat, stat.name, words[face])
+            }
+        }
+        if (sentences.isEmpty()) return getString(R.string.summary_nothing)
+        // Each a sentence: capitalised, with a full stop unless it ends in its own
+        return sentences.joinToString(" ") { sentence ->
+            val text = sentence.trim().replaceFirstChar { it.uppercase() }
+            if (text.last() in ".!?") text else "$text."
+        }
     }
 
     /** Tap a stat to show or hide its line. */

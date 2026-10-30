@@ -120,6 +120,34 @@ object StatEditor {
             }
         }
         fun faceLabels() = MoodStore.facesFor(scale).map { labels[it].orEmpty() }
+
+        // Summary sentences, kept by face like the labels
+        val phrases = mutableMapOf<Int, String>()
+        stat?.phrases?.forEachIndexed { i, phrase -> phrases[MoodStore.facesFor(stat.scale)[i]] = phrase }
+        fun renderPhrases() {
+            binding.statPhrases.removeAllViews()
+            val faces = MoodStore.facesFor(scale).let { if (binding.statInverted.isChecked) it.reversed() else it }
+            faces.forEach { face ->
+                binding.statPhrases.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
+                    addView(textInput(context, phrases[face].orEmpty(), MoodStore.MAX_PHRASE_LENGTH) { phrases[face] = it }.apply {
+                        gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                        setPadding(10.dpToPx(), 8.dpToPx(), 10.dpToPx(), 8.dpToPx())
+                        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                    }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 8.dpToPx() })
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = 6.dpToPx()
+                })
+            }
+        }
+        fun facePhrases() = MoodStore.facesFor(scale).map { phrases[it].orEmpty() }
+        binding.statClearPhrases.setOnClickListener {
+            phrases.clear()
+            binding.statPhrases.findFocus()?.hideKeyboard()
+            renderPhrases()
+        }
         binding.statClearLabels.setOnClickListener {
             labels.clear()
             binding.statFaceLabels.findFocus()?.hideKeyboard()
@@ -127,8 +155,9 @@ object StatEditor {
         }
 
         binding.statInverted.setOnCheckedChangeListener { _, _ ->
-            binding.statFaceLabels.findFocus()?.hideKeyboard()
+            binding.root.findFocus()?.hideKeyboard()
             renderLabels()
+            renderPhrases()
         }
 
         fun renderScales() {
@@ -137,6 +166,7 @@ object StatEditor {
                 view.alpha = if (stat == null || option == scale) 1f else 0.3f
             }
             if (binding.statFaceLabels.childCount != scale) renderLabels()
+            if (binding.statPhrases.childCount != scale) renderPhrases()
         }
         scaleViews.forEach { (option, view) ->
             binding.statScales.addView(view, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -165,9 +195,9 @@ object StatEditor {
                 val inverted = binding.statInverted.isChecked
                 when {
                     builtIn -> moodStore.editBuiltIn(statId!!, color(), question, inverted)
-                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels(), inverted)
+                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels(), inverted, facePhrases())
                     else -> {
-                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels(), inverted)
+                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels(), inverted, facePhrases())
                         return@setPositiveButton onDone(added.id)
                     }
                 }
@@ -206,26 +236,29 @@ object StatEditor {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
         addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
-        // The default EditText style, which makes it focusable and brings up the keyboard
-        addView(EditText(context).apply {
-            setBackgroundResource(R.drawable.rounded_box)
+        addView(textInput(context, text, MoodStore.MAX_LABEL_LENGTH, onChange).apply {
             setPadding(4.dpToPx(), 8.dpToPx(), 4.dpToPx(), 8.dpToPx())
             gravity = Gravity.CENTER
-            textSize = 13f
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            imeOptions = EditorInfo.IME_ACTION_NEXT
-            isSingleLine = true
-            filters = arrayOf(InputFilter.LengthFilter(MoodStore.MAX_LABEL_LENGTH))
-            setTextColor(context.getColorFromAttr(R.attr.primaryColor))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
-            setText(text)
-            addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-                override fun afterTextChanged(s: Editable?) = onChange(s?.toString().orEmpty())
-            })
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 4.dpToPx()
+        })
+    }
+
+    /** A one-line box. The default EditText style makes it focusable and brings up the keyboard. */
+    private fun textInput(context: Context, text: String, maxLength: Int, onChange: (String) -> Unit) = EditText(context).apply {
+        setBackgroundResource(R.drawable.rounded_box)
+        textSize = 13f
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        imeOptions = EditorInfo.IME_ACTION_NEXT
+        isSingleLine = true
+        filters = arrayOf(InputFilter.LengthFilter(maxLength))
+        setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        setText(text)
+        addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) = onChange(s?.toString().orEmpty())
         })
     }
 

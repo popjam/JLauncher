@@ -37,7 +37,8 @@ class MoodStore(context: Context) {
     /**
      * A custom stat. [scale] is 2, 3 or 5 faces (see [facesFor]) and can't change once added. [question]
      * replaces the daily check's usual title while it's asked; empty for the default. [labels] go under
-     * the faces, in [facesFor] order; empty when there are none. [inverted] stats show happy on the
+     * the faces, in [facesFor] order; empty when there are none. [phrases] are the day summary's
+     * sentence for each face, in the same order, with {} standing for the face's label. [inverted] stats show happy on the
      * left and score sad highest (see [score]).
      */
     data class Stat(
@@ -49,6 +50,7 @@ class MoodStore(context: Context) {
         val question: String = "",
         val labels: List<String> = emptyList(),
         val inverted: Boolean = false,
+        val phrases: List<String> = emptyList(),
     )
 
     class Data(
@@ -68,6 +70,8 @@ class MoodStore(context: Context) {
         val order: MutableList<String> = mutableListOf(),
         /** Stat ids whose lines are switched off in the All graph */
         val hiddenInGraph: MutableSet<String> = mutableSetOf(),
+        /** Whether the All graph's day details are a written summary rather than each stat's value */
+        var daySummary: Boolean = false,
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
         var promptSnoozedUntil: String = "",
@@ -160,10 +164,11 @@ class MoodStore(context: Context) {
 
     fun addStat(
         name: String, color: Int, daily: Boolean, scale: Int, question: String, labels: List<String>, inverted: Boolean,
+        phrases: List<String>,
     ): Stat {
         val stat = Stat(
             "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale,
-            sanitizeQuestion(question), sanitizeLabels(labels, scale), inverted,
+            sanitizeQuestion(question), sanitizeLabels(labels, scale), inverted, sanitizePhrases(phrases, scale),
         )
         update { it.stats.add(stat) }
         return stat
@@ -172,12 +177,13 @@ class MoodStore(context: Context) {
     /** The scale stays as it was. */
     fun editStat(
         id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>, inverted: Boolean,
+        phrases: List<String>,
     ) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
         if (index >= 0) data.stats[index] = data.stats[index].let {
             it.copy(
                 name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question),
-                labels = sanitizeLabels(labels, it.scale), inverted = inverted,
+                labels = sanitizeLabels(labels, it.scale), inverted = inverted, phrases = sanitizePhrases(phrases, it.scale),
             )
         }
     }
@@ -307,6 +313,7 @@ class MoodStore(context: Context) {
                 data.order.addAll(backup.order)
             }
             if (json.has("hiddenInGraph")) data.setHidden(backup.hiddenInGraph)
+            if (json.has("daySummary")) data.daySummary = backup.daySummary
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
             if (json.has("catchUpEnabled")) data.catchUpEnabled = backup.catchUpEnabled
@@ -329,6 +336,7 @@ class MoodStore(context: Context) {
         put("moodInverted", data.moodInverted)
         put("usageInverted", data.usageInverted)
         put("hiddenInGraph", JSONArray(data.hiddenInGraph.toList()))
+        put("daySummary", data.daySummary)
         put("order", JSONArray(data.order))
         put("stats", JSONArray().apply {
             data.stats.forEach { stat ->
@@ -341,6 +349,7 @@ class MoodStore(context: Context) {
                     put("question", stat.question)
                     if (stat.labels.isNotEmpty()) put("labels", JSONArray(stat.labels))
                     put("inverted", stat.inverted)
+                    if (stat.phrases.isNotEmpty()) put("phrases", JSONArray(stat.phrases))
                 })
             }
         })
@@ -369,6 +378,7 @@ class MoodStore(context: Context) {
             catchUpEnabled = json.optBoolean("catchUpEnabled", true),
             catchUpMinutes = json.optInt("catchUpMinutes", DEFAULT_CATCH_UP_MINUTES).coerceIn(0, 24 * 60 - 1),
             backupFolder = json.optString("backupFolder", ""),
+            daySummary = json.optBoolean("daySummary"),
         )
         json.optJSONArray("stats")?.let { stats ->
             for (i in 0 until stats.length()) {
@@ -378,11 +388,13 @@ class MoodStore(context: Context) {
                 val scale = stat.optInt("scale", 5).takeIf { it in SCALES } ?: 5
                 val name = sanitizeName(stat.optString("name")).ifEmpty { "?" }
                 val question = sanitizeQuestion(stat.optString("question"))
-                val labels = stat.optJSONArray("labels")?.let { array -> List(array.length()) { array.optString(it) } }.orEmpty()
+                fun strings(key: String) = stat.optJSONArray(key)?.let { array -> List(array.length()) { array.optString(it) } }.orEmpty()
+                val labels = strings("labels")
                 data.stats.add(
                     Stat(
                         id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale,
                         question, sanitizeLabels(labels, scale), stat.optBoolean("inverted"),
+                        sanitizePhrases(strings("phrases"), scale),
                     )
                 )
             }
@@ -420,6 +432,7 @@ class MoodStore(context: Context) {
         const val MAX_NAME_LENGTH = 24
         const val MAX_QUESTION_LENGTH = 80
         const val MAX_LABEL_LENGTH = 10
+        const val MAX_PHRASE_LENGTH = 100
         const val PROMPT_SNOOZE_MINUTES = 30L
 
         const val HAPPY = 0
@@ -475,9 +488,14 @@ class MoodStore(context: Context) {
             sanitizeNote(question?.replace('\n', ' '))?.take(MAX_QUESTION_LENGTH)?.trim().orEmpty()
 
         /** One per face of [scale], each one line capped at [MAX_LABEL_LENGTH]; empty when all are blank. */
-        fun sanitizeLabels(labels: List<String>, scale: Int): List<String> {
+        fun sanitizeLabels(labels: List<String>, scale: Int) = sanitizePerFace(labels, scale, MAX_LABEL_LENGTH)
+
+        /** Like [sanitizeLabels], capped at [MAX_PHRASE_LENGTH]. */
+        fun sanitizePhrases(phrases: List<String>, scale: Int) = sanitizePerFace(phrases, scale, MAX_PHRASE_LENGTH)
+
+        private fun sanitizePerFace(texts: List<String>, scale: Int, maxLength: Int): List<String> {
             val cleaned = List(scale) { i ->
-                sanitizeNote(labels.getOrNull(i)?.replace('\n', ' '))?.take(MAX_LABEL_LENGTH)?.trim().orEmpty()
+                sanitizeNote(texts.getOrNull(i)?.replace('\n', ' '))?.take(maxLength)?.trim().orEmpty()
             }
             return if (cleaned.all { it.isEmpty() }) emptyList() else cleaned
         }
