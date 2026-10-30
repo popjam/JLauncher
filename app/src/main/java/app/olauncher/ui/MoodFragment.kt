@@ -612,12 +612,20 @@ class MoodFragment : Fragment() {
             text.append("● ")
             text.setSpan(ForegroundColorSpan(stat.color), dotStart, dotStart + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             val value = values[stat.id]?.get(point)
-            val valueText = when {
-                value == null -> "–"
-                graphMode == GraphMode.MONTHLY -> String.format(Locale.getDefault(), "%.1f", value)
-                else -> value.toInt().toString()
+            // A day's face label, when the stat has one for it, says more than its score
+            val label = value?.takeIf { graphMode == GraphMode.DAILY }?.let { score ->
+                val face = MoodStore.faceForScore(score.toInt(), stat.inverted)
+                stat.labels.getOrNull(MoodStore.facesFor(stat.scale).indexOf(face))?.takeIf { it.isNotEmpty() }
             }
-            text.append(getString(R.string.stat_total, stat.name, valueText))
+            text.append(
+                when {
+                    label != null -> getString(R.string.stat_label, stat.name, label)
+                    value == null -> getString(R.string.stat_total, stat.name, "–")
+                    graphMode == GraphMode.MONTHLY ->
+                        getString(R.string.stat_total, stat.name, String.format(Locale.getDefault(), "%.1f", value))
+                    else -> getString(R.string.stat_total, stat.name, value.toInt().toString())
+                }
+            )
         }
         binding.pointDetails.text = text
     }
