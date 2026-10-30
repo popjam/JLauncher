@@ -82,6 +82,8 @@ class MoodFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         moodStore = MoodStore(requireContext())
+        // The graph shown last time
+        graphMode = GraphMode.entries.firstOrNull { it.name == moodStore.load().graphMode } ?: GraphMode.WEEKLY
         buildCalendar()
 
         binding.addStat.setOnClickListener { editStat(null) }
@@ -527,6 +529,7 @@ class MoodFragment : Fragment() {
                 GraphMode.DAILY
             }
         }
+        moodStore.update(sync = false) { it.graphMode = graphMode.name }
         renderGraph(rangeChanged = true)
     }
 

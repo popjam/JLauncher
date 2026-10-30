@@ -80,6 +80,8 @@ class MoodStore(context: Context) {
         val hiddenInGraph: MutableSet<String> = mutableSetOf(),
         /** Whether the All graph's day details are a written summary rather than each stat's value */
         var daySummary: Boolean = false,
+        /** The All graph last shown: daily, weekly or monthly */
+        var graphMode: String = "",
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
         var promptSnoozedUntil: String = "",
@@ -342,6 +344,7 @@ class MoodStore(context: Context) {
             }
             if (json.has("hiddenInGraph")) data.setHidden(backup.hiddenInGraph)
             if (json.has("daySummary")) data.daySummary = backup.daySummary
+            if (json.has("graphMode")) data.graphMode = backup.graphMode
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
             if (json.has("catchUpEnabled")) data.catchUpEnabled = backup.catchUpEnabled
@@ -365,6 +368,7 @@ class MoodStore(context: Context) {
         put("usageInverted", data.usageInverted)
         put("hiddenInGraph", JSONArray(data.hiddenInGraph.toList()))
         put("daySummary", data.daySummary)
+        put("graphMode", data.graphMode)
         put("order", JSONArray(data.order))
         put("stats", JSONArray().apply {
             data.stats.forEach { stat ->
@@ -410,6 +414,7 @@ class MoodStore(context: Context) {
             catchUpMinutes = json.optInt("catchUpMinutes", DEFAULT_CATCH_UP_MINUTES).coerceIn(0, 24 * 60 - 1),
             backupFolder = json.optString("backupFolder", ""),
             daySummary = json.optBoolean("daySummary"),
+            graphMode = json.optString("graphMode"),
         )
         json.optJSONArray("stats")?.let { stats ->
             for (i in 0 until stats.length()) {
