@@ -48,7 +48,8 @@ class MoodStore(context: Context) {
      * the faces, left to right; empty when there are none. [phrases] are the day summary's sentence
      * for each place in the row, in the same order, with {} standing for that place's label. Both stay
      * in place when the faces swap. [inverted] stats show happy on the left and score sad highest
-     * (see [score]).
+     * (see [score]). [medicine] stats leave their leftmost face blank on the daily graph, so the days
+     * it was taken stand out.
      */
     data class Stat(
         val id: String,
@@ -60,6 +61,7 @@ class MoodStore(context: Context) {
         val labels: List<String> = emptyList(),
         val inverted: Boolean = false,
         val phrases: List<String> = emptyList(),
+        val medicine: Boolean = false,
     )
 
     class Data(
@@ -189,11 +191,11 @@ class MoodStore(context: Context) {
 
     fun addStat(
         name: String, color: Int, daily: Boolean, scale: Int, question: String, labels: List<String>, inverted: Boolean,
-        phrases: List<String>,
+        phrases: List<String>, medicine: Boolean,
     ): Stat {
         val stat = Stat(
             "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale,
-            sanitizeQuestion(question), sanitizeLabels(labels, scale), inverted, sanitizePhrases(phrases, scale),
+            sanitizeQuestion(question), sanitizeLabels(labels, scale), inverted, sanitizePhrases(phrases, scale), medicine,
         )
         update { it.stats.add(stat) }
         return stat
@@ -202,7 +204,7 @@ class MoodStore(context: Context) {
     /** The scale stays as it was. Changing [inverted] flips the stat's history (see [flipHistory]). */
     fun editStat(
         id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>, inverted: Boolean,
-        phrases: List<String>,
+        phrases: List<String>, medicine: Boolean,
     ) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
         if (index >= 0) data.stats[index] = data.stats[index].let {
@@ -210,6 +212,7 @@ class MoodStore(context: Context) {
             it.copy(
                 name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question),
                 labels = sanitizeLabels(labels, it.scale), inverted = inverted, phrases = sanitizePhrases(phrases, it.scale),
+                medicine = medicine,
             )
         }
     }
@@ -403,6 +406,7 @@ class MoodStore(context: Context) {
                     if (stat.labels.isNotEmpty()) put("labels", JSONArray(stat.labels))
                     put("inverted", stat.inverted)
                     if (stat.phrases.isNotEmpty()) put("phrases", JSONArray(stat.phrases))
+                    put("medicine", stat.medicine)
                 })
             }
         })
@@ -451,7 +455,7 @@ class MoodStore(context: Context) {
                     Stat(
                         id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale,
                         question, sanitizeLabels(labels, scale), stat.optBoolean("inverted"),
-                        sanitizePhrases(strings("phrases"), scale),
+                        sanitizePhrases(strings("phrases"), scale), stat.optBoolean("medicine"),
                     )
                 )
             }

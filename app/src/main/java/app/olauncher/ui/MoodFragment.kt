@@ -581,7 +581,9 @@ class MoodFragment : Fragment() {
                 // Coloured by the day's face, whichever way round the stat scores
                 binding.statHeatmap.setData(
                     visible.map { stat ->
-                        StatHeatmapView.Row(stat.name, stat.color, values[stat.id].orEmpty().mapValues { (_, score) -> MoodStore.faceForScore(score.toInt(), stat.inverted) })
+                        val faces = values[stat.id].orEmpty().mapValues { (_, score) -> MoodStore.faceForScore(score.toInt(), stat.inverted) }
+                        // A medicine's leftmost face means it wasn't taken, so those days stay blank
+                        StatHeatmapView.Row(stat.name, stat.color, if (stat.medicine) faces.filterValues { it != stat.faces.first() } else faces)
                     },
                     first!!,
                     maxOf(first, last!!),

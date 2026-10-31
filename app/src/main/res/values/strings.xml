@@ -267,6 +267,8 @@
     <string name="stat_colour">Colour</string>
     <string name="stat_brightness">Brightness</string>
     <string name="stat_daily_check">Add to daily check</string>
+    <string name="stat_medicine">Medicine</string>
+    <string name="stat_medicine_hint">The leftmost face stays blank on the daily graph</string>
     <string name="stat_display_text">Display text</string>
     <string name="stat_phrases">Summary sentences · optional</string>
     <string name="stat_phrases_hint">Used in a day\'s written summary. {} is the face\'s label.</string>

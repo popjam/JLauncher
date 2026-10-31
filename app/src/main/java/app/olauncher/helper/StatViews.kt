@@ -24,6 +24,7 @@ data class StatInfo(
     val labels: List<String> = emptyList(),
     val inverted: Boolean = false,
     val phrases: List<String> = emptyList(),
+    val medicine: Boolean = false,
 ) {
     val isBuiltIn get() = id == MoodStore.MOOD || id == MoodStore.USAGE
 
@@ -39,7 +40,7 @@ fun Context.allStats(data: MoodStore.Data): List<StatInfo> {
     val stats = listOf(
         StatInfo(MoodStore.MOOD, getString(R.string.mood), data.moodColor, 5, data.moodQuestion, inverted = data.moodInverted),
         StatInfo(MoodStore.USAGE, getString(R.string.screen_time), data.usageColor, 5, inverted = data.usageInverted),
-    ) + data.stats.map { StatInfo(it.id, it.name, it.color, it.scale, it.question, it.labels, it.inverted, it.phrases) }
+    ) + data.stats.map { StatInfo(it.id, it.name, it.color, it.scale, it.question, it.labels, it.inverted, it.phrases, it.medicine) }
     return stats.sortedBy { stat -> data.order.indexOf(stat.id).takeIf { it >= 0 } ?: Int.MAX_VALUE }
 }
 
