@@ -741,7 +741,7 @@ class MoodFragment : Fragment() {
 
     companion object {
         private val WEEKS = WeekFields.ISO
-        private const val GRAPH_DAYS = 31
+        private const val GRAPH_DAYS = 18
         private const val TOP_APP_MIN_MS = 30 * 60 * 1000L
     }
 }
