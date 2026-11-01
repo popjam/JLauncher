@@ -35,6 +35,7 @@ import java.time.Month
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 import java.util.Locale
 
@@ -52,10 +53,13 @@ class MoodFragment : Fragment() {
     private var selectedDate: LocalDate = LocalDate.now()
     private var shownMonth: YearMonth = YearMonth.now()
 
-    /** The All graph shows each day of [graphMonth], or weekly totals or monthly averages over [graphYear] */
+    /** The All graph shows each of the [GRAPH_DAYS] days up to [graphEnd], or weekly totals or monthly averages over [graphYear] */
     private var graphMode = GraphMode.WEEKLY
     private var graphYear = LocalDate.now().get(WEEKS.weekBasedYear())
-    private var graphMonth: YearMonth = YearMonth.now()
+
+    /** How many [GRAPH_DAYS] stretches back from today the daily graph is, so at 0 it rolls with the days */
+    private var graphStretchesBack = 0
+    private val graphEnd: LocalDate get() = LocalDate.now().minusDays((GRAPH_DAYS * graphStretchesBack).toLong())
 
     private val dayCells = mutableListOf<DayCell>()
     private val weekRows = mutableListOf<LinearLayout>()
@@ -468,9 +472,9 @@ class MoodFragment : Fragment() {
         weekRows.last().isVisible = dayCells.takeLast(7).any { it.box.isVisible }
     }
 
-    /** Where a date falls on the graph shown (its day, week or month), or null when it's off it. */
+    /** Where a date falls on the graph shown (its epoch day, week or month), or null when it's off it. */
     private fun graphPoint(date: LocalDate): Int? = when (graphMode) {
-        GraphMode.DAILY -> date.dayOfMonth.takeIf { YearMonth.from(date) == graphMonth }
+        GraphMode.DAILY -> date.toEpochDay().toInt().takeIf { ChronoUnit.DAYS.between(date, graphEnd) in 0 until GRAPH_DAYS }
         GraphMode.WEEKLY -> date.get(WEEKS.weekOfWeekBasedYear()).takeIf { date.get(WEEKS.weekBasedYear()) == graphYear }
         GraphMode.MONTHLY -> date.monthValue.takeIf { date.year == graphYear }
     }
@@ -502,10 +506,20 @@ class MoodFragment : Fragment() {
     private val graphSelected: Int?
         get() = if (graphMode == GraphMode.DAILY) binding.statHeatmap.selected else binding.statChart.selected
 
-    /** Steps the month (daily) or year (weekly, monthly) shown. */
+    /** Steps the [GRAPH_DAYS] days (daily) or year (weekly, monthly) shown. */
     private fun moveGraph(by: Int) {
-        if (graphMode == GraphMode.DAILY) graphMonth = graphMonth.plusMonths(by.toLong()) else graphYear += by
+        if (graphMode == GraphMode.DAILY) graphStretchesBack -= by else graphYear += by
         renderGraph(rangeChanged = true)
+    }
+
+    /** The months the daily graph spans, e.g. "October – November 2026", or just the one. */
+    private fun graphMonthsTitle(): String {
+        val end = graphEnd
+        val start = end.minusDays(GRAPH_DAYS - 1L)
+        val monthAndYear = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
+        if (YearMonth.from(start) == YearMonth.from(end)) return end.format(monthAndYear)
+        val from = if (start.year == end.year) DateTimeFormatter.ofPattern("MMMM", Locale.getDefault()) else monthAndYear
+        return getString(R.string.graph_month_range, start.format(from), end.format(monthAndYear))
     }
 
     /** Daily, then weekly, then monthly and round again, keeping to the period that was being looked at. */
@@ -514,18 +528,20 @@ class MoodFragment : Fragment() {
         val today = LocalDate.now()
         graphMode = when (graphMode) {
             GraphMode.DAILY -> {
-                val date = picked?.let { graphMonth.atDay(it) } ?: graphMonth.atDay(minOf(15, graphMonth.lengthOfMonth()))
+                val date = picked?.let { LocalDate.ofEpochDay(it.toLong()) } ?: graphEnd.minusDays(GRAPH_DAYS / 2L)
                 graphYear = date.get(WEEKS.weekBasedYear())
                 GraphMode.WEEKLY
             }
             // Week-based years start within a few days of calendar years
             GraphMode.WEEKLY -> GraphMode.MONTHLY
             GraphMode.MONTHLY -> {
-                graphMonth = when {
+                val month = when {
                     picked != null -> YearMonth.of(graphYear, picked)
                     graphYear == today.year -> YearMonth.from(today)
                     else -> YearMonth.of(graphYear, 12)
                 }
+                // The stretch holding the middle of the month, which may still be to come
+                graphStretchesBack = (ChronoUnit.DAYS.between(month.atDay(15), today) / GRAPH_DAYS).toInt().coerceAtLeast(0)
                 GraphMode.DAILY
             }
         }
@@ -539,16 +555,13 @@ class MoodFragment : Fragment() {
         val canGoBack: Boolean
         val canGoForward: Boolean
         if (graphMode == GraphMode.DAILY) {
-            val thisMonth = YearMonth.from(today)
-            val firstMonth = minOf(YearMonth.from(firstDate), thisMonth)
-            graphMonth = graphMonth.coerceIn(firstMonth, thisMonth)
-            binding.graphTitle.text = getString(
-                R.string.graph_daily_title, graphMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
-            )
-            canGoBack = graphMonth > firstMonth
-            canGoForward = graphMonth < thisMonth
-            binding.prevGraph.contentDescription = getString(R.string.previous_month)
-            binding.nextGraph.contentDescription = getString(R.string.next_month)
+            val furthestBack = (ChronoUnit.DAYS.between(firstDate, today) / GRAPH_DAYS).toInt().coerceAtLeast(0)
+            graphStretchesBack = graphStretchesBack.coerceIn(0, furthestBack)
+            binding.graphTitle.text = getString(R.string.graph_daily_title, graphMonthsTitle())
+            canGoBack = graphStretchesBack < furthestBack
+            canGoForward = graphStretchesBack > 0
+            binding.prevGraph.contentDescription = getString(R.string.previous_days, GRAPH_DAYS)
+            binding.nextGraph.contentDescription = getString(R.string.next_days, GRAPH_DAYS)
         } else {
             val weekly = graphMode == GraphMode.WEEKLY
             val thisYear = if (weekly) today.get(WEEKS.weekBasedYear()) else today.year
@@ -566,12 +579,14 @@ class MoodFragment : Fragment() {
         }
 
         val values = graphValues()
-        // From the first point with anything in it to today, or to the last point with data in the past
-        val pointsWithData = values.values.flatMap { it.keys }
-        val first = pointsWithData.minOrNull()
-        val last = graphPoint(today) ?: pointsWithData.maxOrNull()
-        val hasData = first != null && last != null
+        // The daily graph's whole stretch, otherwise from the first point with anything in it to today,
+        // or to the last point with data in the past
         val daily = graphMode == GraphMode.DAILY
+        val endDay = graphEnd.toEpochDay().toInt()
+        val pointsWithData = values.values.flatMap { it.keys }
+        val first = pointsWithData.minOrNull()?.let { if (daily) endDay - GRAPH_DAYS + 1 else it }
+        val last = if (daily) endDay else graphPoint(today) ?: pointsWithData.maxOrNull()
+        val hasData = first != null && last != null
         binding.statChart.isVisible = hasData && !daily
         binding.statHeatmap.isVisible = hasData && daily
         binding.graphEmpty.isVisible = !hasData
@@ -587,7 +602,7 @@ class MoodFragment : Fragment() {
                     },
                     first!!,
                     maxOf(first, last!!),
-                    label = { day -> day.toString() },
+                    label = { day -> LocalDate.ofEpochDay(day.toLong()).dayOfMonth.toString() },
                     clearSelection = rangeChanged,
                 )
             } else {
@@ -614,14 +629,14 @@ class MoodFragment : Fragment() {
         if (point == null) return
         val values = graphValues()
         val title = when (graphMode) {
-            GraphMode.DAILY -> graphMonth.atDay(point).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+            GraphMode.DAILY -> LocalDate.ofEpochDay(point.toLong()).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
             GraphMode.WEEKLY -> getString(R.string.week_number, point)
             GraphMode.MONTHLY -> YearMonth.of(graphYear, point).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
         }
         val text = SpannableStringBuilder(title)
         val summary = graphMode == GraphMode.DAILY && data.daySummary
         if (summary) {
-            text.append("\n").append(daySummary(graphMonth.atDay(point), stats.filter { it.id !in data.hiddenInGraph }))
+            text.append("\n").append(daySummary(LocalDate.ofEpochDay(point.toLong()), stats.filter { it.id !in data.hiddenInGraph }))
             binding.pointDetails.text = text
             return
         }
@@ -726,6 +741,7 @@ class MoodFragment : Fragment() {
 
     companion object {
         private val WEEKS = WeekFields.ISO
+        private const val GRAPH_DAYS = 31
         private const val TOP_APP_MIN_MS = 30 * 60 * 1000L
     }
 }

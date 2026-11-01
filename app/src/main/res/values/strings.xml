@@ -310,8 +310,11 @@
     <string name="graph_daily_title">%1$s · daily  ⇄</string>
     <string name="graph_monthly_title">%1$d · monthly  ⇄</string>
     <string name="switch_graph">Switch between daily, weekly and monthly</string>
+    <string name="graph_month_range">%1$s – %2$s</string>
     <string name="previous_year">Previous year</string>
     <string name="next_year">Next year</string>
+    <string name="previous_days">Previous %1$d days</string>
+    <string name="next_days">Next %1$d days</string>
     <string name="week_short">W%1$d</string>
     <string name="week_number">Week %1$d</string>
     <string name="stat_total">%1$s %2$s</string>
