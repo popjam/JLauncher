@@ -9,6 +9,6 @@
 
     <!--Medicine faces, the dark end kept bright enough to see on black-->
     <color name="medicineNone">#FFFFFF</color>
-    <color name="medicineLight">#DCC6FF</color>
-    <color name="medicineDark">#7429CC</color>
+    <color name="medicineLight">#E3D1FF</color>
+    <color name="medicineDark">#9054D6</color>
 </resources>

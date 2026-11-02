@@ -442,7 +442,7 @@ class MoodFragment : Fragment() {
             val value = day?.face(stat.id)
             val isFuture = date > today
 
-            cell.face.isVisible = value != null && !isFuture
+            cell.face.isVisible = value != null && !isFuture && !stat.isBlank(value)
             value?.let {
                 cell.face.mood = it
                 cell.face.color = stat.faceColor(requireContext(), it)
@@ -601,8 +601,7 @@ class MoodFragment : Fragment() {
                 binding.statHeatmap.setData(
                     visible.map { stat ->
                         val faces = values[stat.id].orEmpty().mapValues { (_, score) -> MoodStore.faceForScore(score.toInt(), stat.inverted) }
-                        // A medicine's leftmost face means it wasn't taken, so those days stay blank
-                        val shown = if (stat.medicine) faces.filterValues { it != stat.faces.first() } else faces
+                        val shown = faces.filterValues { !stat.isBlank(it) }
                         StatHeatmapView.Row(stat.name, stat.color, shown.mapValues { (_, face) -> stat.faceColor(requireContext(), face) })
                     },
                     first!!,

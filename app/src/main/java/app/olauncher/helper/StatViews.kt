@@ -33,6 +33,9 @@ data class StatInfo(
     val faces get() = MoodStore.facesFor(scale).let { if (inverted) it.reversed() else it }
 
     fun faceColor(context: Context, face: Int) = PixelFaceView.faceColor(context, face, faces, medicine)
+
+    /** A medicine's leftmost face means it wasn't taken, so the calendar and daily graph leave it blank. */
+    fun isBlank(face: Int) = medicine && face == faces.first()
 }
 
 /**
