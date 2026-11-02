@@ -111,10 +111,11 @@ object StatEditor {
         val labels = mutableMapOf<Int, String>()
         stat?.labels?.forEachIndexed { i, label -> labels[MoodStore.facesFor(stat.scale)[i]] = label }
         fun rowFaces() = MoodStore.facesFor(scale).let { if (binding.statInverted.isChecked) it.reversed() else it }
+        fun faceColor(face: Int) = PixelFaceView.faceColor(context, face, rowFaces(), binding.statMedicine.isChecked)
         fun renderLabels() {
             binding.statFaceLabels.removeAllViews()
             MoodStore.facesFor(scale).zip(rowFaces()).forEachIndexed { i, (place, face) ->
-                binding.statFaceLabels.addView(faceLabelInput(context, face, labels[place].orEmpty()) { labels[place] = it },
+                binding.statFaceLabels.addView(faceLabelInput(context, face, faceColor(face), labels[place].orEmpty()) { labels[place] = it },
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                         if (i > 0) marginStart = 4.dpToPx()
                     })
@@ -131,7 +132,10 @@ object StatEditor {
                 binding.statPhrases.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
+                    addView(PixelFaceView(context).apply {
+                        mood = face
+                        color = faceColor(face)
+                    }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
                     addView(textInput(context, phrases[place].orEmpty(), MoodStore.MAX_PHRASE_LENGTH) { phrases[place] = it }.apply {
                         gravity = Gravity.CENTER_VERTICAL or Gravity.START
                         setPadding(10.dpToPx(), 8.dpToPx(), 10.dpToPx(), 8.dpToPx())
@@ -154,10 +158,12 @@ object StatEditor {
             renderLabels()
         }
 
-        binding.statInverted.setOnCheckedChangeListener { _, _ ->
-            binding.root.findFocus()?.hideKeyboard()
-            renderLabels()
-            renderPhrases()
+        listOf(binding.statInverted, binding.statMedicine).forEach { option ->
+            option.setOnCheckedChangeListener { _, _ ->
+                binding.root.findFocus()?.hideKeyboard()
+                renderLabels()
+                renderPhrases()
+            }
         }
 
         fun renderScales() {
@@ -232,10 +238,13 @@ object StatEditor {
     }
 
     /** A face with a box below for its label. */
-    private fun faceLabelInput(context: Context, face: Int, text: String, onChange: (String) -> Unit) = LinearLayout(context).apply {
+    private fun faceLabelInput(context: Context, face: Int, faceColor: Int, text: String, onChange: (String) -> Unit) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER_HORIZONTAL
-        addView(PixelFaceView(context).apply { mood = face }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
+        addView(PixelFaceView(context).apply {
+            mood = face
+            color = faceColor
+        }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
         addView(textInput(context, text, MoodStore.MAX_LABEL_LENGTH, onChange).apply {
             setPadding(4.dpToPx(), 8.dpToPx(), 4.dpToPx(), 8.dpToPx())
             gravity = Gravity.CENTER

@@ -35,4 +35,9 @@
     <color name="moodMildlySad">#D84315</color>
     <color name="moodSad">#C62828</color>
 
+    <!--Medicine faces. White would vanish on the light theme, so none taken is grey there-->
+    <color name="medicineNone">#9E9E9E</color>
+    <color name="medicineLight">#C4A3F5</color>
+    <color name="medicineDark">#4A148C</color>
+
 </resources>

@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import app.olauncher.R
 import app.olauncher.data.MoodStore
+import app.olauncher.ui.PixelFaceView
 
 /**
  * A stat to show: one of the built-ins or a custom stat, with the name and colour to use. [question] is
@@ -30,6 +31,8 @@ data class StatInfo(
 
     /** The faces left to right: sad to happy, or happy to sad when [inverted]. */
     val faces get() = MoodStore.facesFor(scale).let { if (inverted) it.reversed() else it }
+
+    fun faceColor(context: Context, face: Int) = PixelFaceView.faceColor(context, face, faces, medicine)
 }
 
 /**

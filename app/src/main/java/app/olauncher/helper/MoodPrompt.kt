@@ -77,6 +77,7 @@ object MoodPrompt {
                 faces.forEach { face ->
                     row.addView(PixelFaceView(context).apply {
                         mood = face
+                        color = stat.faceColor(context, face)
                         contentDescription = names[face]
                         setPadding(6.dpToPx())
                         isClickable = true

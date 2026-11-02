@@ -400,13 +400,14 @@ class MoodFragment : Fragment() {
             binding.usageTime.text = usage?.let { requireContext().formattedTimeSpent(it) } ?: getString(R.string.no_data)
         } else {
             val faces = stat.faces
-            if (binding.moodFaces.tag != faces) {
-                binding.moodFaces.tag = faces
+            if (binding.moodFaces.tag != faces to stat.medicine) {
+                binding.moodFaces.tag = faces to stat.medicine
                 binding.moodFaces.removeAllViews()
                 val names = resources.getStringArray(R.array.mood_names)
                 faces.forEach { face ->
                     binding.moodFaces.addView(PixelFaceView(requireContext()).apply {
                         mood = face
+                        color = stat.faceColor(requireContext(), face)
                         contentDescription = names[face]
                         val padding = 6.dpToPx()
                         setPadding(padding, padding, padding, padding)
@@ -442,14 +443,17 @@ class MoodFragment : Fragment() {
             val isFuture = date > today
 
             cell.face.isVisible = value != null && !isFuture
-            value?.let { cell.face.mood = it }
+            value?.let {
+                cell.face.mood = it
+                cell.face.color = stat.faceColor(requireContext(), it)
+            }
             cell.number.isVisible = !cell.face.isVisible
             cell.number.text = date.dayOfMonth.toString()
             cell.number.alpha = if (isFuture) 0.3f else 0.6f
 
             cell.noteDot.isVisible = day?.note != null && !isFuture
             (cell.noteDot.background as GradientDrawable).setColor(
-                if (cell.face.isVisible) PixelFaceView.moodColor(requireContext(), cell.face.mood)
+                if (cell.face.isVisible) cell.face.color
                 else requireContext().getColorFromAttr(R.attr.primaryColor)
             )
 
@@ -598,7 +602,8 @@ class MoodFragment : Fragment() {
                     visible.map { stat ->
                         val faces = values[stat.id].orEmpty().mapValues { (_, score) -> MoodStore.faceForScore(score.toInt(), stat.inverted) }
                         // A medicine's leftmost face means it wasn't taken, so those days stay blank
-                        StatHeatmapView.Row(stat.name, stat.color, if (stat.medicine) faces.filterValues { it != stat.faces.first() } else faces)
+                        val shown = if (stat.medicine) faces.filterValues { it != stat.faces.first() } else faces
+                        StatHeatmapView.Row(stat.name, stat.color, shown.mapValues { (_, face) -> stat.faceColor(requireContext(), face) })
                     },
                     first!!,
                     maxOf(first, last!!),

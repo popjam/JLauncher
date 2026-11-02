@@ -6,4 +6,9 @@
     <color name="moodNeutral">#FDD835</color>
     <color name="moodMildlySad">#FB8C00</color>
     <color name="moodSad">#E53935</color>
+
+    <!--Medicine faces, the dark end kept bright enough to see on black-->
+    <color name="medicineNone">#FFFFFF</color>
+    <color name="medicineLight">#DCC6FF</color>
+    <color name="medicineDark">#7429CC</color>
 </resources>

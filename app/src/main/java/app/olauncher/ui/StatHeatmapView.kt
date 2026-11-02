@@ -17,7 +17,7 @@ import app.olauncher.helper.getColorFromAttr
 
 /**
  * A row per stat and a column per day from [first] to [last], each cell coloured like the face picked
- * that day (happy green to sad red), so good and bad days line up across stats. Tapping picks a day,
+ * that day (usually happy green to sad red), so good and bad days line up across stats. Tapping picks a day,
  * outlined and reported to [onPointSelected].
  */
 class StatHeatmapView @JvmOverloads constructor(
@@ -25,8 +25,8 @@ class StatHeatmapView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    /** [faces] maps days to faces; missing days are left blank. */
-    class Row(val name: String, val color: Int, val faces: Map<Int, Int>)
+    /** [cells] maps days to the colours of their faces; missing days are left blank. */
+    class Row(val name: String, val color: Int, val cells: Map<Int, Int>)
 
     private var rows = emptyList<Row>()
     private var first = 1
@@ -38,7 +38,6 @@ class StatHeatmapView @JvmOverloads constructor(
     var onPointSelected: ((point: Int?) -> Unit)? = null
 
     private val ink = context.getColorFromAttr(R.attr.primaryColor)
-    private val faceColors = IntArray(5) { PixelFaceView.moodColor(context, it) }
     private val emptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ColorUtils.setAlphaComponent(ink, 22) }
     private val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -113,8 +112,8 @@ class StatHeatmapView @JvmOverloads constructor(
             for (point in first..last) {
                 val x = columnLeft(point)
                 rect.set(x + gap / 2, rowTop + gap / 2, x + cellWidth - gap / 2, rowTop + rowHeight - gap / 2)
-                val face = row.faces[point]
-                val paint = if (face == null) emptyPaint else cellPaint.apply { color = faceColors[face.coerceIn(0, 4)] }
+                val cell = row.cells[point]
+                val paint = if (cell == null) emptyPaint else cellPaint.apply { color = cell }
                 canvas.drawRoundRect(rect, corner, corner, paint)
             }
         }

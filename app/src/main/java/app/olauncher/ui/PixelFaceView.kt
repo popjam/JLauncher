@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.dpToPx
@@ -22,6 +23,14 @@ class PixelFaceView @JvmOverloads constructor(
         set(value) {
             field = value.coerceIn(0, 4)
             paint.color = moodColor(context, field)
+            invalidate()
+        }
+
+    /** Starts as [mood]'s; set it after [mood], which resets it, for a stat's own colours. */
+    var color: Int
+        get() = paint.color
+        set(value) {
+            paint.color = value
             invalidate()
         }
 
@@ -90,5 +99,20 @@ class PixelFaceView @JvmOverloads constructor(
         )
 
         fun moodColor(context: Context, mood: Int) = ContextCompat.getColor(context, COLORS[mood.coerceIn(0, 4)])
+
+        /**
+         * The colour of [face] in a stat's row, [faces] being left to right: its mood colour, or for a
+         * [medicine] the leftmost is white (none taken) and the rest go from very light to dark purple.
+         */
+        fun faceColor(context: Context, face: Int, faces: List<Int>, medicine: Boolean): Int {
+            if (!medicine) return moodColor(context, face)
+            val place = faces.indexOf(face)
+            if (place <= 0) return ContextCompat.getColor(context, R.color.medicineNone)
+            // With only one place after the blank one, it gets the full dose's colour
+            val shade = if (faces.size > 2) (place - 1f) / (faces.size - 2) else 1f
+            return ColorUtils.blendARGB(
+                ContextCompat.getColor(context, R.color.medicineLight), ContextCompat.getColor(context, R.color.medicineDark), shade
+            )
+        }
     }
 }

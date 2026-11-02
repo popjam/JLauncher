@@ -48,8 +48,8 @@ class MoodStore(context: Context) {
      * the faces, left to right; empty when there are none. [phrases] are the day summary's sentence
      * for each place in the row, in the same order, with {} standing for that place's label. Both stay
      * in place when the faces swap. [inverted] stats show happy on the left and score sad highest
-     * (see [score]). [medicine] stats leave their leftmost face blank on the daily graph, so the days
-     * it was taken stand out.
+     * (see [score]). [medicine] stats colour their faces white (leftmost, none taken) then light to dark
+     * purple, and leave the leftmost blank on the daily graph, so the days it was taken stand out.
      */
     data class Stat(
         val id: String,
