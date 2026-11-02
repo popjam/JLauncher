@@ -108,8 +108,8 @@ class PixelFaceView @JvmOverloads constructor(
             if (!medicine) return moodColor(context, face)
             val place = faces.indexOf(face)
             if (place <= 0) return ContextCompat.getColor(context, R.color.medicineNone)
-            // With only one place after the blank one, it gets the full dose's colour
-            val shade = if (faces.size > 2) (place - 1f) / (faces.size - 2) else 1f
+            // With only one place after the blank one, the middle purple reads best on the daily graph
+            val shade = if (faces.size > 2) (place - 1f) / (faces.size - 2) else 0.5f
             return ColorUtils.blendARGB(
                 ContextCompat.getColor(context, R.color.medicineLight), ContextCompat.getColor(context, R.color.medicineDark), shade
             )
