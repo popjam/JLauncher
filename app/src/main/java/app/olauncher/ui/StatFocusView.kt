@@ -41,6 +41,9 @@ class StatFocusView @JvmOverloads constructor(
         private set
     var onPointSelected: ((point: Int?) -> Unit)? = null
 
+    /** Whether lifting the finger lets go of the picked point, having touched down on it */
+    private var tapClears = false
+
     private val ink = context.getColorFromAttr(R.attr.primaryColor)
     private val density = resources.displayMetrics.density
     private val gridPaint = Paint().apply { strokeWidth = 1f; color = ColorUtils.setAlphaComponent(ink, 30) }
@@ -98,12 +101,6 @@ class StatFocusView @JvmOverloads constructor(
         this.last = last
         this.label = label
         if (resize) requestLayout()
-        invalidate()
-    }
-
-    /** Picks [point] without reporting it, e.g. when coming from another graph of the same days. */
-    fun select(point: Int?) {
-        selected = point?.takeIf { it in first..last }
         invalidate()
     }
 
@@ -188,15 +185,29 @@ class StatFocusView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
                 val point = (first + ((event.x - left) / columnWidth).toInt()).coerceIn(first, last)
+                // Touching the picked point again lets go of it, unless the finger moves on to another
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) tapClears = point == selected
                 if (point != selected) {
+                    tapClears = false
                     selected = point
                     onPointSelected?.invoke(point)
                     invalidate()
                 }
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
+                if (tapClears) {
+                    tapClears = false
+                    selected = null
+                    onPointSelected?.invoke(null)
+                    invalidate()
+                }
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
+                tapClears = false
                 return true
             }
         }

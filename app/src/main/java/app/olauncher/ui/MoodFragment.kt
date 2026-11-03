@@ -575,7 +575,7 @@ class MoodFragment : Fragment() {
         return getString(R.string.graph_month_range, start.format(from), end.format(monthAndYear))
     }
 
-    /** Switches graph, keeping to the period that was being looked at, and between daily graphs to the picked day. */
+    /** Switches graph, keeping to the period that was being looked at but letting go of the picked point. */
     private fun setGraphMode(mode: GraphMode) {
         if (mode == graphMode) return
         val picked = graphSelected
@@ -584,12 +584,8 @@ class MoodFragment : Fragment() {
         graphMode = mode
         moodStore.update(sync = false) { it.graphMode = mode.name }
         when {
-            from.daily && mode.daily -> {
-                renderGraph()
-                if (mode == GraphMode.FOCUS) binding.statFocus.select(picked) else binding.statHeatmap.select(picked)
-                renderPointDetails(graphSelected)
-                return
-            }
+            // The daily graphs all show the same days
+            from.daily && mode.daily -> Unit
             from.daily -> {
                 val date = picked?.let { LocalDate.ofEpochDay(it.toLong()) } ?: graphEnd.minusDays(GRAPH_DAYS / 2L)
                 graphYear = if (mode == GraphMode.WEEKLY) date.get(WEEKS.weekBasedYear()) else date.year
