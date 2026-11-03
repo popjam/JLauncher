@@ -81,9 +81,13 @@ class MoodStore(context: Context) {
         val order: MutableList<String> = mutableListOf(),
         /** Stat ids whose lines are switched off in the All graph */
         val hiddenInGraph: MutableSet<String> = mutableSetOf(),
+        /** Stat ids drawn in colour on the weekly and monthly graphs; the rest are greyed behind them */
+        val comparedInGraph: MutableSet<String> = mutableSetOf(MOOD),
+        /** The stat the daily focus graph shows */
+        var focusStat: String = MOOD,
         /** Whether the All graph's day details are a written summary rather than each stat's value */
         var daySummary: Boolean = false,
-        /** The All graph last shown: daily, weekly or monthly */
+        /** The All graph last shown: daily (grid, bars or focus), weekly or monthly */
         var graphMode: String = "",
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
@@ -255,6 +259,7 @@ class MoodStore(context: Context) {
     fun deleteStat(id: String) = update { data ->
         data.stats.removeAll { it.id == id }
         data.hiddenInGraph.remove(id)
+        data.comparedInGraph.remove(id)
         data.order.remove(id)
         data.days.keys.toList().forEach { key -> data.editDay(key) { it.copy(values = it.values - id) } }
     }
@@ -264,6 +269,13 @@ class MoodStore(context: Context) {
     private fun Data.setHidden(ids: Set<String>) {
         hiddenInGraph.clear()
         hiddenInGraph.addAll(ids)
+    }
+
+    fun setComparedInGraph(ids: Set<String>) = update { it.setCompared(ids) }
+
+    private fun Data.setCompared(ids: Set<String>) {
+        comparedInGraph.clear()
+        comparedInGraph.addAll(ids)
     }
 
     // --- Daily prompt ---
@@ -369,6 +381,8 @@ class MoodStore(context: Context) {
             if (json.has("hiddenInGraph")) data.setHidden(backup.hiddenInGraph)
             if (json.has("daySummary")) data.daySummary = backup.daySummary
             if (json.has("graphMode")) data.graphMode = backup.graphMode
+            if (json.has("comparedInGraph")) data.setCompared(backup.comparedInGraph)
+            if (json.has("focusStat")) data.focusStat = backup.focusStat
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
             if (json.has("catchUpEnabled")) data.catchUpEnabled = backup.catchUpEnabled
@@ -393,6 +407,8 @@ class MoodStore(context: Context) {
         put("hiddenInGraph", JSONArray(data.hiddenInGraph.toList()))
         put("daySummary", data.daySummary)
         put("graphMode", data.graphMode)
+        put("comparedInGraph", JSONArray(data.comparedInGraph.toList()))
+        put("focusStat", data.focusStat)
         put("order", JSONArray(data.order))
         put("stats", JSONArray().apply {
             data.stats.forEach { stat ->
@@ -440,6 +456,7 @@ class MoodStore(context: Context) {
             backupFolder = json.optString("backupFolder", ""),
             daySummary = json.optBoolean("daySummary"),
             graphMode = json.optString("graphMode"),
+            focusStat = json.optString("focusStat").ifEmpty { MOOD },
         )
         json.optJSONArray("stats")?.let { stats ->
             for (i in 0 until stats.length()) {
@@ -467,6 +484,10 @@ class MoodStore(context: Context) {
         }
         json.optJSONArray("hiddenInGraph")?.let { hidden ->
             for (i in 0 until hidden.length()) hidden.optString(i).takeIf { it.isNotEmpty() }?.let { data.hiddenInGraph.add(it) }
+        }
+        json.optJSONArray("comparedInGraph")?.let { compared ->
+            data.comparedInGraph.clear()
+            for (i in 0 until compared.length()) compared.optString(i).takeIf { it.isNotEmpty() }?.let { data.comparedInGraph.add(it) }
         }
         val days = json.optJSONObject("days") ?: return data
         days.keys().forEach { key ->

@@ -16,21 +16,23 @@ import kotlin.math.roundToInt
 
 /**
  * One line per stat over points [first] to [last] (weeks or months), stretched to fill the width, with
- * values from 0 to [max]. Tapping picks a point, marked with a line, and reports it to [onPointSelected].
+ * values from [min] to [max]. Highlighted lines are drawn in their colour over the rest, which are grey.
+ * Tapping picks a point, marked with a line, and reports it to [onPointSelected].
  */
 class StatChartView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    /** Points missing from [values] count as 0. */
-    class Series(val color: Int, val values: Map<Int, Float>)
+    /** Points missing from [values] are gaps in the line. */
+    class Series(val color: Int, val values: Map<Int, Float>, val highlighted: Boolean)
 
     private var series = emptyList<Series>()
     private var first = 1
     private var last = 1
-    private var max = 35
-    private var gridStep = 7
+    private var min = 1
+    private var max = 5
+    private var partial: Int? = null
     private var label: (Int) -> String = { it.toString() }
 
     var selected: Int? = null
@@ -38,37 +40,41 @@ class StatChartView @JvmOverloads constructor(
     var onPointSelected: ((point: Int?) -> Unit)? = null
 
     private val ink = context.getColorFromAttr(R.attr.primaryColor)
+    private val grey = ColorUtils.setAlphaComponent(ink, 60)
     private val gridPaint = Paint().apply { strokeWidth = 1f; color = ColorUtils.setAlphaComponent(ink, 30) }
-    private val axisPaint = Paint().apply { strokeWidth = 1f; color = ColorUtils.setAlphaComponent(ink, 90) }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ColorUtils.setAlphaComponent(ink, 140)
         textSize = 10f * resources.displayMetrics.scaledDensity
     }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * resources.displayMetrics.density
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
     }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * resources.displayMetrics.density
+    }
     private val selectPaint = Paint().apply { strokeWidth = 1f * resources.displayMetrics.density; color = ColorUtils.setAlphaComponent(ink, 160) }
     private val path = Path()
 
     private val left get() = 26.dpToPx().toFloat()
-    private val right get() = width - 10.dpToPx().toFloat()
+    private val right get() = width - 12.dpToPx().toFloat()
     private val top get() = 8.dpToPx().toFloat()
     private val bottom get() = height - 20.dpToPx().toFloat()
 
     /**
-     * Grid lines every [gridStep], [label] names points along the bottom. The picked point is kept
-     * unless [clearSelection] or the range changed.
+     * Grid lines at each whole value, [label] names points along the bottom. [partial] is a point still
+     * in progress, drawn hollow. The picked point is kept unless [clearSelection] or the range changed.
      */
     fun setData(
         series: List<Series>,
         first: Int,
         last: Int,
+        min: Int,
         max: Int,
-        gridStep: Int,
+        partial: Int?,
         label: (Int) -> String,
         clearSelection: Boolean = false,
     ) {
@@ -76,8 +82,9 @@ class StatChartView @JvmOverloads constructor(
         this.series = series
         this.first = first
         this.last = last
+        this.min = min
         this.max = max
-        this.gridStep = gridStep
+        this.partial = partial
         this.label = label
         invalidate()
     }
@@ -93,14 +100,14 @@ class StatChartView @JvmOverloads constructor(
         if (last == first) (left + right) / 2
         else left + (point - first) * (right - left) / (last - first)
 
-    private fun y(value: Float): Float = top + (1 - value / max) * (bottom - top)
+    private fun y(value: Float): Float = top + (1 - (value - min) / (max - min)) * (bottom - top)
 
     override fun onDraw(canvas: Canvas) {
         textPaint.textAlign = Paint.Align.RIGHT
-        for (value in 0..max step gridStep) {
+        for (value in min..max) {
             val y = y(value.toFloat())
-            canvas.drawLine(left, y, right, y, if (value == 0) axisPaint else gridPaint)
-            canvas.drawText(value.toString(), left - 5.dpToPx(), y + textPaint.textSize / 3, textPaint)
+            canvas.drawLine(left, y, right, y, gridPaint)
+            canvas.drawText(value.toString(), left - 8.dpToPx(), y + textPaint.textSize / 3, textPaint)
         }
 
         // Up to about five labels, always including the first and last
@@ -124,18 +131,41 @@ class StatChartView @JvmOverloads constructor(
 
         selected?.let { canvas.drawLine(x(it), top, x(it), bottom, selectPaint) }
 
-        val dotRadius = 3.dpToPx().toFloat()
-        series.forEach { s ->
-            linePaint.color = s.color
-            dotPaint.color = s.color
-            path.reset()
-            for (point in first..last) {
-                val value = s.values[point] ?: 0f
-                if (point == first) path.moveTo(x(point), y(value)) else path.lineTo(x(point), y(value))
+        // Grey lines first, so the highlighted ones sit on top
+        series.filter { !it.highlighted }.forEach { drawSeries(canvas, it, grey, 1.2f) }
+        series.filter { it.highlighted }.forEach { drawSeries(canvas, it, it.color, 2.5f) }
+    }
+
+    private fun drawSeries(canvas: Canvas, s: Series, color: Int, widthDp: Float) {
+        val density = resources.displayMetrics.density
+        linePaint.color = color
+        linePaint.strokeWidth = widthDp * density
+        dotPaint.color = color
+        path.reset()
+        var drawing = false
+        for (point in first..last) {
+            val value = s.values[point]
+            if (value == null) {
+                drawing = false
+                continue
             }
-            if (span == 0) canvas.drawCircle(x(first), y(s.values[first] ?: 0f), dotRadius, dotPaint)
-            else canvas.drawPath(path, linePaint)
-            selected?.let { canvas.drawCircle(x(it), y(s.values[it] ?: 0f), dotRadius, dotPaint) }
+            if (drawing) path.lineTo(x(point), y(value)) else path.moveTo(x(point), y(value))
+            drawing = true
+        }
+        canvas.drawPath(path, linePaint)
+
+        val radius = (if (s.highlighted) 3.5f else 2f) * density
+        // Every point while there are few enough to tell apart, otherwise the lone ones a line can't show
+        val allDots = s.highlighted && last - first <= 12
+        for (point in first..last) {
+            val value = s.values[point] ?: continue
+            val lone = s.values[point - 1] == null && s.values[point + 1] == null
+            val isPartial = point == partial && s.highlighted
+            if (!allDots && !lone && !isPartial && point != selected) continue
+            if (point == selected && !s.highlighted) continue
+            // A ring while it's still in progress
+            if (isPartial) canvas.drawCircle(x(point), y(value), radius + 1f * density, ringPaint.apply { this.color = color })
+            else canvas.drawCircle(x(point), y(value), radius, dotPaint)
         }
     }
 
