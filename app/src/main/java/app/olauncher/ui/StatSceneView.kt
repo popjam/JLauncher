@@ -3,14 +3,18 @@ package app.olauncher.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.RectF
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.core.graphics.ColorUtils
 import app.olauncher.R
 import app.olauncher.helper.getColorFromAttr
 import kotlin.math.hypot
@@ -94,6 +98,27 @@ class StatSceneView @JvmOverloads constructor(
                 paint.strokeCap = Paint.Cap.ROUND
                 paint.color = color
                 canvas.drawPath(path, paint)
+            }
+        }
+
+        /** The area between [points] and [baseline], [color] at the top fading to nearly clear at the bottom. */
+        fun area(points: List<PointF>, baseline: Float, color: Int) {
+            if (points.isEmpty()) return
+            val path = Path().apply {
+                moveTo(points.first().x, baseline)
+                points.forEach { lineTo(it.x, it.y) }
+                lineTo(points.last().x, baseline)
+                close()
+            }
+            val top = points.minOf { it.y }
+            val shader = LinearGradient(
+                0f, top, 0f, baseline, color, ColorUtils.setAlphaComponent(color, Color.alpha(color) / 12), Shader.TileMode.CLAMP
+            )
+            shapes.add { canvas, paint ->
+                paint.style = Paint.Style.FILL
+                paint.shader = shader
+                canvas.drawPath(path, paint)
+                paint.shader = null
             }
         }
 

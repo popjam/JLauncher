@@ -336,6 +336,11 @@
     <string name="stat_how_often">How often</string>
     <string name="stat_by_weekday">By weekday</string>
     <string name="stat_dose">Dose</string>
+    <string name="stat_level">Estimated level</string>
+    <string name="half_life">half-life %1$d h</string>
+    <string name="in_your_system">in your system</string>
+    <string name="holiday">holiday</string>
+    <string name="about_amount">about %1$s</string>
     <string name="stat_top_app">Top app</string>
     <string name="stat_taken_vs_not">On days taken vs not</string>
     <string name="last_days">last %1$d days</string>

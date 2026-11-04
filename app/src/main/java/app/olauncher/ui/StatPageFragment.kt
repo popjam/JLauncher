@@ -131,6 +131,7 @@ class StatPageFragment : Fragment() {
         binding.cards.removeAllViews()
         if (stat.medicine) {
             takenCard()
+            if (stat.name.contains(SERTRALINE, ignoreCase = true)) levelCard(SERTRALINE_HALF_LIFE_HOURS)
             trendCard()
             overTimeCard()
             doseCard()
@@ -535,6 +536,104 @@ class StatPageFragment : Fragment() {
             }
         }
         draw()
+    }
+
+    /**
+     * A rough estimate of how much of a medicine is in the body over the last [LEVEL_DAYS] days: each
+     * day's dose added to what's left of the day before's, which halves every [halfLifeHours]. Doses
+     * are read from the face labels ("50 mg"); without numbers in them, each place in the row counts
+     * as one more dose. Stretches of [HOLIDAY_DAYS] or more days not taken are shaded.
+     */
+    private fun levelCard(halfLifeHours: Float) {
+        val first = firstDate ?: return
+        val card = Card(getString(R.string.stat_level))
+        card.subtitle(getString(R.string.half_life, halfLifeHours.toInt()))
+
+        val amounts = stat.faces.mapIndexed { place, _ ->
+            stat.labels.getOrNull(place)?.let { NUMBER.find(it)?.value?.replace(',', '.')?.toFloatOrNull() }
+        }
+        val fromLabels = amounts.drop(1).all { it != null }
+        val unit = if (fromLabels) stat.labels.drop(1).firstNotNullOfOrNull { label ->
+            NUMBER.find(label)?.let { label.substring(it.range.last + 1).trim() }?.takeIf { it.isNotEmpty() }
+        }.orEmpty() else ""
+        fun amount(face: Int): Float {
+            val place = stat.faces.indexOf(face)
+            return if (place <= 0) 0f else if (fromLabels) amounts[place] ?: 0f else place.toFloat()
+        }
+
+        val today = LocalDate.now()
+        val start = maxOf(first, today.minusDays(LEVEL_DAYS - 1L))
+        val remaining = Math.pow(0.5, 24.0 / halfLifeHours).toFloat()
+        // From the first dose, so what's carried into the shown days is right
+        var level = 0f
+        val levels = mutableListOf<Float>()
+        var date = first
+        while (date <= today) {
+            level = level * remaining + (dayOf(date)?.face(stat.id)?.let(::amount) ?: 0f)
+            if (date >= start) levels.add(level)
+            date = date.plusDays(1)
+        }
+        val days = levels.indices.map { start.plusDays(it.toLong()) }
+
+        // Runs of days not taken, as first and last index
+        val holidays = mutableListOf<IntRange>()
+        var runStart = -1
+        days.forEachIndexed { i, day ->
+            val off = dayOf(day)?.face(stat.id)?.let { stat.isBlank(it) } == true
+            if (off && runStart < 0) runStart = i
+            if ((!off || i == days.lastIndex) && runStart >= 0) {
+                val end = if (off) i else i - 1
+                if (end - runStart + 1 >= HOLIDAY_DAYS) holidays.add(runStart..end)
+                runStart = -1
+            }
+        }
+
+        val holidayColor = ContextCompat.getColor(requireContext(), R.color.holiday)
+        card.keyItem(ContextCompat.getColor(requireContext(), R.color.medicineLight), getString(R.string.in_your_system))
+        if (holidays.isNotEmpty()) card.keyItem(ColorUtils.setAlphaComponent(holidayColor, 110), getString(R.string.holiday))
+        fun amountText(value: Float) = listOf(String.format(Locale.getDefault(), "%.0f", value), unit).filter { it.isNotEmpty() }.joinToString(" ")
+        card.describe = { key ->
+            val i = key as Int
+            listOf(dateText(days[i]), getString(R.string.about_amount, amountText(levels[i]))).joinToString(" · ")
+        }
+
+        val highest = levels.maxOrNull() ?: 0f
+        // A round top: to the next 50 for doses in mg, otherwise the next whole dose
+        val step = if (fromLabels && highest > 10) 50f else 1f
+        val top = maxOf(step, ceil(highest / step) * step)
+        card.draw { s ->
+            val labelSize = s.sp(11f)
+            val ticks = listOf(0f, top / 2, top)
+            val left = ticks.maxOf { s.textWidth(amountText(it), labelSize) } + s.dp(8f)
+            val right = s.width - s.dp(8f)
+            val chartTop = s.dp(10f)
+            val bottom = chartTop + s.dp(130f)
+            val count = levels.size
+            fun x(i: Int) = if (count == 1) (left + right) / 2 else left + i * (right - left) / (count - 1)
+            fun y(value: Float) = bottom - value / top * (bottom - chartTop)
+            val half = if (count == 1) s.dp(4f) else (right - left) / (count - 1) / 2
+            holidays.forEach { run ->
+                s.rect(x(run.first) - half, chartTop, x(run.last) + half, bottom, ColorUtils.setAlphaComponent(holidayColor, 36))
+            }
+            ticks.forEach { tick ->
+                s.line(left, y(tick), right, y(tick), faint(30), s.dp(1f))
+                s.text(amountText(tick), left - s.dp(8f), y(tick) + labelSize * 0.35f, faint(140), labelSize, Paint.Align.RIGHT)
+            }
+            val points = levels.mapIndexed { i, value -> PointF(x(i), y(value)) }
+            val light = ContextCompat.getColor(requireContext(), R.color.medicineLight)
+            s.area(points, bottom, ColorUtils.setAlphaComponent(ContextCompat.getColor(requireContext(), R.color.medicineDark), 200))
+            s.polyline(points, light, s.dp(2.5f))
+            points.lastOrNull()?.let { s.ring(it.x, it.y, s.dp(6f), light, s.dp(2.5f)) }
+            // Each month's name at its first day
+            days.forEachIndexed { i, day ->
+                if (day.dayOfMonth == 1 && x(i) > left + s.dp(10f) && x(i) < right - s.dp(14f))
+                    s.text(day.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), x(i), bottom + s.dp(18f), faint(140), s.sp(12f))
+            }
+            s.height = bottom + s.dp(24f)
+            days.indices.forEach { i ->
+                s.target(i, RectF(x(i) - half, 0f, x(i) + half, s.height), RectF(x(i) - s.dp(7f), chartTop - s.dp(4f), x(i) + s.dp(7f), bottom + s.dp(4f)), s.dp(7f))
+            }
+        }
     }
 
     /**
@@ -968,6 +1067,13 @@ class StatPageFragment : Fragment() {
         private const val MIN_TAKEN_DAYS = 3
         private const val MIN_WEEKDAY_DAYS = 14
         private const val HOUR_MS = 3_600_000f
+
+        /** Only Sertraline gets the level card for now, with its usual half-life */
+        private const val SERTRALINE = "sertraline"
+        private const val SERTRALINE_HALF_LIFE_HOURS = 26f
+        private const val LEVEL_DAYS = 90
+        private const val HOLIDAY_DAYS = 2
+        private val NUMBER = Regex("\\d+(?:[.,]\\d+)?")
 
         /** The Trend and Over time cards' choices, kept while the app runs */
         private var trendPeriod = 0

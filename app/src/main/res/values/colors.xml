@@ -39,5 +39,7 @@
     <color name="medicineNone">#9E9E9E</color>
     <color name="medicineLight">#C4A3F5</color>
     <color name="medicineDark">#4A148C</color>
+    <!-- Stretches of a medicine not taken, on its level card -->
+    <color name="holiday">#FB8C00</color>
 
 </resources>
