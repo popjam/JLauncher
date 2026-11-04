@@ -311,6 +311,26 @@ class StatPageFragment : Fragment() {
             headerEnd.addView(textView(13f, 150).apply { this.text = text })
         }
 
+        /** A big figure with a line under it, between the title and the drawing */
+        fun headline(figure: String, caption: String) {
+            root.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                addView(TextView(context, null, 0, R.style.TextLarge).apply {
+                    text = figure
+                    textSize = 40f
+                    setTextColor(ink)
+                    includeFontPadding = false
+                })
+                addView(textView(13f, 150).apply {
+                    text = caption
+                    updatePadding(top = 4.dpToPx())
+                })
+            }, root.indexOfChild(scene), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = 16.dpToPx()
+            })
+        }
+
         /** Options on the right, the [selected] one bold. */
         fun segment(options: List<Int>, selected: Int, onSelect: (Int) -> Unit) {
             headerEnd.removeAllViews()
@@ -566,9 +586,11 @@ class StatPageFragment : Fragment() {
         val remaining = Math.pow(0.5, 24.0 / halfLifeHours).toFloat()
         // From the first dose, so what's carried into the shown days is right
         var level = 0f
+        var beforeToday = 0f
         val levels = mutableListOf<Float>()
         var date = first
         while (date <= today) {
+            if (date == today) beforeToday = level
             level = level * remaining + (dayOf(date)?.face(stat.id)?.let(::amount) ?: 0f)
             if (date >= start) levels.add(level)
             date = date.plusDays(1)
@@ -592,6 +614,13 @@ class StatPageFragment : Fragment() {
         card.keyItem(ContextCompat.getColor(requireContext(), R.color.medicineLight), getString(R.string.in_your_system))
         if (holidays.isNotEmpty()) card.keyItem(ColorUtils.setAlphaComponent(holidayColor, 110), getString(R.string.holiday))
         fun amountText(value: Float) = listOf(String.format(Locale.getDefault(), "%.0f", value), unit).filter { it.isNotEmpty() }.joinToString(" ")
+
+        // Right now: with today's dose in, as drawn; otherwise what was left by midnight, still wearing off
+        val now = if (dayOf(today)?.face(stat.id) != null) level else {
+            val hours = java.time.Duration.between(today.atStartOfDay(), java.time.LocalDateTime.now()).toMinutes() / 60.0
+            beforeToday * Math.pow(0.5, hours / halfLifeHours).toFloat()
+        }
+        card.headline(getString(R.string.about_amount, amountText(now)), getString(R.string.in_your_system_now))
         card.describe = { key ->
             val i = key as Int
             listOf(dateText(days[i]), getString(R.string.about_amount, amountText(levels[i]))).joinToString(" · ")
