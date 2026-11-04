@@ -60,7 +60,7 @@
             app:popExitAnim="@anim/fade_exit" />
     </fragment>
 
-    <!-- One stat up close, opened by holding it under the All graph -->
+    <!-- The stat pages, opened by holding a stat under the All graph or tapping the open tab -->
     <fragment
         android:id="@+id/statFragment"
         android:name="app.olauncher.ui.StatFragment"

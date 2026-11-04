@@ -271,8 +271,8 @@ class MoodFragment : Fragment() {
     }
 
     /**
-     * "All", then a tab per stat with a dot in its colour. Tapping the open stat's tab edits it; holding
-     * a stat's tab picks it up to drag somewhere else.
+     * "All", then a tab per stat with a dot in its colour. Tapping the open stat's tab opens its page
+     * (where it can be edited); holding a stat's tab picks it up to drag somewhere else.
      */
     private fun buildTabs() {
         if (tabsKey == stats) return
@@ -290,10 +290,7 @@ class MoodFragment : Fragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 setStatDot(stat?.color)
                 setOnClickListener {
-                    if (stat != null && id == selectedStat) {
-                        leaveNote()
-                        editStat(id)
-                    } else selectStat(id)
+                    if (stat != null && id == selectedStat) openStatPage(id) else selectStat(id)
                 }
                 if (stat != null) setOnLongClickListener { startTabDrag(it) }
             })

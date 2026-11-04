@@ -359,6 +359,14 @@
     <string name="hours_short">%1$dh</string>
     <string name="needs_more_days">Needs a few more days</string>
     <string name="needs_taken_and_not">Shows once there are 3 days taken and 3 not</string>
+    <string name="filter_days">%1$s on %2$d of %3$d days</string>
+    <string-array name="usage_faces">
+        <item>Under 30m</item>
+        <item>30m–1h</item>
+        <item>1–2h</item>
+        <item>2–4h</item>
+        <item>4h+</item>
+    </string-array>
     <string name="taken_of_days">taken %1$d of %2$d days</string>
     <string name="a_day">%1$s a day</string>
     <string name="taken_vs_not_detail">%1$s: %2$s on %3$d days taken, %4$s on %5$d not</string>
