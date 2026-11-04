@@ -50,7 +50,7 @@ class MoodFragment : Fragment() {
     private var data = MoodStore.Data()
     private var stats = emptyList<StatInfo>()
 
-    /** [MoodStore.ALL] for the graph, otherwise the stat whose days are shown */
+    /** [StatsHome.TAB] for Home, [MoodStore.ALL] for the graph, otherwise the stat whose days are shown */
     private var selectedStat = MoodStore.MOOD
     private var selectedDate: LocalDate = LocalDate.now()
     private var shownMonth: YearMonth = YearMonth.now()
@@ -62,6 +62,9 @@ class MoodFragment : Fragment() {
     /** How many [GRAPH_DAYS] stretches back from today the daily graph is, so at 0 it rolls with the days */
     private var graphStretchesBack = 0
     private val graphEnd: LocalDate get() = LocalDate.now().minusDays((GRAPH_DAYS * graphStretchesBack).toLong())
+
+    /** The Home tab's cards, built when it's first shown */
+    private var home: StatsHome? = null
 
     private val dayCells = mutableListOf<DayCell>()
     private val weekRows = mutableListOf<LinearLayout>()
@@ -147,7 +150,7 @@ class MoodFragment : Fragment() {
     private fun reload() {
         data = moodStore.load()
         stats = requireContext().allStats(data)
-        if (selectedStat != MoodStore.ALL && stats.none { it.id == selectedStat }) selectedStat = MoodStore.MOOD
+        if (selectedStat != MoodStore.ALL && selectedStat != StatsHome.TAB && stats.none { it.id == selectedStat }) selectedStat = MoodStore.MOOD
     }
 
     private val selected: StatInfo? get() = stats.firstOrNull { it.id == selectedStat }
@@ -271,7 +274,7 @@ class MoodFragment : Fragment() {
     }
 
     /**
-     * "All", then a tab per stat with a dot in its colour. Tapping the open stat's tab opens its page
+     * "Home", "All", then a tab per stat with a dot in its colour. Tapping the open stat's tab opens its page
      * (where it can be edited); holding a stat's tab picks it up to drag somewhere else.
      */
     private fun buildTabs() {
@@ -279,6 +282,13 @@ class MoodFragment : Fragment() {
         tabsKey = stats
         val context = requireContext()
         binding.tabRow.removeAllViews()
+        binding.tabRow.addView(TextView(context, null, 0, R.style.TextSmall).apply {
+            tag = StatsHome.TAB
+            text = getString(R.string.home_tab)
+            setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+            setPadding(12.dpToPx(), 8.dpToPx(), 12.dpToPx(), 8.dpToPx())
+            setOnClickListener { selectStat(StatsHome.TAB) }
+        })
         val tabs = listOf<StatInfo?>(null) + stats
         tabs.forEach { stat ->
             val id = stat?.id ?: MoodStore.ALL
@@ -346,8 +356,8 @@ class MoodFragment : Fragment() {
     private fun moveDraggedTab(tab: View) {
         val row = binding.tabRow
         val x = dragX + binding.tabScroll.scrollX
-        var target = 1 // After All
-        for (i in 1 until row.childCount) {
+        var target = FIRST_STAT_TAB // After Home and All
+        for (i in FIRST_STAT_TAB until row.childCount) {
             val other = row.getChildAt(i)
             if (other != tab && (other.left + other.right) / 2 < x) target++
         }
@@ -363,7 +373,7 @@ class MoodFragment : Fragment() {
         draggedTab = null
         tabScrollSpeed = 0
         if (_binding == null) return
-        val ids = (1 until binding.tabRow.childCount).map { binding.tabRow.getChildAt(it).tag as String }
+        val ids = (FIRST_STAT_TAB until binding.tabRow.childCount).map { binding.tabRow.getChildAt(it).tag as String }
         if (ids != stats.map { it.id }) {
             moodStore.setOrder(ids)
             reload()
@@ -395,11 +405,16 @@ class MoodFragment : Fragment() {
     private fun render() {
         renderTabs()
         val all = selectedStat == MoodStore.ALL
-        binding.dayCard.isVisible = !all
-        binding.calendarCard.isVisible = !all
+        val isHome = selectedStat == StatsHome.TAB
+        binding.dayCard.isVisible = !all && !isHome
+        binding.calendarCard.isVisible = !all && !isHome
         binding.graphCard.isVisible = all
         binding.graphToggles.isVisible = all
-        if (all) {
+        binding.homeCards.isVisible = isHome
+        if (isHome) {
+            val home = home ?: StatsHome(binding.homeCards) { openStatPage(it) }.also { home = it }
+            home.show(data, stats)
+        } else if (all) {
             renderGraph()
         } else {
             renderSelectedDay()
@@ -814,6 +829,7 @@ class MoodFragment : Fragment() {
         dayCells.clear()
         weekRows.clear()
         tabsKey = null
+        home = null
         draggedTab = null
         tabScrollSpeed = 0
         _binding = null
@@ -822,6 +838,9 @@ class MoodFragment : Fragment() {
     companion object {
         private val WEEKS = WeekFields.ISO
         private const val GRAPH_DAYS = 18
+
+        /** Where the stat tabs start, after Home and All */
+        private const val FIRST_STAT_TAB = 2
         private const val TOP_APP_MIN_MS = 30 * 60 * 1000L
     }
 }

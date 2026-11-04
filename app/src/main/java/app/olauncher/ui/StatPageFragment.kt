@@ -408,7 +408,7 @@ class StatPageFragment : Fragment() {
             note.isVisible = false
             scene.isVisible = true
             details.isVisible = false
-            scene.setScene(build)
+            scene.setScene(build = build)
         }
 
         /** Instead of a drawing, when there's too little to draw */

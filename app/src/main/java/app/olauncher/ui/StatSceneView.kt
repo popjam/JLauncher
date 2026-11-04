@@ -101,6 +101,31 @@ class StatSceneView @JvmOverloads constructor(
             }
         }
 
+        /** A stroke along a circle's edge from [startDegrees] (0 is 3 o'clock, going clockwise), flat-ended. */
+        fun arc(x: Float, y: Float, radius: Float, startDegrees: Float, sweepDegrees: Float, color: Int, width: Float) {
+            val oval = RectF(x - radius, y - radius, x + radius, y + radius)
+            shapes.add { canvas, paint ->
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = width
+                paint.strokeCap = Paint.Cap.BUTT
+                paint.color = color
+                canvas.drawArc(oval, startDegrees, sweepDegrees, false, paint)
+            }
+        }
+
+        /** [path] filled, or stroked [width] wide when given. */
+        fun path(path: Path, color: Int, width: Float? = null) = shapes.add { canvas, paint ->
+            paint.style = if (width == null) Paint.Style.FILL else Paint.Style.STROKE
+            width?.let { paint.strokeWidth = it }
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.color = color
+            canvas.drawPath(path, paint)
+        }
+
+        /** For shapes targets can't cover, like a ring: what's at a tapped point, checked before the targets. */
+        var hit: ((x: Float, y: Float) -> Any?)? = null
+
         /** The area between [points] and [baseline], [color] at the top fading to nearly clear at the bottom. */
         fun area(points: List<PointF>, baseline: Float, color: Int) {
             if (points.isEmpty()) return
@@ -162,11 +187,14 @@ class StatSceneView @JvmOverloads constructor(
     private var downX = 0f
     private var downY = 0f
 
-    /** [build] lays the scene out for the width it's given and sets its height. Lets go of the picked target. */
-    fun setScene(build: (Scene) -> Unit) {
+    /**
+     * [build] lays the scene out for the width it's given and sets its height. Lets go of the picked
+     * target, unless [keepPicked] (to redraw around it, say).
+     */
+    fun setScene(keepPicked: Boolean = false, build: (Scene) -> Unit) {
         builder = build
         scene = null
-        picked = null
+        if (!keepPicked) picked = null
         requestLayout()
         invalidate()
     }
@@ -202,7 +230,8 @@ class StatSceneView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val targets = scene?.targets.orEmpty()
-        if (targets.isEmpty()) return super.onTouchEvent(event)
+        val customHit = scene?.hit
+        if (targets.isEmpty() && customHit == null) return super.onTouchEvent(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
@@ -212,7 +241,7 @@ class StatSceneView @JvmOverloads constructor(
                 if (hypot(event.x - downX, event.y - downY) > touchSlop) return true
                 val x = event.x - paddingLeft
                 val y = event.y - paddingTop
-                val hit = targets.firstOrNull { it.area.contains(x, y) }?.key
+                val hit = customHit?.invoke(x, y) ?: targets.firstOrNull { it.area.contains(x, y) }?.key
                 // Tapping the picked one again, or nothing, lets go
                 picked = if (hit == picked) null else hit
                 onPicked?.invoke(picked)

@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The stats page's Home tab (StatsHome), kept apart so it can be taken out in one go -->
+<resources>
+    <string name="home_tab">Home</string>
+    <string name="home_and">and</string>
+    <string name="home_yesterday">yesterday</string>
+    <string name="home_quote">“%1$s”</string>
+    <string-array name="home_mood_words">
+        <item>Awful</item>
+        <item>Bad</item>
+        <item>Okay</item>
+        <item>Good</item>
+        <item>Great</item>
+    </string-array>
+
+    <!-- Pet -->
+    <string name="pet_name">Mochi</string>
+    <string name="pet_waiting">%1$s is waiting for you to log a day</string>
+    <string-array name="pet_feelings">
+        <item>having a rough time</item>
+        <item>feeling low</item>
+        <item>doing okay</item>
+        <item>feeling good</item>
+        <item>on top of the world</item>
+    </string-array>
+    <string name="pet_caption">%1$s is %2$s</string>
+    <string name="pet_caption_and">%1$s is %2$s, %3$s</string>
+    <string name="pet_caption_but">%1$s is %2$s, but %3$s</string>
+    <string name="pet_from">From %1$s: %2$s</string>
+    <string name="pet_love">in love</string>
+    <string name="pet_anxious">a bit on edge</string>
+    <string name="pet_tired">sleepy</string>
+    <string name="pet_creative">full of ideas</string>
+    <string name="pet_social">glowing from company</string>
+    <string name="pet_coffee">caffeinated</string>
+    <string name="pet_exercise">fresh from a workout</string>
+    <string name="pet_meditation">zen</string>
+    <string name="pet_phone">glued to the phone</string>
+    <string name="pet_rain">under a little cloud</string>
+    <string name="pet_sun">on a sunny streak</string>
+
+    <!-- At a glance -->
+    <string name="home_at_a_glance">At a glance</string>
+    <string name="home_this_week">This week</string>
+    <string name="home_mood_average">mood average</string>
+    <string name="home_up_vs_last_week">▲ %1$s vs last week</string>
+    <string name="home_down_vs_last_week">▼ %1$s vs last week</string>
+    <string name="home_streak">Streak</string>
+    <string name="home_days_in_a_row">days logged in a row</string>
+    <string name="home_usually">usually %1$s</string>
+    <string name="home_good_days">Good days</string>
+    <string name="home_of_logged_this_month">of %1$d logged this month</string>
+
+    <!-- Forecast -->
+    <string name="home_forecast">Mood forecast</string>
+    <string name="home_forecast_sub">the week as weather</string>
+    <string name="home_forecast_tomorrow">Tomorrow looks %1$s\n%2$ss average %3$s, the last 3 days %4$s</string>
+    <string name="home_today_short">Today</string>
+    <string name="home_tomorrow_short">Next</string>
+
+    <!-- Streaks -->
+    <string name="home_streaks">Streaks</string>
+    <string name="home_days_logged_in_a_row">days logged in a row</string>
+    <string name="home_best_run">Longest ever: %1$d</string>
+    <string name="home_good_moods">Good moods</string>
+    <string name="home_best">best %1$d</string>
+
+    <!-- Notes -->
+    <string name="home_notes">Notes</string>
+    <string name="home_no_notes">No notes yet. Thoughts written on a day show up here.</string>
+    <string name="home_memory_title">%1$s · %2$s</string>
+    <string name="home_a_year_ago">A year ago today</string>
+    <string name="home_six_months_ago">Six months ago today</string>
+    <string name="home_a_month_ago">A month ago today</string>
+    <string name="home_random_memory">Remember a random day</string>
+    <string name="home_remember_this">Remember this?</string>
+
+    <!-- Recipe -->
+    <string name="home_recipe">Recipe for a good day</string>
+    <string name="home_recipe_great">%1$d great days</string>
+    <string name="home_recipe_good">%1$d good days</string>
+    <string name="home_recipe_lead">Your best days usually had…</string>
+    <string name="home_recipe_none">Nothing stands out on your best days yet</string>
+    <string name="home_recipe_detail">%1$s on %2$d%% of your best days, and %3$d%% of the rest</string>
+    <string name="home_vs">vs %1$d%%</string>
+    <string name="home_screen_under">Screen time under %1$dh</string>
+
+    <!-- Year ring -->
+    <string name="home_year_ring">The year so far</string>
+    <string name="home_average">average %1$s</string>
+
+    <!-- What comes next -->
+    <string name="home_next_day">What comes next</string>
+    <string name="home_a_day">a day</string>
+    <string name="home_the_next">the next</string>
+    <string name="home_after_a">After a %1$s day (%2$d times), the next was</string>
+
+    <!-- Before and after -->
+    <string name="home_before_after">Before and after</string>
+    <string name="home_before_after_none">Shows once a medicine has a week of Mood before it was first taken and a week after</string>
+    <string name="home_before">Before</string>
+    <string name="home_on">On %1$s</string>
+    <string name="home_until">until %1$s</string>
+    <string name="home_since">since %1$s</string>
+
+    <!-- Web -->
+    <string name="home_web">How it all connects</string>
+    <string name="home_all_time">all time</string>
+    <string name="home_web_together">goes with %1$s</string>
+    <string name="home_web_apart">pulls against %1$s</string>
+    <string name="home_web_none">No strong links yet</string>
+    <string name="home_go_together">go together</string>
+    <string name="home_pull_apart">pull apart</string>
+
+    <!-- Screen time's cost -->
+    <string name="home_screen_cost">Screen time and Mood</string>
+    <string name="home_each_hour_down">each extra hour ≈ −%1$s mood</string>
+    <string name="home_each_hour_up">each extra hour ≈ +%1$s mood</string>
+
+    <!-- Weather -->
+    <string name="home_weather">Mood by weather</string>
+    <string name="home_weather_none">Shows once there are a few days of mood under different weather</string>
+    <string name="home_sky_sun">Sunny</string>
+    <string name="home_sky_cloud">Cloudy</string>
+    <string name="home_sky_rain">Rain</string>
+    <string name="home_sky_snow">Snow</string>
+    <string name="home_sky_storm">Storm</string>
+    <string name="home_weather_detail">%1$s · %2$d days · average %3$s</string>
+
+    <!-- Bouncing back -->
+    <string name="home_bounce">Bouncing back</string>
+    <string name="home_bounce_none">Shows after a few bad days have come and gone</string>
+    <plurals name="home_days_decimal">
+        <item quantity="one">%1$s day</item>
+        <item quantity="other">%1$s days</item>
+    </plurals>
+    <string name="home_bounce_lead">on average from a bad day back to Okay or better</string>
+    <string-array name="home_bounce_buckets">
+        <item>Next day</item>
+        <item>2 days</item>
+        <item>3 days</item>
+        <item>4+ days</item>
+    </string-array>
+    <string name="home_bounce_detail">Back up %1$s: %2$d times</string>
+
+    <!-- Week shape -->
+    <string name="home_week_shape">Week shape</string>
+    <string name="home_vs_usual">vs the 3 months before</string>
+    <string name="home_week_shape_none">Shows once three stats have a few weeks of days</string>
+    <string name="home_week_shape_detail">%1$s: %2$s this week, usually %3$s</string>
+    <string name="home_last_7_days">last 7 days</string>
+    <string name="home_usual">usual</string>
+
+    <!-- Words -->
+    <string name="home_words">Your words</string>
+    <string name="home_words_none">Words you use in notes on a few days show up here</string>
+    <string name="home_word_detail">“%1$s” on %2$d days · mood %3$s on average · last %4$s</string>
+    <string-array name="home_stop_words">
+        <item>the</item><item>and</item><item>but</item><item>for</item><item>with</item><item>was</item><item>were</item>
+        <item>are</item><item>this</item><item>that</item><item>then</item><item>than</item><item>have</item><item>had</item>
+        <item>has</item><item>not</item><item>you</item><item>your</item><item>its</item><item>it\'s</item><item>i\'m</item>
+        <item>i\'ve</item><item>don\'t</item><item>didn\'t</item><item>can\'t</item><item>just</item><item>got</item><item>get</item>
+        <item>all</item><item>out</item><item>about</item><item>from</item><item>into</item><item>very</item><item>really</item>
+        <item>some</item><item>more</item><item>much</item><item>too</item><item>what</item><item>when</item><item>who</item>
+        <item>how</item><item>why</item><item>will</item><item>would</item><item>could</item><item>should</item><item>them</item>
+        <item>they</item><item>their</item><item>there</item><item>here</item><item>his</item><item>her</item><item>him</item>
+        <item>she</item><item>our</item><item>one</item><item>today</item><item>day</item><item>feel</item><item>felt</item>
+        <item>bit</item><item>lot</item><item>like</item><item>been</item><item>being</item><item>also</item><item>still</item>
+        <item>after</item><item>before</item><item>again</item><item>did</item><item>does</item><item>doing</item><item>which</item>
+        <item>because</item><item>though</item><item>over</item><item>only</item><item>even</item><item>went</item><item>going</item>
+    </string-array>
+
+    <!-- Galaxy -->
+    <string name="home_galaxy">Your galaxy</string>
+
+    <!-- Milestones -->
+    <string name="home_milestones">Milestones</string>
+    <string name="home_earned">%1$d earned</string>
+    <string name="home_m_logged">days logged</string>
+    <string name="home_m_streak">day streak</string>
+    <string name="home_m_notes">notes</string>
+    <string name="home_m_great">great days</string>
+    <string name="home_m_run">%1$s run</string>
+    <string name="home_medal_earned">%1$d %2$s · earned</string>
+    <string name="home_medal_to_go">%1$d %2$s · %3$d to go</string>
+</resources>
