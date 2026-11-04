@@ -50,7 +50,22 @@
         android:id="@+id/moodFragment"
         android:name="app.olauncher.ui.MoodFragment"
         android:label="MoodFragment"
-        tools:layout="@layout/fragment_mood" />
+        tools:layout="@layout/fragment_mood">
+        <action
+            android:id="@+id/action_moodFragment_to_statFragment"
+            app:destination="@id/statFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+    </fragment>
+
+    <!-- One stat up close, opened by holding it under the All graph -->
+    <fragment
+        android:id="@+id/statFragment"
+        android:name="app.olauncher.ui.StatFragment"
+        android:label="StatFragment"
+        tools:layout="@layout/fragment_stat" />
 
     <fragment
         android:id="@+id/appListFragment"

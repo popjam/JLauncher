@@ -267,7 +267,7 @@
                         android:textColor="?attr/primaryColor" />
                 </FrameLayout>
 
-                <!-- Which graph: daily as a grid, bars or one stat in focus, then weekly or monthly -->
+                <!-- Which graph: daily as a grid, weekly or monthly -->
                 <LinearLayout
                     android:id="@+id/graphModes"
                     android:layout_width="wrap_content"
@@ -285,24 +285,6 @@
                     android:id="@+id/statHeatmap"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:visibility="gone" />
-
-                <app.olauncher.ui.StatFocusView
-                    android:id="@+id/statFocus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/focusNote"
-                    style="@style/TextSmall"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:alpha="0.5"
-                    android:gravity="center"
-                    android:text="@string/graph_focus_note"
-                    android:textColor="?attr/primaryColor"
-                    android:textSize="11sp"
                     android:visibility="gone" />
 
                 <TextView

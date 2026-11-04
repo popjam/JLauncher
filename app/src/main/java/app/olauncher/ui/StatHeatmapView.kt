@@ -17,28 +17,16 @@ import app.olauncher.helper.getColorFromAttr
 
 /**
  * A row per stat and a column per day from [first] to [last], each cell coloured like the face picked
- * that day (usually happy green to sad red), so good and bad days line up across stats. As [bars], each
- * cell is instead a bar rising from the row's foot, so each row reads as its own small bar chart. Tapping
- * picks a day, outlined and reported to [onPointSelected].
+ * that day (usually happy green to sad red), so good and bad days line up across stats. Tapping picks a
+ * day, outlined and reported to [onPointSelected].
  */
 class StatHeatmapView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    /**
-     * [cells] maps days to their colours; missing days are left blank. As bars, [heights] says how much
-     * of the row each day's bar fills, from 0 to 1.
-     */
-    class Row(val name: String, val color: Int, val cells: Map<Int, Int>, val heights: Map<Int, Float> = emptyMap())
-
-    var bars = false
-        set(value) {
-            if (field == value) return
-            field = value
-            requestLayout()
-            invalidate()
-        }
+    /** [cells] maps days to their colours; missing days are left blank. */
+    class Row(val name: String, val color: Int, val cells: Map<Int, Int>)
 
     private var rows = emptyList<Row>()
     private var first = 1
@@ -72,7 +60,7 @@ class StatHeatmapView @JvmOverloads constructor(
     }
     private val rect = RectF()
 
-    private val rowHeight get() = (if (bars) 22 else 20).dpToPx()
+    private val rowHeight = 20.dpToPx()
     private val top = 4.dpToPx().toFloat()
     private val labelBand = 20.dpToPx()
 
@@ -128,13 +116,6 @@ class StatHeatmapView @JvmOverloads constructor(
                 val x = columnLeft(point)
                 rect.set(x + gap / 2, rowTop + gap / 2, x + cellWidth - gap / 2, rowTop + rowHeight - gap / 2)
                 val cell = row.cells[point]
-                if (bars) {
-                    // A bar from the foot, or a thin line along it for a day with nothing
-                    val height = if (cell == null) 0f else row.heights[point] ?: 1f
-                    val foot = rect.bottom
-                    rect.top = maxOf(rect.top, foot - maxOf(height * (foot - rect.top), 2.dpToPx().toFloat()))
-                    if (cell == null) rect.top = foot - 1.5f * resources.displayMetrics.density
-                }
                 val paint = if (cell == null) emptyPaint else cellPaint.apply { color = cell }
                 canvas.drawRoundRect(rect, corner, corner, paint)
             }

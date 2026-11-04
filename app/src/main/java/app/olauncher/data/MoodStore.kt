@@ -50,6 +50,7 @@ class MoodStore(context: Context) {
      * in place when the faces swap. [inverted] stats show happy on the left and score sad highest
      * (see [score]). [medicine] stats colour their faces white (leftmost, none taken) then light to dark
      * purple, and leave the leftmost blank on the calendar and daily graph, so the days it was taken stand out.
+     * [nextDay] medicines (taken at night, say) are counted towards the day after on the stat pages.
      */
     data class Stat(
         val id: String,
@@ -62,6 +63,7 @@ class MoodStore(context: Context) {
         val inverted: Boolean = false,
         val phrases: List<String> = emptyList(),
         val medicine: Boolean = false,
+        val nextDay: Boolean = false,
     )
 
     class Data(
@@ -83,11 +85,9 @@ class MoodStore(context: Context) {
         val hiddenInGraph: MutableSet<String> = mutableSetOf(),
         /** Stat ids drawn in colour on the weekly and monthly graphs; the rest are greyed behind them */
         val comparedInGraph: MutableSet<String> = mutableSetOf(MOOD),
-        /** The stat the daily focus graph shows */
-        var focusStat: String = MOOD,
         /** Whether the All graph's day details are a written summary rather than each stat's value */
         var daySummary: Boolean = false,
-        /** The All graph last shown: daily (grid, bars or focus), weekly or monthly */
+        /** The All graph last shown: daily, weekly or monthly */
         var graphMode: String = "",
         var promptEnabled: Boolean = false,
         var promptMinutes: Int = DEFAULT_PROMPT_MINUTES,
@@ -195,11 +195,12 @@ class MoodStore(context: Context) {
 
     fun addStat(
         name: String, color: Int, daily: Boolean, scale: Int, question: String, labels: List<String>, inverted: Boolean,
-        phrases: List<String>, medicine: Boolean,
+        phrases: List<String>, medicine: Boolean, nextDay: Boolean,
     ): Stat {
         val stat = Stat(
             "s" + System.currentTimeMillis().toString(36), sanitizeName(name), color, daily, scale,
             sanitizeQuestion(question), sanitizeLabels(labels, scale), inverted, sanitizePhrases(phrases, scale), medicine,
+            nextDay && medicine,
         )
         update { it.stats.add(stat) }
         return stat
@@ -208,7 +209,7 @@ class MoodStore(context: Context) {
     /** The scale stays as it was. Changing [inverted] flips the stat's history (see [flipHistory]). */
     fun editStat(
         id: String, name: String, color: Int, daily: Boolean, question: String, labels: List<String>, inverted: Boolean,
-        phrases: List<String>, medicine: Boolean,
+        phrases: List<String>, medicine: Boolean, nextDay: Boolean,
     ) = update { data ->
         val index = data.stats.indexOfFirst { it.id == id }
         if (index >= 0) data.stats[index] = data.stats[index].let {
@@ -216,7 +217,7 @@ class MoodStore(context: Context) {
             it.copy(
                 name = sanitizeName(name), color = color, daily = daily, question = sanitizeQuestion(question),
                 labels = sanitizeLabels(labels, it.scale), inverted = inverted, phrases = sanitizePhrases(phrases, it.scale),
-                medicine = medicine,
+                medicine = medicine, nextDay = nextDay && medicine,
             )
         }
     }
@@ -382,7 +383,6 @@ class MoodStore(context: Context) {
             if (json.has("daySummary")) data.daySummary = backup.daySummary
             if (json.has("graphMode")) data.graphMode = backup.graphMode
             if (json.has("comparedInGraph")) data.setCompared(backup.comparedInGraph)
-            if (json.has("focusStat")) data.focusStat = backup.focusStat
             if (json.has("promptEnabled")) data.promptEnabled = backup.promptEnabled
             if (json.has("promptMinutes")) data.promptMinutes = backup.promptMinutes
             if (json.has("catchUpEnabled")) data.catchUpEnabled = backup.catchUpEnabled
@@ -408,7 +408,6 @@ class MoodStore(context: Context) {
         put("daySummary", data.daySummary)
         put("graphMode", data.graphMode)
         put("comparedInGraph", JSONArray(data.comparedInGraph.toList()))
-        put("focusStat", data.focusStat)
         put("order", JSONArray(data.order))
         put("stats", JSONArray().apply {
             data.stats.forEach { stat ->
@@ -423,6 +422,7 @@ class MoodStore(context: Context) {
                     put("inverted", stat.inverted)
                     if (stat.phrases.isNotEmpty()) put("phrases", JSONArray(stat.phrases))
                     put("medicine", stat.medicine)
+                    put("nextDay", stat.nextDay)
                 })
             }
         })
@@ -456,7 +456,6 @@ class MoodStore(context: Context) {
             backupFolder = json.optString("backupFolder", ""),
             daySummary = json.optBoolean("daySummary"),
             graphMode = json.optString("graphMode"),
-            focusStat = json.optString("focusStat").ifEmpty { MOOD },
         )
         json.optJSONArray("stats")?.let { stats ->
             for (i in 0 until stats.length()) {
@@ -473,6 +472,7 @@ class MoodStore(context: Context) {
                         id, name, stat.optInt("color", DEFAULT_MOOD_COLOR), stat.optBoolean("daily"), scale,
                         question, sanitizeLabels(labels, scale), stat.optBoolean("inverted"),
                         sanitizePhrases(strings("phrases"), scale), stat.optBoolean("medicine"),
+                        stat.optBoolean("nextDay") && stat.optBoolean("medicine"),
                     )
                 )
             }

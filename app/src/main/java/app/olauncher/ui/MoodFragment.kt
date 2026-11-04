@@ -16,7 +16,9 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentMoodBinding
@@ -74,11 +76,11 @@ class MoodFragment : Fragment() {
     private var draggedTab: View? = null
     private var dragX = 0f
 
-    /** [DAILY] is the grid of faces' colours, [BARS] a small bar chart per stat, [FOCUS] one stat's days up close. */
+    /** [DAILY] is the grid of faces' colours, a row per stat. */
     private enum class GraphMode {
-        DAILY, BARS, FOCUS, WEEKLY, MONTHLY;
+        DAILY, WEEKLY, MONTHLY;
 
-        val daily get() = this == DAILY || this == BARS || this == FOCUS
+        val daily get() = this == DAILY
     }
 
     private class DayCell(val box: FrameLayout, val number: TextView, val face: PixelFaceView, val noteDot: View)
@@ -91,8 +93,11 @@ class MoodFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         moodStore = MoodStore(requireContext())
-        // The graph shown last time
-        graphMode = GraphMode.entries.firstOrNull { it.name == moodStore.load().graphMode } ?: GraphMode.WEEKLY
+        // The graph shown last time; the daily bars and focus graphs it once had are now the grid
+        graphMode = when (val saved = moodStore.load().graphMode) {
+            "BARS", "FOCUS" -> GraphMode.DAILY
+            else -> GraphMode.entries.firstOrNull { it.name == saved } ?: GraphMode.WEEKLY
+        }
         buildCalendar()
         buildGraphModes()
 
@@ -115,7 +120,6 @@ class MoodFragment : Fragment() {
         }
         binding.statChart.onPointSelected = { renderPointDetails(it) }
         binding.statHeatmap.onPointSelected = { renderPointDetails(it) }
-        binding.statFocus.onPointSelected = { renderPointDetails(it) }
         // A day's details switch between each stat's value and a written summary, remembered for every day
         binding.pointDetails.setOnClickListener {
             if (!graphMode.daily) return@setOnClickListener
@@ -197,14 +201,10 @@ class MoodFragment : Fragment() {
         renderGraph()
     }
 
-    private fun setFocus(id: String) {
-        moodStore.update(sync = false) { it.focusStat = id }
-        reload()
-        renderGraph()
+    private fun openStatPage(id: String) {
+        leaveNote()
+        findNavController().navigate(R.id.action_moodFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to id))
     }
-
-    /** The stat the focus graph shows, Mood when the one picked is gone. */
-    private val focusStat: StatInfo get() = stats.firstOrNull { it.id == data.focusStat } ?: stats.first()
 
     // --- Building ---
 
@@ -255,8 +255,6 @@ class MoodFragment : Fragment() {
         val context = requireContext()
         val names = mapOf(
             GraphMode.DAILY to R.string.graph_grid,
-            GraphMode.BARS to R.string.graph_bars,
-            GraphMode.FOCUS to R.string.graph_focus,
             GraphMode.WEEKLY to R.string.graph_weekly,
             GraphMode.MONTHLY to R.string.graph_monthly,
         )
@@ -553,11 +551,7 @@ class MoodFragment : Fragment() {
     }
 
     private val graphSelected: Int?
-        get() = when (graphMode) {
-            GraphMode.FOCUS -> binding.statFocus.selected
-            GraphMode.DAILY, GraphMode.BARS -> binding.statHeatmap.selected
-            else -> binding.statChart.selected
-        }
+        get() = if (graphMode.daily) binding.statHeatmap.selected else binding.statChart.selected
 
     /** Steps the [GRAPH_DAYS] days (daily) or year (weekly, monthly) shown. */
     private fun moveGraph(by: Int) {
@@ -584,8 +578,6 @@ class MoodFragment : Fragment() {
         graphMode = mode
         moodStore.update(sync = false) { it.graphMode = mode.name }
         when {
-            // The daily graphs all show the same days
-            from.daily && mode.daily -> Unit
             from.daily -> {
                 val date = picked?.let { LocalDate.ofEpochDay(it.toLong()) } ?: graphEnd.minusDays(GRAPH_DAYS / 2L)
                 graphYear = if (mode == GraphMode.WEEKLY) date.get(WEEKS.weekBasedYear()) else date.year
@@ -656,65 +648,23 @@ class MoodFragment : Fragment() {
         val first = pointsWithData.minOrNull()?.let { if (daily) endDay - GRAPH_DAYS + 1 else it }
         val last = if (daily) endDay else graphPoint(today) ?: pointsWithData.maxOrNull()
         val hasData = first != null && last != null
-        val grid = graphMode == GraphMode.DAILY || graphMode == GraphMode.BARS
         binding.statChart.isVisible = hasData && !daily
-        binding.statHeatmap.isVisible = hasData && grid
-        binding.statFocus.isVisible = hasData && graphMode == GraphMode.FOCUS
-        binding.focusNote.isVisible = hasData && graphMode == GraphMode.FOCUS
+        binding.statHeatmap.isVisible = hasData && daily
         binding.graphEmpty.isVisible = !hasData
         if (hasData) {
             val context = requireContext()
             val dayLabel = { day: Int -> LocalDate.ofEpochDay(day.toLong()).dayOfMonth.toString() }
             when {
-                grid -> {
-                    val bars = graphMode == GraphMode.BARS
-                    binding.statHeatmap.bars = bars
+                daily -> {
                     binding.statHeatmap.setData(
                         stats.filter { it.id !in data.hiddenInGraph }.map { stat ->
                             val faces = values[stat.id].orEmpty().mapValues { (_, score) -> MoodStore.faceForScore(score.toInt(), stat.inverted) }
+                            // Coloured by the day's face, whichever way round the stat scores
                             val shown = faces.filterValues { !stat.isBlank(it) }
-                            when {
-                                // Coloured by the day's face, whichever way round the stat scores
-                                !bars -> StatHeatmapView.Row(stat.name, stat.color, shown.mapValues { (_, face) -> stat.faceColor(context, face) })
-                                // A medicine's days taken as short pills in the dose's colour
-                                stat.medicine -> StatHeatmapView.Row(
-                                    stat.name, stat.color,
-                                    shown.mapValues { (_, face) -> stat.faceColor(context, face) },
-                                    shown.mapValues { MEDICINE_BAR },
-                                )
-                                // Otherwise bars in the stat's colour, as tall as the day's score
-                                else -> StatHeatmapView.Row(
-                                    stat.name, stat.color,
-                                    shown.mapValues { stat.color },
-                                    shown.mapValues { (day, _) -> values.getValue(stat.id).getValue(day) / 5 },
-                                )
-                            }
+                            StatHeatmapView.Row(stat.name, stat.color, shown.mapValues { (_, face) -> stat.faceColor(context, face) })
                         },
                         first!!,
                         maxOf(first, last!!),
-                        label = dayLabel,
-                        clearSelection = rangeChanged,
-                    )
-                }
-                graphMode == GraphMode.FOCUS -> {
-                    val focus = focusStat
-                    val bars = values[focus.id].orEmpty().mapNotNull { (day, score) ->
-                        val face = MoodStore.faceForScore(score.toInt(), focus.inverted)
-                        if (focus.isBlank(face)) null else day to StatFocusView.Bar(score, focus.faceColor(context, face))
-                    }.toMap()
-                    val strips = stats.filter { it.medicine && it.id != focus.id }.map { stat ->
-                        val dots = values[stat.id].orEmpty().mapNotNull { (day, score) ->
-                            val face = MoodStore.faceForScore(score.toInt(), stat.inverted)
-                            if (stat.isBlank(face)) null else day to stat.faceColor(context, face)
-                        }.toMap()
-                        StatFocusView.Strip(stat.name, dots)
-                    }
-                    binding.statFocus.setData(
-                        bars,
-                        rollingAverage(focus, first!!, maxOf(first, last!!)),
-                        strips,
-                        first,
-                        maxOf(first, last),
                         label = dayLabel,
                         clearSelection = rangeChanged,
                     )
@@ -739,28 +689,10 @@ class MoodFragment : Fragment() {
         renderChips()
     }
 
-    /**
-     * For each day from [first] to [last] (epoch days), the average score of [stat] over that day and
-     * the [AVERAGE_DAYS] - 1 before it, leaving out days not filled in (and a medicine's days not taken).
-     */
-    private fun rollingAverage(stat: StatInfo, first: Int, last: Int): Map<Int, Float> {
-        val scores = (first - AVERAGE_DAYS + 1..last).associateWith { day ->
-            data.days[LocalDate.ofEpochDay(day.toLong()).toString()]?.face(stat.id)
-                ?.takeIf { !stat.isBlank(it) }?.let { MoodStore.score(it, stat.inverted) }
-        }
-        val today = LocalDate.now().toEpochDay().toInt()
-        return (first..minOf(last, today)).mapNotNull { day ->
-            val window = (day - AVERAGE_DAYS + 1..day).mapNotNull { scores[it] }
-            if (window.isEmpty()) null else day to window.average().toFloat()
-        }.toMap()
-    }
-
     /** The stats whose values the graph shows, so the tapped point's details list them. */
-    private fun graphStats(): List<StatInfo> = when (graphMode) {
-        GraphMode.DAILY, GraphMode.BARS -> stats.filter { it.id !in data.hiddenInGraph }
-        GraphMode.FOCUS -> focusStat.let { focus -> listOf(focus) + stats.filter { it.medicine && it.id != focus.id } }
-        else -> stats.filter { it.id in data.comparedInGraph }.ifEmpty { stats }
-    }
+    private fun graphStats(): List<StatInfo> =
+        if (graphMode.daily) stats.filter { it.id !in data.hiddenInGraph }
+        else stats.filter { it.id in data.comparedInGraph }.ifEmpty { stats }
 
     /** The tapped day's, week's or month's values, each with its stat's dot. */
     private fun renderPointDetails(point: Int?) {
@@ -851,29 +783,15 @@ class MoodFragment : Fragment() {
     }
 
     /**
-     * Tap a stat to show or hide its row on the daily grid and bars, to focus on it, or to compare it in
-     * colour on the weekly and monthly graphs.
+     * Tap a stat to show or hide its row on the daily grid, or to compare it in colour on the weekly and
+     * monthly graphs. Hold one to open its page.
      */
     private fun renderChips() {
         val context = requireContext()
-        val focus = graphMode == GraphMode.FOCUS
-        binding.chipsTitle.setText(
-            when {
-                focus -> R.string.focus_on
-                graphMode.daily -> R.string.show
-                else -> R.string.compare
-            }
-        )
-        binding.selectAllStats.isVisible = !focus
-        binding.clearStats.isVisible = !focus
-        val focusId = focusStat.id
+        binding.chipsTitle.setText(if (graphMode.daily) R.string.show else R.string.compare)
         binding.graphChips.removeAllViews()
         stats.forEach { stat ->
-            val on = when {
-                focus -> stat.id == focusId
-                graphMode.daily -> stat.id !in data.hiddenInGraph
-                else -> stat.id in data.comparedInGraph
-            }
+            val on = if (graphMode.daily) stat.id !in data.hiddenInGraph else stat.id in data.comparedInGraph
             binding.graphChips.addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = stat.name
                 textSize = 13f
@@ -883,11 +801,12 @@ class MoodFragment : Fragment() {
                 setStatDot(stat.color)
                 alpha = if (on) 1f else 0.35f
                 setOnClickListener {
-                    when {
-                        focus -> setFocus(stat.id)
-                        graphMode.daily -> setHidden(if (on) data.hiddenInGraph + stat.id else data.hiddenInGraph - stat.id)
-                        else -> setCompared(if (on) data.comparedInGraph - stat.id else data.comparedInGraph + stat.id)
-                    }
+                    if (graphMode.daily) setHidden(if (on) data.hiddenInGraph + stat.id else data.hiddenInGraph - stat.id)
+                    else setCompared(if (on) data.comparedInGraph - stat.id else data.comparedInGraph + stat.id)
+                }
+                setOnLongClickListener {
+                    openStatPage(stat.id)
+                    true
                 }
             })
         }
@@ -906,10 +825,6 @@ class MoodFragment : Fragment() {
     companion object {
         private val WEEKS = WeekFields.ISO
         private const val GRAPH_DAYS = 18
-        private const val AVERAGE_DAYS = 7
-
-        /** How much of a bars row a medicine's pill fills */
-        private const val MEDICINE_BAR = 0.35f
         private const val TOP_APP_MIN_MS = 30 * 60 * 1000L
     }
 }

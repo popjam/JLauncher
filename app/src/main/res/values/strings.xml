@@ -268,6 +268,8 @@
     <string name="stat_brightness">Brightness</string>
     <string name="stat_daily_check">Add to daily check</string>
     <string name="stat_medicine">Medicine</string>
+    <string name="stat_next_day">Affects the next day</string>
+    <string name="stat_next_day_hint">For one taken at night: each dose counts towards the day after on the stat pages</string>
     <string name="stat_medicine_hint">Faces go white, then light to dark purple. The leftmost stays blank on the calendar and daily graph</string>
     <string name="stat_display_text">Display text</string>
     <string name="stat_phrases">Summary sentences · optional</string>
@@ -307,12 +309,9 @@
     <string name="delete_stat">Delete</string>
     <string name="delete_stat_message">Delete %1$s and all its history?</string>
     <string name="graph_year_title">%1$d</string>
-    <string name="graph_grid">Grid</string>
-    <string name="graph_bars">Bars</string>
-    <string name="graph_focus">Focus</string>
+    <string name="graph_grid">Daily</string>
     <string name="graph_weekly">Weekly</string>
     <string name="graph_monthly">Monthly</string>
-    <string name="graph_focus_note">Line: 7-day average</string>
     <string name="graph_so_far">%1$s · so far</string>
     <string name="graph_month_range">%1$s – %2$s</string>
     <string name="previous_year">Previous year</string>
@@ -324,9 +323,49 @@
     <string name="stat_total">%1$s %2$s</string>
     <string name="stat_label">%1$s: %2$s</string>
     <string name="show">Show</string>
-    <string name="focus_on">Focus on</string>
     <string name="compare">Compare</string>
     <string name="select_all">Select all</string>
+
+    <!-- Stat page, opened by holding a stat under the All graph -->
+    <string name="back">Back</string>
+    <string name="edit">Edit</string>
+    <string name="stat_daily">Daily</string>
+    <string name="stat_taken">Taken</string>
+    <string name="stat_trend">Trend</string>
+    <string name="stat_over_time">Over time</string>
+    <string name="stat_how_often">How often</string>
+    <string name="stat_by_weekday">By weekday</string>
+    <string name="stat_dose">Dose</string>
+    <string name="stat_top_app">Top app</string>
+    <string name="stat_taken_vs_not">On days taken vs not</string>
+    <string name="last_days">last %1$d days</string>
+    <string name="trend_weeks">Weeks</string>
+    <string name="trend_months">Months</string>
+    <string name="trend_years">Years</string>
+    <string name="over_3_months">3 months</string>
+    <string name="over_year">Year</string>
+    <string name="over_all">All</string>
+    <string name="averages">averages</string>
+    <string name="average_hours">average hours</string>
+    <string name="hours">hours</string>
+    <string name="days_it_was_top">days it was top</string>
+    <string name="seven_day_average">7-day average</string>
+    <string name="days_not_taken">days not taken</string>
+    <string name="days_taken">days taken</string>
+    <string name="none_taken">None</string>
+    <string name="taken">Taken</string>
+    <string name="not_taken">Not taken</string>
+    <string name="dose_number">Dose %1$d</string>
+    <string name="hours_short">%1$dh</string>
+    <string name="needs_more_days">Needs a few more days</string>
+    <string name="needs_taken_and_not">Shows once there are 3 days taken and 3 not</string>
+    <string name="taken_of_days">taken %1$d of %2$d days</string>
+    <string name="a_day">%1$s a day</string>
+    <string name="taken_vs_not_detail">%1$s: %2$s on %3$d days taken, %4$s on %5$d not</string>
+    <plurals name="day_count">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
     <string name="clear">Clear</string>
 
     <string name="backup">Backup</string>

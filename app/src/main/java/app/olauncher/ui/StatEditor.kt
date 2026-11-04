@@ -103,6 +103,9 @@ object StatEditor {
         binding.statName.setText(stat?.name.orEmpty())
         binding.statDaily.isChecked = stat?.daily ?: true
         binding.statMedicine.isChecked = stat?.medicine ?: false
+        // Only for medicines, and off to start with
+        binding.statNextDay.isChecked = stat?.nextDay ?: false
+        binding.statNextDaySection.isVisible = binding.statMedicine.isChecked
         var scale = stat?.scale ?: 5
         if (stat != null) binding.statScaleLabel.text = context.getString(R.string.stat_scale_locked)
         val scaleViews = MoodStore.SCALES.associateWith { option -> scaleOption(context, option) }
@@ -161,6 +164,7 @@ object StatEditor {
         listOf(binding.statInverted, binding.statMedicine).forEach { option ->
             option.setOnCheckedChangeListener { _, _ ->
                 binding.root.findFocus()?.hideKeyboard()
+                binding.statNextDaySection.isVisible = binding.statMedicine.isChecked
                 renderLabels()
                 renderPhrases()
             }
@@ -201,9 +205,9 @@ object StatEditor {
                 val inverted = binding.statInverted.isChecked
                 when {
                     builtIn -> moodStore.editBuiltIn(statId!!, color(), question, inverted)
-                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels(), inverted, facePhrases(), binding.statMedicine.isChecked)
+                    stat != null -> moodStore.editStat(stat.id, name, color(), binding.statDaily.isChecked, question, faceLabels(), inverted, facePhrases(), binding.statMedicine.isChecked, binding.statNextDay.isChecked)
                     else -> {
-                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels(), inverted, facePhrases(), binding.statMedicine.isChecked)
+                        val added = moodStore.addStat(name, color(), binding.statDaily.isChecked, scale, question, faceLabels(), inverted, facePhrases(), binding.statMedicine.isChecked, binding.statNextDay.isChecked)
                         return@setPositiveButton onDone(added.id)
                     }
                 }
