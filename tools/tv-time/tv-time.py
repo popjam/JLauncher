@@ -19,6 +19,9 @@ ADB = os.path.expanduser("~/Android/Sdk/platform-tools/adb")
 DIR = os.path.expanduser("~/.local/share/jlauncher-tv")
 LOG = os.path.join(DIR, "minutes.log")
 DAYS = 60
+# Its own adb server port, so it doesn't take 5037 from Windows' adb (WSL forwards its localhost ports
+# to Windows, and Windows' adb would then use this one, which can't see emulators running on Windows)
+ADB_ENV = dict(os.environ, ANDROID_ADB_SERVER_PORT="5038")
 
 # Package to the name shown on the phone; anything else shows as its package
 APPS = {
@@ -59,7 +62,7 @@ APPS = {
 
 def adb(*args, timeout=10):
     try:
-        return subprocess.run([ADB, *args], capture_output=True, text=True, timeout=timeout).stdout
+        return subprocess.run([ADB, *args], capture_output=True, text=True, timeout=timeout, env=ADB_ENV).stdout
     except (subprocess.TimeoutExpired, OSError):
         return ""
 
