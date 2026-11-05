@@ -21,6 +21,8 @@ else
 fi
 # T3 Code's Device panel installs its helpers with pnpm
 command -v pnpm >/dev/null || brew install pnpm
+# ...and streams the emulator's screen with ffmpeg (Homebrew's has libx264)
+command -v ffmpeg >/dev/null || brew install ffmpeg
 
 if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
     tmp=$(mktemp -d)
