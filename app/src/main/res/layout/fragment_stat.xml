@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A page per stat, swiped between sideways -->
-<androidx.viewpager2.widget.ViewPager2 xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/statPager"
+<!-- A page per stat, swiped between sideways; pulled down from the top to go back -->
+<app.olauncher.ui.PullDismissLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pull"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="?attr/primaryShadeDarkColor"
-    android:clickable="true"
-    android:focusable="true" />
+    android:layout_height="match_parent">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/statPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/primaryShadeDarkColor"
+        android:clickable="true"
+        android:focusable="true" />
+</app.olauncher.ui.PullDismissLayout>

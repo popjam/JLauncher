@@ -16,6 +16,10 @@ object AutoStats {
     const val MAC = "mac"
     const val VIBECODING = "vibecoding"
 
+    /** Which of these [id] is ([SLEEP], [MUSIC] and so on), or null for a stat filled in by hand. */
+    fun keyOf(context: Context, id: String): String? =
+        prefs(context).all.entries.firstOrNull { it.value == id }?.key
+
     /** The stat's id, or null if it hasn't been added or was deleted. */
     fun id(context: Context, key: String, data: MoodStore.Data = MoodStore(context).load()): String? =
         prefs(context).getString(key, null)?.takeIf { data.stat(it) != null }

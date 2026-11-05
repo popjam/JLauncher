@@ -82,18 +82,16 @@ object Steps {
         handler.postDelayed({ manager.unregisterListener(listener) }, ONE_SHOT_MS)
     }
 
+    /** Steps had a stat of its own; it's shown on Exercise's page now, so the old one goes. */
     fun ensureStat(context: Context): String? {
-        if (!hasSensor(context)) return null
-        return AutoStats.ensure(context, AutoStats.STEPS, NAME) { store ->
-            store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
-                phrases = emptyList(), medicine = false, nextDay = false)
-        }
+        val store = MoodStore(context)
+        val data = store.load()
+        (AutoStats.id(context, AutoStats.STEPS, data) ?: data.stats.firstOrNull { it.name == NAME && it.labels == LABELS }?.id)?.let { store.deleteStat(it) }
+        return null
     }
 
-    private fun setFace(context: Context, date: LocalDate, steps: Int) {
-        val id = ensureStat(context) ?: return
-        MoodStore(context).setFace(date, id, faceFor(steps))
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private fun setFace(context: Context, date: LocalDate, steps: Int) {}
 
     /** Under 2,000 is the saddest face, then 2–5k, 5–8k, 8–10k and 10k or more. */
     fun faceFor(steps: Int) = when {

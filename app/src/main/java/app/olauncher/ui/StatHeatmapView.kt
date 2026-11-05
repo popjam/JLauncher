@@ -26,7 +26,7 @@ class StatHeatmapView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     /** [cells] maps days to their colours; missing days are left blank. */
-    class Row(val name: String, val color: Int, val cells: Map<Int, Int>)
+    class Row(val name: String, val color: Int, val cells: Map<Int, Int>, val icon: String? = null)
 
     private var rows = emptyList<Row>()
     private var first = 1
@@ -107,8 +107,14 @@ class StatHeatmapView @JvmOverloads constructor(
             val rowTop = top + i * rowHeight
             val middle = rowTop + rowHeight / 2f
 
-            dotPaint.color = row.color
-            canvas.drawCircle(4.dpToPx() + dotRadius, middle, dotRadius, dotPaint)
+            // The stat's icon where it has one, else a dot in its colour
+            if (row.icon != null) {
+                val size = 11.dpToPx().toFloat()
+                StatIcons.draw(canvas, row.icon, 0f, middle - size / 2, size, row.color, dotPaint)
+            } else {
+                dotPaint.color = row.color
+                canvas.drawCircle(4.dpToPx() + dotRadius, middle, dotRadius, dotPaint)
+            }
             val name = TextUtils.ellipsize(row.name, namePaint, left - 18.dpToPx(), TextUtils.TruncateAt.END)
             canvas.drawText(name, 0, name.length, 14.dpToPx().toFloat(), middle - (namePaint.ascent() + namePaint.descent()) / 2, namePaint)
 

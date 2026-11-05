@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import app.olauncher.R
@@ -12,8 +13,8 @@ import app.olauncher.data.MoodStore
 import app.olauncher.helper.allStats
 
 /**
- * The stat pages, opened on the stat held under the All graph (or the open tab tapped), swiping
- * sideways to the others in tab order. The pages either side are built ahead so the swipe stays smooth.
+ * The stat pages, opened on the stat tapped in the list, swiping sideways to the others in its order
+ * and pulling down from the top to go back. The pages either side are built ahead so the swipe stays smooth.
  */
 class StatFragment : Fragment(R.layout.fragment_stat) {
 
@@ -23,6 +24,7 @@ class StatFragment : Fragment(R.layout.fragment_stat) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         if (ids.isEmpty()) ids = requireContext().allStats(MoodStore(requireContext()).load()).map { it.id }
+        view.findViewById<PullDismissLayout>(R.id.pull).onDismiss = { if (isAdded) findNavController().popBackStack() }
         val pager = view.findViewById<ViewPager2>(R.id.statPager)
         pager.offscreenPageLimit = 1
         pager.adapter = object : FragmentStateAdapter(this) {

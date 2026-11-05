@@ -17,27 +17,37 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingVertical="48dp">
+            android:paddingTop="40dp"
+            android:paddingBottom="48dp">
 
-            <!-- Back, the stat's name with its dot, and Edit -->
+            <!-- Back, the stat's icon and name, and Edit, on a band of its colour -->
             <LinearLayout
+                android:id="@+id/header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="12dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:paddingVertical="14dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="14dp">
 
                 <TextView
                     android:id="@+id/back"
                     style="@style/TextLarge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:alpha="0.7"
                     android:contentDescription="@string/back"
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="4dp"
                     android:text="‹"
-                    android:textColor="?attr/primaryColor" />
+                    android:textSize="24sp" />
+
+                <View
+                    android:id="@+id/statIcon"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_marginEnd="12dp" />
 
                 <TextView
                     android:id="@+id/statName"
@@ -48,8 +58,8 @@
                     android:ellipsize="end"
                     android:gravity="center_vertical"
                     android:singleLine="true"
-                    android:textColor="?attr/primaryColor"
-                    android:textSize="20sp"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
                     tools:text="Anxiety" />
 
                 <TextView
@@ -57,11 +67,9 @@
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_stat_chip"
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="6dp"
                     android:text="@string/edit"
-                    android:textColor="?attr/primaryColor"
                     android:textSize="13sp" />
             </LinearLayout>
 

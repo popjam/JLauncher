@@ -39,6 +39,8 @@ import app.olauncher.helper.Vibecoding
 import app.olauncher.helper.Social
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatInfo
+import app.olauncher.helper.StatKind
+import app.olauncher.helper.PhoneApps
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.formattedTimeSpent
@@ -66,7 +68,7 @@ import kotlin.math.ceil
  * A medicine set to affect the next day ([StatInfo.nextDay]) counts each dose towards the day after,
  * wherever it's set against another stat.
  */
-class StatPageFragment : Fragment() {
+class StatPageFragment : CardPageFragment() {
 
     private var _binding: FragmentStatPageBinding? = null
     private val binding get() = _binding!!
@@ -85,8 +87,17 @@ class StatPageFragment : Fragment() {
     /** The face Over time is showing only the days of, picked from the chips under it */
     private var overTimeFilter: Int? = null
 
-    private val ink by lazy { requireContext().getColorFromAttr(R.attr.primaryColor) }
-    private fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
+    override val cards: LinearLayout get() = binding.cards
+
+    override fun colorOfLabel(label: String): Int? = stats.firstOrNull { it.name == label }?.color
+
+    override fun iconOfLabel(label: String): String? = stats.firstOrNull { it.name == label }?.let { StatIcons.forStat(it) }
+
+    /** The page's stat counted in something real (hours, dollars) rather than faces, by day; null for faces */
+    private var real: Map<LocalDate, Float>? = null
+    private var unit: Measure? = null
+
+    private enum class Measure { HOURS, DOLLARS }
 
     private enum class Period { WEEKS, MONTHS, YEARS }
     private enum class Span { MONTHS_3, YEAR, ALL }
@@ -151,63 +162,135 @@ class StatPageFragment : Fragment() {
         }
         dates = data.days.keys.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }.sorted()
 
-        binding.statName.text = stat.name
-        binding.statName.setCompoundDrawablesRelativeWithIntrinsicBounds(statDot(stat.color, 10.dpToPx()), null, null, null)
-        binding.statName.compoundDrawablePadding = 10.dpToPx()
+        renderHeader()
+        real = realValues()
+        unit = when (stat.kind) {
+            StatKind.SCREEN, StatKind.VIBECODING, StatKind.MUSIC -> Measure.HOURS
+            StatKind.MONEY -> Measure.DOLLARS.takeIf { real != null }
+            else -> null
+        }
 
         binding.cards.removeAllViews()
         spendingShownOn = null
         socialShownState = null
-        if (Spending.moneyStat(data)?.id == stat.id) spendingCard()
-        if (AutoStats.id(requireContext(), AutoStats.SLEEP, data) == stat.id) {
-            val nights = Sleep.nights(requireContext())
-            sleepCard(nights)
-            sleepTimesCard(nights)
-            sleepMoodCard(nights)
-        }
-        if (AutoStats.id(requireContext(), AutoStats.MUSIC, data) == stat.id) musicCard()
-        if (AutoStats.id(requireContext(), AutoStats.STEPS, data) == stat.id) stepsCard()
-        if (AutoStats.id(requireContext(), AutoStats.VIBECODING, data) == stat.id) {
-            val days = Vibecoding.days(requireContext())
-            vibeTodayCard(days)
-            vibeProjectsCard(days)
-            vibeHoursCard(days)
-            vibeYouCard(days)
-            vibeCostCard(days)
-        }
-        if (AutoStats.id(requireContext(), AutoStats.SOCIAL, data) == stat.id) {
-            val days = Social.days(requireContext())
-            socialTodayCard(days)
-            socialHomesCard(days)
-            socialTimelineCard(days)
-            socialStayInCard(days)
-            socialMoodCard(days)
-        }
-        if (stat.medicine) {
-            if (stat.name.contains(COFFEE, ignoreCase = true)) cupsCard() else takenCard()
-            if (stat.name.contains(SERTRALINE, ignoreCase = true)) holidayCard()
-            trendCard()
-            overTimeCard()
-            doseCard()
-        } else {
-            dailyCard()
-            if (stat.id == MoodStore.USAGE) {
-                deviceSplitCard()
+        val context = requireContext()
+        // Each kind's own cards come first, then the ones every stat gets
+        when (stat.kind) {
+            StatKind.SCREEN -> {
                 readDevicesOnce()
-                val habits = PhoneHabits.days(requireContext())
-                pickupsCard(habits)
-                doomCard(habits)
-                val withData = DeviceTime.Device.values().filter { DeviceTime.days(requireContext(), it).isNotEmpty() }
-                withData.forEach { deviceCard(it) }
-                // Until a device's file has been found
-                if (withData.isEmpty()) macSetupCard()
+                devicePieCard()
+                appsCard()
+                pickupsCard(PhoneHabits.days(context))
+                if (DeviceTime.Device.values().none { DeviceTime.days(context, it).isNotEmpty() }) macSetupCard()
+                screenDailyCard()
             }
-            trendCard()
-            overTimeCard()
-            if (stat.id == MoodStore.USAGE) topAppCard() else howOftenCard()
-            weekdayCard()
+            StatKind.SLEEP -> {
+                val nights = Sleep.nights(context)
+                sleepCard(nights)
+                sleepTimesCard(nights)
+                sleepPhoneCard(nights)
+                sleepMoodCard(nights)
+                dailyCard()
+            }
+            StatKind.MONEY -> {
+                spendingCard()
+                moneyCalendarCard()
+                moneyMonthCard()
+                moneyCategoriesCard(essential = false)
+                moneyShopsCard()
+                moneyCategoriesCard(essential = true)
+            }
+            StatKind.COFFEE -> cupsCard()
+            StatKind.EXERCISE -> {
+                workoutsCard()
+                stepsCard()
+            }
+            StatKind.MEDITATION -> {
+                streakCard()
+                dailyCard()
+            }
+            StatKind.MUSIC -> {
+                musicCard()
+                musicDaysCard()
+            }
+            StatKind.VIBECODING -> {
+                val days = Vibecoding.days(context)
+                vibeTodayCard(days)
+                vibeProjectsCard(days)
+                vibeHoursCard(days)
+                vibeYouCard(days)
+                vibeCostCard(days)
+            }
+            StatKind.SOCIAL -> {
+                val days = Social.days(context)
+                socialTodayCard(days)
+                socialHomesCard(days)
+                socialTimelineCard(days)
+                socialStayInCard(days)
+                socialMoodCard(days)
+                dailyCard()
+            }
+            StatKind.LIBIDO -> {
+                pornCard()
+                dailyCard()
+            }
+            StatKind.MEDICINE -> takenCard()
+            else -> dailyCard()
         }
-        takenVsNotCard()
+        trendCard()
+        overTimeCard()
+        when {
+            stat.kind == StatKind.MONEY || stat.kind == StatKind.MUSIC || unit != null -> {}
+            stat.medicine -> doseCard()
+            else -> howOftenCard()
+        }
+        if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE) weekdayCard()
+        // Set against the medicines, or on a medicine's page every stat set against it; not for things counted like Coffee
+        if (stat.isMedicine || !stat.medicine) takenVsNotCard()
+    }
+
+    /** The stat's name and icon on a band of its colour, with back and Edit on it */
+    private fun renderHeader() {
+        val color = stat.themeColor
+        val onColor = if (ColorUtils.calculateLuminance(color) > 0.45) 0xFF161616.toInt() else 0xFFFFFFFF.toInt()
+        binding.header.background = GradientDrawable().apply {
+            cornerRadius = 28.dpToPx().toFloat()
+            setColor(color)
+        }
+        binding.statName.text = stat.name
+        binding.statName.setTextColor(onColor)
+        binding.statIcon.background = StatIcons.drawable(StatIcons.forStat(stat), onColor, 26.dpToPx())
+        binding.back.setTextColor(onColor)
+        binding.editStat.setTextColor(onColor)
+        binding.editStat.background = GradientDrawable().apply {
+            cornerRadius = 20.dpToPx().toFloat()
+            setStroke(1.dpToPx(), ColorUtils.setAlphaComponent(onColor, 110))
+        }
+    }
+
+    /**
+     * The page's stat in real terms, where it has them: Screen time's hours on every device, Vibecoding's
+     * and Music's hours, and Money's dollars since purchases have been read (days without any being $0).
+     */
+    private fun realValues(): Map<LocalDate, Float>? {
+        val context = requireContext()
+        return when (stat.kind) {
+            StatKind.SCREEN -> data.days.entries.mapNotNull { (key, day) ->
+                day.totalUsageMs?.let { ms -> runCatching { LocalDate.parse(key) }.getOrNull()?.let { it to ms / HOUR_MS } }
+            }.toMap()
+            StatKind.VIBECODING -> Vibecoding.days(context).mapValues { it.value.minutes / 60f }
+            StatKind.MUSIC -> Music.days(context).mapValues { it.value.ms / HOUR_MS }.let { played ->
+                // Days logged with nothing played count as none
+                played + dates.filter { !played.containsKey(it) && dayOf(it)?.face(stat.id) != null }.associateWith { 0f }
+            }
+            StatKind.MONEY -> {
+                val since = Spending.trackedSince(context) ?: return null
+                val spent = Spending.dailyCents(context)
+                val today = LocalDate.now()
+                (0..ChronoUnit.DAYS.between(since, today)).associate { since.plusDays(it) to (spent[since.plusDays(it)] ?: 0L) / 100f }
+            }
+            else -> null
+        }
     }
 
     // --- Values ---
@@ -216,11 +299,38 @@ class StatPageFragment : Fragment() {
 
     private fun dayOf(date: LocalDate) = data.days[date.toString()]
 
-    /** [s]'s value on [date]: hours for Screen time, otherwise its face's score, 1 to 5. */
+    /** [s]'s value on [date]: in real terms for the page's own stat if it has them ([real]), else [scoreOf]. */
     private fun valueOf(s: StatInfo, date: LocalDate): Float? {
+        if (s.id == stat.id) real?.let { return it[date] }
+        return scoreOf(s, date)
+    }
+
+    /** [s]'s face's score on [date], 1 to 5 (hours for Screen time) */
+    private fun scoreOf(s: StatInfo, date: LocalDate): Float? {
         val day = dayOf(date) ?: return null
         if (s.id == MoodStore.USAGE) return day.totalUsageMs?.let { it / HOUR_MS }
         return day.face(s.id)?.let { MoodStore.score(it, s.inverted).toFloat() }
+    }
+
+    /** What [value] says in the page's unit: a time, an amount or a score */
+    private fun valueText(value: Float): String = when (unit) {
+        Measure.HOURS -> duration((value * HOUR_MS).toLong())
+        Measure.DOLLARS -> moneyShort((value * 100).roundToInt().toLong())
+        null -> decimal(value)
+    }
+
+    /** The top of an axis for values up to [highest]: whole hours (at least [minHours]), or a round amount of money */
+    private fun axisMax(highest: Float?, minHours: Float = if (usage) 8f else 2f): Float = when (unit) {
+        Measure.HOURS -> hoursMax(highest, minHours)
+        Measure.DOLLARS -> listOf(10f, 20f, 50f, 100f, 200f, 300f, 500f, 1000f, 2000f, 5000f, 10_000f).firstOrNull { it >= (highest ?: 0f) } ?: (ceil((highest ?: 0f) / 1000f) * 1000f)
+        null -> 5f
+    }
+
+    /** Lines across an axis up to [max], each with its label */
+    private fun axisTicks(max: Float): List<Pair<Float, String>> = when (unit) {
+        Measure.HOURS -> (0..max.toInt() step if (max <= 4f) 1 else 2).map { it.toFloat() to getString(R.string.hours_short, it) }
+        Measure.DOLLARS -> (0..4).map { max * it / 4 }.map { it to "$" + it.roundToInt() }
+        null -> listOf(1f, 3f, 5f).map { it to it.toInt().toString() }
     }
 
     /** The face [value] is nearest, or for a medicine [taken] at all, its nearest dose. */
@@ -231,8 +341,11 @@ class StatPageFragment : Fragment() {
     }
 
     /** Null for a medicine's blank face, left empty like on the calendar. */
-    private fun colorFor(s: StatInfo, value: Float, taken: Boolean = false): Int? =
-        faceFor(s, value, taken).let { face -> if (s.isBlank(face)) null else s.faceColor(requireContext(), face) }
+    private fun colorFor(s: StatInfo, value: Float, taken: Boolean = false, faces: Boolean = false): Int? {
+        // Real values other than Screen time's hours have no faces to match; they're the stat's own colour
+        if (!faces && s.id == stat.id && unit != null && !usage) return if (value > 0f) s.themeColor else null
+        return faceFor(s, value, taken).let { face -> if (s.isBlank(face)) null else s.faceColor(requireContext(), face) }
+    }
 
     /** The medicine's dose counted towards [date]: the day before's when it affects the next day. */
     private fun doseFor(med: StatInfo, date: LocalDate): Int? =
@@ -256,21 +369,24 @@ class StatPageFragment : Fragment() {
 
     /** [s]'s day in words: its face's name, or Screen time's time. */
     private fun dayText(s: StatInfo, date: LocalDate): String? {
+        if (s.id == stat.id && unit != null && !usage) real?.get(date)?.let { return valueText(it) }
         val day = dayOf(date) ?: return null
         if (s.id == MoodStore.USAGE) return day.totalUsageMs?.let { requireContext().formattedTimeSpent(it) }
         return day.face(s.id)?.let { faceName(s, it) }
     }
 
-    private fun averageText(s: StatInfo, average: Float): String =
-        if (s.id == MoodStore.USAGE) getString(R.string.a_day, requireContext().formattedTimeSpent((average * HOUR_MS).toLong()))
-        else String.format(Locale.getDefault(), "%.1f", average)
+    private fun averageText(s: StatInfo, average: Float): String = when {
+        s.id == MoodStore.USAGE -> getString(R.string.a_day, requireContext().formattedTimeSpent((average * HOUR_MS).toLong()))
+        s.id == stat.id && unit != null -> getString(R.string.a_day, valueText(average))
+        else -> String.format(Locale.getDefault(), "%.1f", average)
+    }
 
     /** [s]'s average over the days [keyOf] puts in each group, leaving out days it gives null. */
-    private fun averages(s: StatInfo, keyOf: (LocalDate) -> Int?): Map<Int, Float> {
+    private fun averages(s: StatInfo, keyOf: (LocalDate) -> Int?, value: (StatInfo, LocalDate) -> Float? = ::valueOf): Map<Int, Float> {
         val values = mutableMapOf<Int, MutableList<Float>>()
         dates.forEach { date ->
             val key = keyOf(date) ?: return@forEach
-            val value = valueOf(s, date) ?: return@forEach
+            val value = value(s, date) ?: return@forEach
             values.getOrPut(key) { mutableListOf() }.add(value)
         }
         return values.mapValues { (_, list) -> list.average().toFloat() }
@@ -288,10 +404,11 @@ class StatPageFragment : Fragment() {
         return counts
     }
 
-    private val firstDate: LocalDate? get() = dates.firstOrNull { valueOf(stat, it) != null }
+    private val firstDate: LocalDate?
+        get() = listOfNotNull(real?.filterValues { it > 0f }?.keys?.minOrNull(), dates.firstOrNull { valueOf(stat, it) != null }).minOrNull()
 
-    /** Screen time's axis: at least 8 hours, rounded up to an even number to fit [highest]. */
-    private fun hoursMax(highest: Float?) = maxOf(8f, ceil((highest ?: 0f) / 2) * 2)
+    /** An hours axis: at least [minHours], rounded up to an even number to fit [highest]. */
+    private fun hoursMax(highest: Float?, minHours: Float = 8f) = maxOf(minHours, ceil((highest ?: 0f) / 2) * 2)
 
     private val mood get() = stats.first { it.id == MoodStore.MOOD }
 
@@ -302,190 +419,7 @@ class StatPageFragment : Fragment() {
             ContextCompat.getColor(requireContext(), R.color.medicineDark), 0.4f
         )
 
-    private fun dateText(date: LocalDate) = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
-
     // --- Cards ---
-
-    /** A card with its title, anything on the right of it, its drawing, a key, and the tapped point's details. */
-    private inner class Card(title: String) {
-        val context = requireContext()
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.rounded_rect_shade_color)
-            setPadding(16.dpToPx(), 16.dpToPx(), 16.dpToPx(), 14.dpToPx())
-        }
-        val headerEnd = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val scene = StatSceneView(context)
-        val note = textView(13f, 150).apply {
-            gravity = Gravity.CENTER
-            updatePadding(top = 20.dpToPx(), bottom = 20.dpToPx())
-            isVisible = false
-        }
-        val chips = FlowLayout(context).apply { isVisible = false }
-        val key = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            isVisible = false
-        }
-        val details = textView(13f, 255).apply {
-            gravity = Gravity.CENTER
-            setLineSpacing(4.dpToPx().toFloat(), 1f)
-            isVisible = false
-        }
-
-        /** What the tapped point's details say */
-        var describe: (Any) -> String = { "" }
-
-        init {
-            root.addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(textView(15f, 255).apply { this.text = title }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(headerEnd)
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = 14.dpToPx()
-            })
-            root.addView(scene)
-            root.addView(note)
-            root.addView(chips, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 14.dpToPx()
-            })
-            root.addView(key, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 12.dpToPx()
-            })
-            root.addView(details, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 10.dpToPx()
-            })
-            scene.onPicked = { picked ->
-                details.isVisible = picked != null
-                details.text = picked?.let(describe)
-            }
-            binding.cards.addView(root, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 0)
-            })
-        }
-
-        fun textView(size: Float, alpha: Int) = TextView(context, null, 0, R.style.TextSmall).apply {
-            textSize = size
-            setTextColor(faint(alpha))
-        }
-
-        fun subtitle(text: String) {
-            headerEnd.removeAllViews()
-            headerEnd.addView(textView(13f, 150).apply { this.text = text })
-        }
-
-        /** A big figure with a line under it, between the title and the drawing */
-        fun headline(figure: String, caption: String) {
-            root.addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                    text = figure
-                    textSize = 40f
-                    setTextColor(ink)
-                    includeFontPadding = false
-                })
-                addView(textView(13f, 150).apply {
-                    text = caption
-                    updatePadding(top = 4.dpToPx())
-                })
-            }, root.indexOfChild(scene), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = 16.dpToPx()
-            })
-        }
-
-        /** Options on the right, the [selected] one bold. */
-        fun segment(options: List<Int>, selected: Int, onSelect: (Int) -> Unit) {
-            headerEnd.removeAllViews()
-            options.forEachIndexed { i, option ->
-                headerEnd.addView(textView(13f, if (i == selected) 255 else 120).apply {
-                    setText(option)
-                    if (i == selected) setTypeface(null, Typeface.BOLD)
-                    setPadding(8.dpToPx(), 4.dpToPx(), if (i == options.lastIndex) 0 else 2.dpToPx(), 4.dpToPx())
-                    setOnClickListener { if (i != selected) onSelect(i) }
-                })
-            }
-        }
-
-        /** ‹ [text] ›, stepping with [onStep] (-1 back, 1 on) where [canGoBack] and [canGoForward]. */
-        fun stepper(text: String, canGoBack: Boolean, canGoForward: Boolean, days: Int, onStep: (Int) -> Unit) {
-            headerEnd.removeAllViews()
-            fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
-                this.text = symbol
-                textSize = 18f
-                setTextColor(ink)
-                alpha = if (enabled) 0.8f else 0.2f
-                isEnabled = enabled
-                contentDescription = getString(description, days)
-                setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
-                setOnClickListener { onStep(by) }
-            }
-            headerEnd.addView(arrow("‹", canGoBack, -1, R.string.previous_days))
-            headerEnd.addView(textView(13f, 150).apply { this.text = text })
-            headerEnd.addView(arrow("›", canGoForward, 1, R.string.next_days))
-        }
-
-        /**
-         * A chip per option, each with its colour's dot. The [selected] one stands out and the rest fade;
-         * with none selected they're all as they are.
-         */
-        fun chipRow(options: List<Pair<String, Int>>, selected: Int?, onTap: (Int) -> Unit) {
-            chips.isVisible = true
-            chips.removeAllViews()
-            options.forEachIndexed { i, (name, color) ->
-                chips.addView(textView(13f, 255).apply {
-                    text = name
-                    setBackgroundResource(R.drawable.bg_stat_chip)
-                    setPadding(10.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
-                    setStatDot(color)
-                    alpha = when (selected) {
-                        null -> 0.8f
-                        i -> 1f
-                        else -> 0.35f
-                    }
-                    if (i == selected) setTypeface(null, Typeface.BOLD)
-                    setOnClickListener { onTap(i) }
-                })
-            }
-        }
-
-        fun keyItem(color: Int, text: String, ring: Boolean = false) {
-            key.isVisible = true
-            key.addView(textView(13f, 150).apply {
-                this.text = text
-                gravity = Gravity.CENTER_VERTICAL
-                val size = 11.dpToPx()
-                val mark = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setSize(size, size)
-                    if (ring) setStroke(2.dpToPx(), color) else setColor(color)
-                }
-                setCompoundDrawablesRelativeWithIntrinsicBounds(mark, null, null, null)
-                compoundDrawablePadding = 6.dpToPx()
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginEnd = 16.dpToPx()
-            })
-        }
-
-        fun draw(build: (StatSceneView.Scene) -> Unit) {
-            note.isVisible = false
-            scene.isVisible = true
-            details.isVisible = false
-            scene.setScene(build = build)
-        }
-
-        /** Instead of a drawing, when there's too little to draw */
-        fun showNote(text: String) {
-            scene.isVisible = false
-            chips.isVisible = false
-            details.isVisible = false
-            note.isVisible = true
-            note.text = text
-        }
-    }
 
     /** The [count] days the Daily, Taken or Cups card shows, stepping back to the stat's first day. */
     private fun dailyDates(card: Card, count: Int = DAILY_DAYS, redraw: () -> Unit): List<LocalDate> {
@@ -522,7 +456,7 @@ class StatPageFragment : Fragment() {
                 else (0L until AVERAGE_DAYS).mapNotNull { valueOf(stat, date.minusDays(it)) }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
             }
             val max = if (usage) hoursMax((values + averages).filterNotNull().maxOrNull()) else 5f
-            val meds = stats.filter { it.medicine && it.id != stat.id }
+            val meds = stats.filter { it.isMedicine && it.id != stat.id }
                 .map { med -> med to days.map { date -> doseFor(med, date)?.takeIf { !med.isBlank(it) } } }
                 .filter { (_, doses) -> doses.any { it != null } }
             card.describe = { key ->
@@ -630,7 +564,7 @@ class StatPageFragment : Fragment() {
      */
     private fun cupsCard() {
         val card = Card(getString(R.string.stat_cups))
-        card.keyItem(stat.color, getString(R.string.a_cup))
+        card.keyItem(coffeeCup, getString(R.string.a_cup))
         card.keyItem(hotCup, getString(R.string.cup_past, CUPS_HOT + 1))
         fun cupsOn(date: LocalDate): Int? = dayOf(date)?.face(stat.id)?.let { stat.faces.indexOf(it).coerceAtLeast(0) }
         fun draw() {
@@ -654,7 +588,7 @@ class StatPageFragment : Fragment() {
                     if (count == 0) s.circle(x + cup / 2, base - s.dp(4f), s.dp(2f), faint(110))
                     repeat(count ?: 0) { k ->
                         val y = base - (k + 1) * (cupHeight + gap) + gap
-                        val color = if (k >= CUPS_HOT) hotCup else stat.color
+                        val color = if (k >= CUPS_HOT) hotCup else coffeeCup
                         s.path(Path().apply {
                             moveTo(x, y)
                             lineTo(x + cup, y)
@@ -681,11 +615,12 @@ class StatPageFragment : Fragment() {
 
     /**
      * Purchases read from CommBank's and Google Wallet's notifications, which fill in Money spent: today's
-     * total and the latest few. Until notification access is on, a way to turn it on.
+     * total (leaving out essentials) and the latest [SPENDING_SHOWN]. Until notification access is on, a
+     * way to turn it on.
      */
     private fun spendingCard() {
         val context = requireContext()
-        val card = Card(getString(R.string.spending_card))
+        val card = Card(getString(R.string.today))
         val on = Spending.isEnabled(context)
         spendingShownOn = on
         if (!on) {
@@ -693,33 +628,46 @@ class StatPageFragment : Fragment() {
             card.chipRow(listOf(getString(R.string.spending_turn_on) to ink), null) { Spending.openSettings(context) }
             return
         }
-        card.subtitle(getString(R.string.spending_sources))
         val purchases = Spending.purchases(context)
         val today = LocalDate.now()
         val todays = purchases.filter { it.date == today }
-        card.headline(money(todays.sumOf { it.cents }), resources.getQuantityString(R.plurals.spending_today, todays.size, todays.size))
+        val spent = todays.filter { !it.essential }
+        val essentials = todays.filter { it.essential }.sumOf { it.cents }
+        card.headline(money(spent.sumOf { it.cents }), listOfNotNull(
+            resources.getQuantityString(R.plurals.spending_today, spent.size, spent.size),
+            essentials.takeIf { it > 0 }?.let { getString(R.string.plus_essentials, money(it)) },
+        ).joinToString(" · "))
         if (purchases.isEmpty()) {
             card.showNote(getString(R.string.spending_none))
             return
         }
-        card.scene.isVisible = false
         val timeFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         purchases.take(SPENDING_SHOWN).forEach { purchase ->
             val time = java.time.Instant.ofEpochMilli(purchase.time).atZone(java.time.ZoneId.systemDefault())
-            val `when` = if (purchase.date == today) time.format(timeFormat) else dateText(purchase.date)
+            val `when` = if (purchase.date == today) time.format(timeFormat).lowercase(Locale.getDefault()) else dateText(purchase.date)
             list.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
+                updatePadding(top = 7.dpToPx(), bottom = 7.dpToPx())
+                alpha = if (purchase.essential) 0.6f else 1f
                 addView(card.textView(15f, 255).apply {
                     text = money(purchase.cents)
                     setTypeface(null, Typeface.BOLD)
-                }, LinearLayout.LayoutParams(76.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-                addView(card.textView(13f, 170).apply {
-                    text = purchase.shop
-                    isSingleLine = true
-                    ellipsize = TextUtils.TruncateAt.END
+                    setTextColor(if (purchase.essential) faint(255) else moneyGold)
+                }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(card.textView(14f, 235).apply {
+                        text = purchase.merchant
+                        isSingleLine = true
+                        ellipsize = TextUtils.TruncateAt.END
+                    })
+                    addView(card.textView(12f, 140).apply {
+                        text = listOfNotNull(purchase.category, getString(R.string.essential).takeIf { purchase.essential }).joinToString(" · ").ifEmpty { `when` }
+                        isSingleLine = true
+                        ellipsize = TextUtils.TruncateAt.END
+                    })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(card.textView(12f, 130).apply {
                     text = `when`
@@ -727,21 +675,276 @@ class StatPageFragment : Fragment() {
                 })
             })
         }
-        card.root.addView(list, card.root.indexOfChild(card.scene))
+        card.addBody(list)
     }
 
-    private fun money(cents: Long) = String.format(Locale.getDefault(), "$%d.%02d", cents / 100, cents % 100)
+    private val moneyGold get() = StatKind.MONEY.shades!!.let { ColorUtils.blendARGB(it.first, it.second, 0.3f) }
+
+    /** Dollars short enough for a day's square: "$4.50", "$45", "$1.2k" */
+    private fun squareMoney(cents: Long): String = when {
+        cents < 1000 -> String.format(Locale.getDefault(), "$%.2f", cents / 100.0)
+        cents < 100_000 -> "$" + (cents + 50) / 100
+        else -> String.format(Locale.getDefault(), "$%.1fk", cents / 100_000.0)
+    }
+
+    /**
+     * The days as a calendar, each square gold as deep as what was spent (leaving out essentials), with
+     * the amount on it. Days from before purchases were read show their face's colour and label instead.
+     */
+    private fun moneyCalendarCard() {
+        val card = Card(getString(R.string.spent_each_day))
+        val shades = StatKind.MONEY.shades!!
+        fun draw() {
+            val days = dailyDates(card, redraw = ::draw)
+            val cents = days.associateWith { date -> real?.get(date)?.let { (it * 100).roundToInt().toLong() } }
+            val most = cents.values.filterNotNull().maxOrNull()?.coerceAtLeast(1) ?: 1
+            card.describe = { key ->
+                val date = key as LocalDate
+                val amount = cents[date]
+                val purchases = Spending.purchases(requireContext()).filter { it.date == date }
+                (listOf(dateText(date), amount?.let { getString(R.string.stat_label, getString(R.string.spent), money(it)) } ?: dayText(stat, date) ?: "–") +
+                    purchases.take(4).map { getString(R.string.stat_label, it.merchant, money(it.cents)) }).joinToString("\n")
+            }
+            card.draw { s ->
+                val cell = minOf(s.width / 7.4f, s.dp(48f))
+                val left = (s.width - cell * 7) / 2
+                val gap = s.dp(3f)
+                var day = DayOfWeek.MONDAY
+                repeat(7) { i ->
+                    s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, s.sp(12f), faint(140), s.sp(12f))
+                    day = day.plus(1)
+                }
+                val gridTop = s.dp(24f)
+                val lead = days.first().dayOfWeek.value - 1
+                val corner = s.dp(9f)
+                days.forEachIndexed { i, date ->
+                    val place = i + lead
+                    val x = left + place % 7 * cell + gap
+                    val y = gridTop + place / 7 * cell + gap
+                    val size = cell - gap * 2
+                    val amount = cents[date]
+                    val face = dayOf(date)?.face(stat.id)
+                    val (fill, text) = when {
+                        amount != null && amount > 0 -> ColorUtils.blendARGB(shades.first, shades.second, (amount.toFloat() / most).coerceIn(0f, 1f) * 0.85f) to squareMoney(amount)
+                        amount != null -> null to "$0"
+                        face != null && !stat.isBlank(face) -> stat.faceColor(requireContext(), face) to faceName(stat, face)
+                        face != null -> null to "$0"
+                        else -> null to null
+                    }
+                    if (fill != null) s.rect(x, y, x + size, y + size, fill, corner)
+                    else if (text != null) s.outline(x, y, x + size, y + size, faint(80), corner, s.dp(1.5f))
+                    val textColor = if (fill != null && ColorUtils.calculateLuminance(fill) > 0.4) 0xFF1A1A1A.toInt() else if (fill != null) 0xFFFFFFFF.toInt() else faint(150)
+                    // A day with nothing logged is just its date, faint
+                    if (text == null) s.text(date.dayOfMonth.toString(), x + size / 2, y + size / 2 + s.sp(4.5f), faint(70), s.sp(12.5f))
+                    else s.text(date.dayOfMonth.toString(), x + s.dp(6f), y + s.sp(11f), ColorUtils.setAlphaComponent(textColor, 150), s.sp(9.5f), Paint.Align.LEFT)
+                    text?.let {
+                        val textSize = if (it.length > 5) s.sp(10f) else s.sp(12f)
+                        s.text(it, x + size / 2, y + size * 0.68f, textColor, textSize, bold = fill != null)
+                    }
+                    s.target(date, RectF(x - gap, y - gap, x + size + gap, y + size + gap), RectF(x - gap / 2, y - gap / 2, x + size + gap / 2, y + size + gap / 2), corner)
+                }
+                val rows = (days.size + lead + 6) / 7
+                s.height = gridTop + rows * cell + s.dp(2f)
+            }
+        }
+        draw()
+    }
+
+    /** This month so far against last month by the same day, and the usual day */
+    private fun moneyMonthCard() {
+        val spent = real ?: return
+        val today = LocalDate.now()
+        val thisMonth = spent.filterKeys { YearMonth.from(it) == YearMonth.from(today) }
+        val lastMonth = YearMonth.from(today).minusMonths(1)
+        val lastBy = spent.filterKeys { YearMonth.from(it) == lastMonth && it.dayOfMonth <= today.dayOfMonth }
+        val card = Card(getString(R.string.this_month))
+        val tracked = lastBy.isNotEmpty()
+        tiles(card, null, listOfNotNull(
+            moneyShort((thisMonth.values.sum() * 100).roundToInt().toLong()) to getString(R.string.so_far),
+            if (tracked) moneyShort((lastBy.values.sum() * 100).roundToInt().toLong()) to getString(R.string.last_month_by_now) else null,
+            moneyShort((spent.filterKeys { it > today.minusDays(30) }.values.average() * 100).roundToInt().toLong()) to getString(R.string.a_usual_day),
+        ))
+    }
+
+    /** What went on each category (or on essentials alone) over the last 30 days */
+    private fun moneyCategoriesCard(essential: Boolean) {
+        val context = requireContext()
+        val since = LocalDate.now().minusDays(RECENT_DAYS.toLong())
+        val purchases = Spending.purchases(context).filter { it.date > since && it.essential == essential }
+        if (purchases.isEmpty()) return
+        val card = Card(getString(if (essential) R.string.essentials else R.string.where_it_went))
+        card.subtitle(getString(R.string.last_days, RECENT_DAYS))
+        val groups = purchases.groupBy { it.category ?: getString(R.string.other) }.mapValues { (_, list) -> list.sumOf { it.cents } }
+            .entries.sortedByDescending { it.value }.take(6)
+        if (essential) card.headline(money(purchases.sumOf { it.cents }), getString(R.string.essentials_note))
+        val color = if (essential) faint(150) else moneyGold
+        card.describe = { key ->
+            val (name, cents) = groups[key as Int]
+            val count = purchases.count { (it.category ?: getString(R.string.other)) == name }
+            listOf(name, getString(R.string.stat_label, getString(R.string.spent), money(cents)),
+                getString(R.string.stat_label, getString(R.string.purchases), count.toString())).joinToString("\n")
+        }
+        horizontalBars(card, groups.map { (name, cents) -> Triple(name, (cents / 100).toInt().coerceAtLeast(1), color) }) { "$$it" }
+    }
+
+    /** The shops spent at most over the last 30 days, leaving out essentials */
+    private fun moneyShopsCard() {
+        val since = LocalDate.now().minusDays(RECENT_DAYS.toLong())
+        val purchases = Spending.purchases(requireContext()).filter { it.date > since && !it.essential }
+        if (purchases.size < 2) return
+        val card = Card(getString(R.string.top_shops))
+        card.subtitle(getString(R.string.last_days, RECENT_DAYS))
+        val shops = purchases.groupBy { it.merchant }.entries.sortedByDescending { (_, list) -> list.sumOf { it.cents } }.take(5)
+        card.describe = { key ->
+            val (shop, list) = shops[key as Int]
+            listOf(shop, getString(R.string.stat_label, getString(R.string.spent), money(list.sumOf { it.cents })),
+                getString(R.string.stat_label, getString(R.string.purchases), list.size.toString()),
+                getString(R.string.stat_label, getString(R.string.last_time), dateText(list.maxOf { it.date }))).joinToString("\n")
+        }
+        horizontalBars(card, shops.map { (shop, list) -> Triple(shop, (list.sumOf { it.cents } / 100).toInt().coerceAtLeast(1), moneyGold) }) { "$$it" }
+    }
+
+    // --- Exercise, Meditation and Music ---
+
+    /** Exercise's days as a calendar of dumbbells, deeper the harder the day; a faint outline for a rest day */
+    private fun workoutsCard() {
+        val card = Card(getString(R.string.workouts))
+        fun draw() {
+            val days = dailyDates(card, redraw = ::draw)
+            card.describe = { key -> listOf(dateText(key as LocalDate), dayText(stat, key) ?: "–").joinToString(" · ") }
+            card.draw { s ->
+                val cell = minOf(s.width / 7.4f, s.dp(48f))
+                val left = (s.width - cell * 7) / 2
+                val gap = s.dp(3f)
+                var day = DayOfWeek.MONDAY
+                repeat(7) { i ->
+                    s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, s.sp(12f), faint(140), s.sp(12f))
+                    day = day.plus(1)
+                }
+                val gridTop = s.dp(24f)
+                val lead = days.first().dayOfWeek.value - 1
+                days.forEachIndexed { i, date ->
+                    val place = i + lead
+                    val x = left + place % 7 * cell + gap
+                    val y = gridTop + place / 7 * cell + gap
+                    val size = cell - gap * 2
+                    val face = dayOf(date)?.face(stat.id)
+                    val done = face != null && !isRest(face)
+                    if (done) {
+                        val icon = size * 0.62f
+                        s.icon(StatIcons.DUMBBELL, x + (size - icon) / 2, y + (size - icon) / 2 - s.dp(3f), icon, stat.faceColor(requireContext(), face!!))
+                        s.text(date.dayOfMonth.toString(), x + size / 2, y + size - s.dp(2f), faint(150), s.sp(9.5f))
+                    } else {
+                        if (face != null) s.outline(x, y, x + size, y + size, faint(60), s.dp(9f), s.dp(1.5f))
+                        s.text(date.dayOfMonth.toString(), x + size / 2, y + size / 2 + s.sp(4.5f), faint(if (face != null) 130 else 70), s.sp(12.5f))
+                    }
+                    s.target(date, RectF(x - gap, y - gap, x + size + gap, y + size + gap), RectF(x - gap / 2, y - gap / 2, x + size + gap / 2, y + size + gap / 2), s.dp(9f))
+                }
+                val rows = (days.size + lead + 6) / 7
+                s.height = gridTop + rows * cell + s.dp(2f)
+            }
+        }
+        draw()
+    }
+
+    /** A rest day: none, for something counted from none, otherwise the lowest score */
+    private fun isRest(face: Int) = if (stat.medicine) stat.isBlank(face) else MoodStore.score(face, stat.inverted) <= 1
+
+    /** Days in a row with some, the best run, and the last [STREAK_DAYS] days as dots */
+    private fun streakCard() {
+        val today = LocalDate.now()
+        val done = dates.filter { date -> dayOf(date)?.face(stat.id)?.let { !isRest(it) } == true }.toSet()
+        val card = Card(getString(R.string.streak))
+        if (dates.none { dayOf(it)?.face(stat.id) != null }) return card.showNote(getString(R.string.no_data))
+        var current = 0
+        var date = if (today in done) today else today.minusDays(1)
+        while (date in done) {
+            current++
+            date = date.minusDays(1)
+        }
+        var best = 0
+        var run = 0
+        var previous: LocalDate? = null
+        done.sorted().forEach { d ->
+            run = if (previous?.plusDays(1) == d) run + 1 else 1
+            best = maxOf(best, run)
+            previous = d
+        }
+        card.headline(resources.getQuantityString(R.plurals.day_count, current, current), getString(R.string.streak_caption, best))
+        val color = stat.themeColor
+        card.keyItem(color, getString(R.string.streak_done))
+        card.keyItem(faint(170), getString(R.string.streak_missed), ring = true)
+        val days = (STREAK_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        card.describe = { key -> listOf(dateText(key as LocalDate), dayText(stat, key) ?: "–").joinToString(" · ") }
+        card.draw { s ->
+            val perRow = 10
+            val cell = s.width / perRow
+            val radius = minOf(cell * 0.32f, s.dp(10f))
+            days.forEachIndexed { i, d ->
+                val cx = i % perRow * cell + cell / 2
+                val cy = i / perRow * cell + cell / 2
+                val face = dayOf(d)?.face(stat.id)
+                when {
+                    d in done -> s.circle(cx, cy, radius, color)
+                    face != null -> s.ring(cx, cy, radius, faint(170), s.dp(2f))
+                    else -> s.circle(cx, cy, s.dp(2f), faint(70))
+                }
+                s.target(d, RectF(cx - cell / 2, cy - cell / 2, cx + cell / 2, cy + cell / 2),
+                    RectF(cx - radius - s.dp(3f), cy - radius - s.dp(3f), cx + radius + s.dp(3f), cy + radius + s.dp(3f)), radius + s.dp(3f))
+            }
+            s.height = ((days.size + perRow - 1) / perRow) * cell
+        }
+    }
+
+    /**
+     * Each day's listening as a level meter, a block per [MUSIC_BLOCK_MINUTES] minutes, lighter at the
+     * bottom and deeper up, the last [HABIT_DAYS] days.
+     */
+    private fun musicDaysCard() {
+        val days = Music.days(requireContext())
+        if (days.isEmpty()) return
+        val today = LocalDate.now()
+        val shown = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val card = Card(getString(R.string.music_each_day))
+        val shades = StatKind.MUSIC.shades!!
+        val blocks = shown.map { date -> ((days[date]?.ms ?: 0L) / 60_000L / MUSIC_BLOCK_MINUTES).toInt() }
+        val most = maxOf(blocks.maxOrNull() ?: 0, 6)
+        card.describe = { key ->
+            val date = key as LocalDate
+            val day = days[date]
+            (listOf(dateText(date), getString(R.string.stat_label, getString(R.string.time), duration(day?.ms ?: 0L))) +
+                day?.artists?.entries?.sortedByDescending { it.value }?.take(3)?.map { getString(R.string.stat_label, it.key, duration(it.value)) }.orEmpty()).joinToString("\n")
+        }
+        card.draw { s ->
+            val column = s.width / shown.size
+            val gap = s.dp(2f)
+            val block = minOf(s.dp(7f), s.dp(130f) / most - gap)
+            val bottom = most * (block + gap)
+            shown.forEachIndexed { i, date ->
+                val x = i * column + column * 0.18f
+                val w = column * 0.64f
+                val count = blocks[i]
+                if (count == 0) s.rect(x, bottom - s.dp(2f), x + w, bottom, faint(45), s.dp(1f))
+                repeat(minOf(count, most)) { k ->
+                    val y = bottom - (k + 1) * (block + gap) + gap
+                    s.rect(x, y, x + w, y + block, ColorUtils.blendARGB(shades.first, shades.second, k / most.toFloat()), s.dp(2f))
+                }
+                s.target(date, RectF(i * column, 0f, (i + 1) * column, bottom + s.dp(24f)), RectF(i * column, 0f, (i + 1) * column, bottom + s.dp(2f)))
+            }
+            labelIndices(shown.size, 3).forEach { i ->
+                s.text(shown[i].dayOfMonth.toString(), i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+            }
+            s.height = bottom + s.dp(24f)
+        }
+        card.keyItem(ColorUtils.blendARGB(shades.first, shades.second, 0.5f), getString(R.string.music_block, MUSIC_BLOCK_MINUTES))
+    }
 
     // --- Sleep and Music, filled in by themselves ---
-
-    private fun clock(time: java.time.LocalTime) = time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
 
     /** Minutes from midnight on the morning woken up: before it (going to bed) is negative. */
     private fun offset(time: java.time.LocalDateTime, date: LocalDate) = ChronoUnit.MINUTES.between(date.atStartOfDay(), time).toInt()
 
     private fun offsetClock(minutes: Int) = clock(java.time.LocalTime.MIDNIGHT.plusMinutes(Math.floorMod(minutes, 1440).toLong()))
-
-    private fun duration(ms: Long) = requireContext().formattedTimeSpent(ms)
 
     private fun nightText(date: LocalDate, night: Sleep.Night) = listOfNotNull(
         dateText(date),
@@ -988,23 +1191,6 @@ class StatPageFragment : Fragment() {
         day.outings.takeIf { it.isNotEmpty() }?.let { o -> getString(R.string.social_left_at, o.joinToString(", ") { clock(it.startTime.toLocalTime()) }) },
         day.mainHome?.let { getString(R.string.social_at, homeName(it)) },
     ).joinToString(" · ")
-
-    /** Three figures side by side under [caption] */
-    private fun tiles(card: Card, caption: String, tiles: List<Pair<String, String>>) {
-        card.draw { s ->
-            s.text(caption, 0f, s.sp(12f), faint(140), s.sp(12f), Paint.Align.LEFT)
-            val top = s.dp(22f)
-            val gap = s.dp(8f)
-            val width = (s.width - gap * (tiles.size - 1)) / tiles.size
-            tiles.forEachIndexed { i, (value, label) ->
-                val x = i * (width + gap)
-                s.rect(x, top, x + width, top + s.dp(64f), faint(18), s.dp(14f))
-                s.text(value, x + width / 2, top + s.dp(30f), ink, s.sp(17f), bold = true)
-                s.text(label, x + width / 2, top + s.dp(50f), faint(150), s.sp(12f))
-            }
-            s.height = top + s.dp(64f)
-        }
-    }
 
     /**
      * The two homes' Wi-Fi, set from the Wi-Fi you're on, with where you are now and how many days of
@@ -1307,34 +1493,13 @@ class StatPageFragment : Fragment() {
     /** Unlocks each day, today's against the usual. */
     private fun pickupsCard(days: Map<LocalDate, PhoneHabits.Day>) {
         if (days.isEmpty()) return
-        val card = Card(getString(R.string.pickups))
+        val card = Card(getString(R.string.phone_pickups), icon = StatIcons.PHONE, iconColor = faint(200))
         val today = LocalDate.now()
         val usual = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }.values.map { it.pickups }.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
         card.headline((days[today]?.pickups ?: 0).toString(),
             listOfNotNull(getString(R.string.pickups_today), usual?.let { getString(R.string.usually_n, it) }).joinToString(" · "))
         dayBars(card, days.mapValues { it.value.pickups.toFloat() }, stat.color) { _, value ->
             resources.getQuantityString(R.plurals.pickup_count, value.toInt(), value.toInt())
-        }
-    }
-
-    /** Time in stretches of [PhoneHabits.DOOM_MINUTES]+ minutes in one feed app, each day. */
-    private fun doomCard(days: Map<LocalDate, PhoneHabits.Day>) {
-        if (days.isEmpty()) return
-        val card = Card(getString(R.string.doomscrolling))
-        card.subtitle(getString(R.string.doom_rule, PhoneHabits.DOOM_MINUTES))
-        val today = LocalDate.now()
-        val day = days[today]
-        card.headline(duration(day?.doomMs ?: 0), listOfNotNull(
-            getString(R.string.doom_today),
-            day?.doomSessions?.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.doom_sessions, it, it) },
-            day?.doomApp?.let { getString(R.string.doom_mostly, it) },
-        ).joinToString(" · "))
-        // Nothing to chart until there's been some
-        if (days.values.none { it.doomMs > 0 }) return
-        dayBars(card, days.mapValues { it.value.doomMs / HOUR_MS }, ContextCompat.getColor(requireContext(), R.color.holiday)) { date, _ ->
-            val d = days.getValue(date)
-            listOfNotNull(duration(d.doomMs), d.doomSessions.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.doom_sessions, it, it) },
-                d.doomApp?.let { getString(R.string.doom_mostly, it) }).joinToString(" · ")
         }
     }
 
@@ -1346,7 +1511,7 @@ class StatPageFragment : Fragment() {
     /** Today's steps against the usual, a bar a day with the 10,000 line, and the last [HABIT_DAYS] days' figures. */
     private fun stepsCard() {
         val context = requireContext()
-        val card = Card(getString(R.string.steps_today))
+        val card = Card(getString(R.string.steps_title), icon = StatIcons.STEPS, iconColor = stat.themeColor)
         if (!Steps.hasPermission(context)) {
             card.showNote(getString(R.string.steps_need_permission))
             card.chipRow(listOf(getString(R.string.steps_allow) to ink), null) {
@@ -1365,11 +1530,11 @@ class StatPageFragment : Fragment() {
             return
         }
         card.keyItem(faint(110), getString(R.string.steps_goal, format.format(Steps.GOAL)))
-        dayBars(card, days.mapValues { it.value.toFloat() }, stat.color, Steps.GOAL.toFloat()) { _, value ->
+        dayBars(card, days.mapValues { it.value.toFloat() }, stat.themeColor, Steps.GOAL.toFloat()) { _, value ->
             getString(R.string.steps_count, format.format(value.toInt()))
         }
         if (past.size >= 2) {
-            val tilesCard = Card(getString(R.string.steps_usual_title))
+            val tilesCard = Card(getString(R.string.steps_usual_heading))
             tiles(tilesCard, getString(R.string.social_usual, past.size), listOf(
                 format.format(past.average().roundToInt()) to getString(R.string.steps_tile_average),
                 format.format(past.max()) to getString(R.string.steps_tile_best),
@@ -1391,55 +1556,303 @@ class StatPageFragment : Fragment() {
         }.start()
     }
 
+    // --- Screen time across the phone, the Mac and the TV ---
+
+    /** A device screen time comes from: its key in [MoodStore.Day.deviceMs] ("phone" for the phone's own), name and icon */
+    private class Source(val key: String, val name: String, val icon: String, val color: Int)
+
+    /** The phone, then the Mac and the TV, in shades of Screen time's colour so they read as one */
+    private val sources: List<Source>
+        get() = listOf(
+            Source(PHONE, getString(R.string.device_phone), StatIcons.PHONE, stat.color),
+            Source(DeviceTime.Device.MAC.key, getString(R.string.device_mac), StatIcons.LAPTOP, ColorUtils.blendARGB(stat.color, 0xFFFFFFFF.toInt(), 0.45f)),
+            Source(DeviceTime.Device.TV.key, getString(R.string.device_tv), StatIcons.TV, ColorUtils.blendARGB(stat.color, 0xFF000000.toInt(), 0.4f)),
+        )
+
+    private fun sourceMs(date: LocalDate, key: String): Long =
+        dayOf(date)?.let { if (key == PHONE) it.usageMs ?: 0L else it.deviceMs[key] ?: 0L } ?: 0L
+
+    private fun screenDayText(date: LocalDate) = (listOf(dateText(date), getString(R.string.stat_label, getString(R.string.total), duration(sources.sumOf { sourceMs(date, it.key) })))
+        + sources.filter { sourceMs(date, it.key) > 0 }.map { getString(R.string.stat_label, it.name, duration(sourceMs(date, it.key))) }).joinToString("\n")
+
     /**
-     * Screen time split between the phone, the Mac and the TV: today's, a stacked bar a day for the
-     * last [HABIT_DAYS] days, and each device's share of them.
+     * A bar a day of all screen time, stacked phone, Mac and TV in shades of one colour, against an hours
+     * axis. Tapping one gives the day's total and how it split.
      */
-    private fun deviceSplitCard() {
-        val context = requireContext()
-        val today = LocalDate.now()
-        val days = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
-        val devices = listOf(Triple("phone", getString(R.string.device_phone), stat.color)) +
-            DeviceTime.Device.values().map { Triple(it.key, getString(it.label), it.color) }
-        fun ms(date: LocalDate, key: String): Long = dayOf(date)?.let { if (key == "phone") it.usageMs ?: 0L else it.deviceMs[key] ?: 0L } ?: 0L
-        // Only the devices with any time in these days
-        val shown = devices.filter { (key, _, _) -> days.any { ms(it, key) > 0 } }
-        if (shown.size < 2) return
-        val card = Card(getString(R.string.device_split))
-        val totals = shown.map { (key, _, _) -> days.sumOf { ms(it, key) } }
-        val all = totals.sum().coerceAtLeast(1)
-        shown.forEachIndexed { i, (_, name, color) -> card.keyItem(color, getString(R.string.device_share, name, (totals[i] * 100f / all).roundToInt())) }
-        card.headline(duration(shown.sumOf { (key, _, _) -> ms(today, key) }),
-            shown.filter { (key, _, _) -> ms(today, key) > 0 }.joinToString(" · ") { (key, name, _) -> "$name ${duration(ms(today, key))}" }
-                .ifEmpty { getString(R.string.mac_not_today) })
-        card.describe = { key ->
-            val date = key as LocalDate
-            (listOf(dateText(date)) + shown.map { (k, name, _) -> "$name ${duration(ms(date, k))}" }).joinToString(" · ")
-        }
-        val max = days.maxOf { date -> shown.sumOf { (key, _, _) -> ms(date, key) } }.coerceAtLeast(1).toFloat()
-        card.draw { s ->
-            val top = s.dp(6f)
-            val bottom = top + s.dp(120f)
-            val column = s.width / days.size
-            s.line(0f, bottom, s.width, bottom, faint(30), s.dp(1f))
-            val gap = minOf(s.dp(2f), column * 0.15f)
-            days.forEachIndexed { i, date ->
-                val x = i * column
-                var y = bottom
-                shown.forEach { (key, _, color) ->
-                    val h = ms(date, key) / max * (bottom - top)
-                    if (h > 0f) {
-                        s.rect(x + gap, y - h, x + column - gap, y, color)
-                        y -= h
+    private fun screenDailyCard() {
+        val card = Card(getString(R.string.stat_daily))
+        sources.forEach { card.keyItem(it.color, it.name, icon = it.icon) }
+        fun draw() {
+            val days = dailyDates(card, redraw = ::draw)
+            val totals = days.map { date -> sources.sumOf { sourceMs(date, it.key) } / HOUR_MS }
+            val max = axisMax(totals.maxOrNull())
+            card.describe = { key -> screenDayText(key as LocalDate) }
+            card.draw { s ->
+                // The hours in a column of their own on the right, clear of the bars
+                val labelSize = s.sp(11f)
+                val width = s.width - s.textWidth("88h", labelSize) - s.dp(8f)
+                val column = width / days.size
+                val top = s.dp(8f)
+                val bottom = top + s.dp(130f)
+                fun y(value: Float) = bottom - minOf(value, max) / max * (bottom - top)
+                axisTicks(max).drop(1).forEach { (v, label) ->
+                    s.line(0f, y(v), width, y(v), faint(30), s.dp(1f))
+                    s.text(label, s.width, y(v) + labelSize * 0.35f, faint(130), labelSize, Paint.Align.RIGHT)
+                }
+                val gap = minOf(s.dp(1.5f), column * 0.15f)
+                val corner = minOf(s.dp(4f), column / 4)
+                days.forEachIndexed { i, date ->
+                    val x = i * column
+                    var base = bottom
+                    // Phone at the bottom; only the top piece gets the rounded corners
+                    val pieces = sources.map { it to sourceMs(date, it.key) / HOUR_MS }.filter { it.second > 0f }
+                    if (pieces.isEmpty()) s.rect(x + gap, bottom - s.dp(2f), x + column - gap, bottom, faint(45), s.dp(1f))
+                    pieces.forEachIndexed { k, (source, hours) ->
+                        val h = minOf(hours, max) / max * (bottom - top)
+                        s.rect(x + gap, base - h, x + column - gap, base, source.color, if (k == pieces.lastIndex) corner else 0f)
+                        if (k < pieces.lastIndex) s.rect(x + gap, base - h, x + column - gap, base - h + corner, source.color)
+                        base -= h
                     }
                 }
-                if (y == bottom) s.rect(x + gap, bottom - s.dp(2f), x + column - gap, bottom, faint(45), s.dp(1f))
-                s.target(date, RectF(x, 0f, x + column, bottom + s.dp(24f)), RectF(x, top - s.dp(2f), x + column, bottom + s.dp(2f)))
+                labelIndices(days.size, 3).forEach { i ->
+                    s.text(days[i].dayOfMonth.toString(), i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+                }
+                s.height = bottom + s.dp(24f)
+                days.forEachIndexed { i, date ->
+                    val x = i * column
+                    s.target(date, RectF(x, 0f, x + column, s.height), RectF(x, 0f, x + column, bottom + s.dp(2f)), corner)
+                }
             }
-            labelIndices(days.size, 2).forEach { i ->
-                s.text(days[i].dayOfMonth.toString(), i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+        }
+        draw()
+    }
+
+    /** Today's screen time in big text, and a ring split between the devices, each with its icon. */
+    private fun devicePieCard() {
+        val today = LocalDate.now()
+        val split = sources.map { it to sourceMs(today, it.key) }
+        val total = split.sumOf { it.second }
+        val card = Card(getString(R.string.today))
+        card.headline(duration(total), getString(R.string.across_devices))
+        val used = split.filter { it.second > 0 }
+        if (used.isEmpty()) return
+        card.describe = { key ->
+            val (source, ms) = used[key as Int]
+            listOf(source.name, getString(R.string.stat_label, getString(R.string.time), duration(ms)),
+                getString(R.string.stat_label, getString(R.string.share_of), "${(ms * 100f / total).roundToInt()}%")).joinToString("\n")
+        }
+        card.draw { s ->
+            val size = minOf(s.width * 0.42f, s.dp(132f))
+            val radius = size / 2
+            val cx = radius
+            val cy = radius
+            val thickness = s.dp(20f)
+            var angle = -90f
+            used.forEachIndexed { i, (source, ms) ->
+                val sweep = ms * 360f / total
+                // A hair's gap between pieces
+                s.arc(cx, cy, radius - thickness / 2, angle + 1f, maxOf(sweep - 2f, 1f), source.color, thickness)
+                angle += sweep
             }
-            s.height = bottom + s.dp(24f)
+            s.icon(StatIcons.SCREEN, cx - s.dp(12f), cy - s.dp(12f), s.dp(24f), faint(120))
+            // The key on the right: icon, name, time and share
+            val left = size + s.dp(22f)
+            val rowHeight = s.dp(38f)
+            val top = cy - rowHeight * used.size / 2
+            used.forEachIndexed { i, (source, ms) ->
+                val y = top + i * rowHeight
+                s.icon(source.icon, left, y + s.dp(5f), s.dp(18f), source.color)
+                s.text(source.name, left + s.dp(28f), y + s.dp(14f), faint(220), s.sp(13.5f), Paint.Align.LEFT)
+                s.text(duration(ms) + " · " + (ms * 100f / total).roundToInt() + "%", left + s.dp(28f), y + s.dp(30f), faint(150), s.sp(12f), Paint.Align.LEFT)
+                s.target(i, RectF(left - s.dp(6f), y, s.width, y + rowHeight))
+            }
+            s.height = maxOf(size, top + used.size * rowHeight)
+        }
+    }
+
+    /** The most used apps on every device together, today or over the last week, each with its device's icon. */
+    private fun appsCard() {
+        val context = requireContext()
+        val card = Card(getString(R.string.apps))
+        val phone = PhoneApps.days(context)
+        val others = DeviceTime.Device.values().associateWith { DeviceTime.days(context, it) }
+        fun draw() {
+            card.segment(listOf(R.string.today, R.string.last_7_days), appsSpan) {
+                appsSpan = it
+                draw()
+            }
+            val today = LocalDate.now()
+            val days = (0 until if (appsSpan == 0) 1 else 7).map { today.minusDays(it.toLong()) }
+            val sourceOf = sources.associateBy { it.key }
+            val rows = mutableListOf<Triple<Source, String, Long>>()
+            days.flatMap { d -> phone[d].orEmpty().entries }.groupBy({ it.key }, { it.value }).forEach { (app, times) ->
+                rows.add(Triple(sourceOf.getValue(PHONE), app, times.sum()))
+            }
+            others.forEach { (device, byDay) ->
+                days.flatMap { d -> byDay[d]?.apps.orEmpty().entries }.groupBy({ it.key }, { it.value }).forEach { (app, minutes) ->
+                    rows.add(Triple(sourceOf.getValue(device.key), app, minutes.sum() * 60_000L))
+                }
+            }
+            // Launchers and system screens aren't apps anyone chose to use
+            val top = rows.filter { it.second !in NOT_APPS }.sortedByDescending { it.third }.take(APPS_SHOWN)
+            if (top.isEmpty()) return card.showNote(getString(R.string.apps_none))
+            card.describe = { key ->
+                val (source, app, ms) = top[key as Int]
+                listOf(app, getString(R.string.stat_label, getString(R.string.device), source.name),
+                    getString(R.string.stat_label, getString(R.string.time), duration(ms))).joinToString("\n")
+            }
+            horizontalBars(card, top.map { (source, app, ms) -> Triple(app, (ms / 60_000L).toInt(), source.color) }, top.map { it.first.icon }) {
+                duration(it * 60_000L)
+            }
+        }
+        draw()
+    }
+
+    // --- Libido: porn, from the Mac's VLC time ---
+
+    /**
+     * The Mac's time in VLC each week (the last [PORN_WEEKS]), and the last [PORN_DAYS] days as dots,
+     * filled on days with [PORN_MIN_MINUTES] or more.
+     */
+    private fun pornCard() {
+        val days = DeviceTime.days(requireContext(), DeviceTime.Device.MAC)
+        val minutes = days.mapValues { (_, day) -> day.apps.entries.filter { it.key.contains("VLC", ignoreCase = true) }.sumOf { it.value } }
+        val card = Card(getString(R.string.porn_usage))
+        if (days.isEmpty()) return card.showNote(getString(R.string.porn_needs_mac))
+        val today = LocalDate.now()
+        val watched = { date: LocalDate -> (minutes[date] ?: 0) >= PORN_MIN_MINUTES }
+        val tracked = { date: LocalDate -> date >= (days.keys.minOrNull() ?: today) }
+        val week = (0..6).map { today.with(DayOfWeek.MONDAY).plusDays(it.toLong()) }.filter { it <= today }
+        card.headline(week.count(watched).toString(), getString(R.string.porn_days_this_week, week.size))
+        val color = stat.themeColor
+        val monday = today.with(DayOfWeek.MONDAY)
+        val weeks = (PORN_WEEKS - 1 downTo 0).map { monday.minusWeeks(it.toLong()) }
+        val weekMinutes = weeks.map { start -> (0..6).sumOf { minutes[start.plusDays(it.toLong())] ?: 0 } }
+        val weekDays = weeks.map { start -> (0..6).count { watched(start.plusDays(it.toLong())) } }
+        card.keyItem(color, getString(R.string.porn_watched))
+        card.keyItem(faint(170), getString(R.string.porn_not), ring = true)
+        card.describe = { key ->
+            when (key) {
+                is LocalDate -> listOf(dateText(key), if (!tracked(key)) getString(R.string.no_data)
+                    else getString(R.string.stat_label, getString(R.string.time), duration((minutes[key] ?: 0) * 60_000L))).joinToString("\n")
+                else -> {
+                    val i = key as Int
+                    listOf(getString(R.string.week_of, weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))),
+                        getString(R.string.stat_label, getString(R.string.time), duration(weekMinutes[i] * 60_000L)),
+                        getString(R.string.stat_label, getString(R.string.days), getString(R.string.n_of_days, weekDays[i], 7))).joinToString("\n")
+                }
+            }
+        }
+        val most = maxOf(weekMinutes.maxOrNull() ?: 0, 30).toFloat()
+        card.draw { s ->
+            // A bar a week
+            val top = s.dp(4f)
+            val bottom = top + s.dp(80f)
+            val column = s.width / weeks.size
+            s.line(0f, bottom, s.width, bottom, faint(30), s.dp(1f))
+            weeks.forEachIndexed { i, start ->
+                val x = i * column
+                val h = weekMinutes[i] / most * (bottom - top)
+                if (weekMinutes[i] == 0) s.rect(x + s.dp(3f), bottom - s.dp(2f), x + column - s.dp(3f), bottom, faint(45), s.dp(1f))
+                else s.rect(x + s.dp(3f), bottom - h, x + column - s.dp(3f), bottom, if (i == weeks.lastIndex) color else ColorUtils.setAlphaComponent(color, 170), s.dp(4f))
+                s.target(i, RectF(x, 0f, x + column, bottom + s.dp(20f)), RectF(x + s.dp(1f), top - s.dp(2f), x + column - s.dp(1f), bottom + s.dp(2f)))
+            }
+            labelIndices(weeks.size, 3).forEach { i ->
+                s.text(weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())), i * column + column / 2, bottom + s.dp(16f), faint(140), s.sp(11f))
+            }
+            // The days, a row a week, Monday first
+            val gridTop = bottom + s.dp(46f)
+            val cell = minOf(s.width / 7, s.dp(30f))
+            val left = (s.width - cell * 7) / 2
+            val radius = cell * 0.28f
+            var day = DayOfWeek.MONDAY
+            repeat(7) { i ->
+                s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, gridTop, faint(140), s.sp(11f))
+                day = day.plus(1)
+            }
+            val first = monday.minusWeeks(PORN_GRID_WEEKS - 1L)
+            (0 until PORN_GRID_WEEKS * 7).forEach { n ->
+                val date = first.plusDays(n.toLong())
+                val cx = left + n % 7 * cell + cell / 2
+                val cy = gridTop + s.dp(12f) + n / 7 * cell + cell / 2
+                when {
+                    date > today || !tracked(date) -> s.circle(cx, cy, s.dp(2f), faint(60))
+                    watched(date) -> s.circle(cx, cy, radius, color)
+                    else -> s.ring(cx, cy, radius, faint(150), s.dp(1.5f))
+                }
+                if (date <= today) s.target(date, RectF(cx - cell / 2, cy - cell / 2, cx + cell / 2, cy + cell / 2),
+                    RectF(cx - radius - s.dp(3f), cy - radius - s.dp(3f), cx + radius + s.dp(3f), cy + radius + s.dp(3f)), radius + s.dp(3f))
+            }
+            s.height = gridTop + s.dp(12f) + PORN_GRID_WEEKS * cell
+        }
+    }
+
+    // --- Sleep: the phone late at night and first thing ---
+
+    /**
+     * The phone's time from 11 pm until falling asleep, and in the first hour after waking, the last
+     * [SLEEP_DAYS] nights: the usual of each, and a dot a night sized by the minutes.
+     */
+    private fun sleepPhoneCard(nights: Map<LocalDate, Sleep.Night>) {
+        val today = LocalDate.now()
+        val days = (SLEEP_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val shown = days.mapNotNull { nights[it] }
+        if (shown.size < 2) return
+        val card = Card(getString(R.string.sleep_phone), icon = StatIcons.PHONE, iconColor = stat.themeColor)
+        card.subtitle(getString(R.string.last_days, SLEEP_DAYS))
+        val late = shown.map { it.lateMs }
+        val morning = shown.map { it.morningMs }
+        val tiles = listOf(
+            duration(late.average().toLong()) to getString(R.string.sleep_late_avg),
+            late.count { it >= SLEEP_LATE_MS }.toString() + "/" + shown.size to getString(R.string.sleep_late_nights),
+            duration(morning.average().toLong()) to getString(R.string.sleep_morning_avg),
+        )
+        val color = stat.themeColor
+        card.describe = { key ->
+            val date = key as LocalDate
+            val night = nights.getValue(date)
+            listOf(dateText(date), getString(R.string.stat_label, getString(R.string.sleep_late_row), duration(night.lateMs)),
+                getString(R.string.stat_label, getString(R.string.sleep_morning_row), duration(night.morningMs))).joinToString("\n")
+        }
+        card.draw { s ->
+            // The usual of each, then a dot a night, as big as its minutes
+            val gap = s.dp(8f)
+            val tileWidth = (s.width - gap * 2) / 3
+            tiles.forEachIndexed { i, (value, label) ->
+                val x = i * (tileWidth + gap)
+                s.rect(x, 0f, x + tileWidth, s.dp(64f), faint(18), s.dp(14f))
+                s.text(value, x + tileWidth / 2, s.dp(30f), ink, s.sp(17f), bold = true)
+                s.text(label, x + tileWidth / 2, s.dp(50f), faint(150), s.sp(12f))
+            }
+            val top = s.dp(84f)
+            val labelSize = s.sp(12f)
+            val left = maxOf(s.textWidth(getString(R.string.sleep_late_row), labelSize), s.textWidth(getString(R.string.sleep_morning_row), labelSize)) + s.dp(12f)
+            val column = (s.width - left) / days.size
+            val row = s.dp(30f)
+            val most = minOf(s.dp(10f), column * 0.45f)
+            listOf(getString(R.string.sleep_late_row) to { n: Sleep.Night -> n.lateMs }, getString(R.string.sleep_morning_row) to { n: Sleep.Night -> n.morningMs })
+                .forEachIndexed { r, (label, ms) ->
+                    val cy = top + r * row + row / 2
+                    s.text(label, 0f, cy + labelSize * 0.35f, faint(180), labelSize, Paint.Align.LEFT)
+                    days.forEachIndexed { i, date ->
+                        val cx = left + i * column + column / 2
+                        val night = nights[date]
+                        if (night == null) s.circle(cx, cy, s.dp(1.5f), faint(60))
+                        else {
+                            val minutes = ms(night) / 60_000f
+                            // Up to an hour, then as big as it gets
+                            val radius = s.dp(2.5f) + (minutes / 60f).coerceIn(0f, 1f) * (most - s.dp(2.5f))
+                            s.circle(cx, cy, radius, if (minutes >= 30) color else ColorUtils.setAlphaComponent(color, 140))
+                        }
+                    }
+                }
+            labelIndices(days.size, 3).forEach { i ->
+                s.text(days[i].dayOfMonth.toString(), left + i * column + column / 2, top + row * 2 + s.dp(16f), faint(140), s.sp(11.5f))
+            }
+            s.height = top + row * 2 + s.dp(22f)
+            days.forEachIndexed { i, date ->
+                if (nights.containsKey(date)) s.target(date, RectF(left + i * column, top, left + (i + 1) * column, s.height))
+            }
         }
     }
 
@@ -1462,55 +1875,6 @@ class StatPageFragment : Fragment() {
         val card = Card(getString(R.string.mac_screen_time))
         card.showNote(getString(R.string.mac_setup))
         card.chipRow(listOf(getString(R.string.mac_choose_folder) to ink), null) { pickDeviceFolder.launch(null) }
-    }
-
-    /** Today on the Mac or TV, when it was first and last used, and its apps over the last [HABIT_DAYS] days. */
-    private fun deviceCard(device: DeviceTime.Device) {
-        val context = requireContext()
-        val days = DeviceTime.days(context, device)
-        val card = Card(getString(device.label))
-        val updated = DeviceTime.updated(context, device)
-        if (updated > 0) card.subtitle(getString(R.string.mac_updated, android.text.format.DateUtils.getRelativeTimeSpanString(updated, System.currentTimeMillis(), 60_000L)))
-        val today = LocalDate.now()
-        val day = days[today]
-        card.headline(duration((day?.minutes ?: 0) * 60_000L), listOfNotNull(
-            if (day?.first != null && day.last != null) getString(R.string.sleep_span, clock(java.time.LocalTime.parse(day.first)), clock(java.time.LocalTime.parse(day.last))) else getString(R.string.mac_not_today),
-            day?.apps?.maxByOrNull { it.value }?.key?.let { getString(R.string.doom_mostly, it) },
-        ).joinToString(" · "))
-        val apps = days.filterKeys { it > today.minusDays(HABIT_DAYS.toLong()) }.values.flatMap { it.apps.entries }
-            .groupBy({ it.key }, { it.value }).mapValues { (_, m) -> m.sum() }.entries.sortedByDescending { it.value }.take(MAC_APPS)
-        // Its apps, under today's figure in the same card
-        val appsCard = card
-        appsCard.scene.isVisible = false
-        if (apps.isEmpty()) return
-        val most = apps.first().value.toFloat()
-        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        apps.forEach { (app, minutes) ->
-            list.addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
-                addView(appsCard.textView(14f, 255).apply {
-                    text = app
-                    isSingleLine = true
-                    ellipsize = TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                // A bar as long as its share of the most-used app's time
-                addView(View(context).apply {
-                    background = GradientDrawable().apply {
-                        cornerRadius = 3.dpToPx().toFloat()
-                        setColor(device.color)
-                    }
-                }, LinearLayout.LayoutParams((60.dpToPx() * minutes / most).toInt().coerceAtLeast(3.dpToPx()), 6.dpToPx()).apply {
-                    marginStart = 10.dpToPx()
-                })
-                addView(appsCard.textView(13f, 150).apply {
-                    text = duration(minutes * 60_000L)
-                    gravity = Gravity.END
-                }, LinearLayout.LayoutParams(64.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-            })
-        }
-        appsCard.root.addView(list, appsCard.root.indexOfChild(appsCard.scene))
     }
 
     // --- Vibecoding, from the files the PC and Mac write to Google Drive ---
@@ -1708,159 +2072,17 @@ class StatPageFragment : Fragment() {
         }
     }
 
-    private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
-
-    /** A run of days a medicine wasn't taken, and the days just after it. */
-    private class Holiday(val start: LocalDate, val end: LocalDate) {
-        val length get() = ChronoUnit.DAYS.between(start, end).toInt() + 1
-        val after get() = (1..HOLIDAY_AFTER_DAYS).map { end.plusDays(it.toLong()) }
-        fun contains(date: LocalDate) = date in start..end
-    }
+    private val coffeeCup get() = StatKind.COFFEE.shades!!.let { ColorUtils.blendARGB(it.first, it.second, 0.35f) }
+    private val hotCup get() = StatKind.COFFEE.shades!!.second
 
     /**
-     * Breaks of [HOLIDAY_DAYS] or more days not taken, oldest first. Days with nothing logged for the
-     * medicine don't end a break, but it only counts from and to days logged as not taken.
-     */
-    private fun holidays(): List<Holiday> {
-        val found = mutableListOf<Holiday>()
-        var start: LocalDate? = null
-        var lastOff: LocalDate? = null
-        fun close() {
-            val first = start ?: return
-            val last = lastOff ?: return
-            if (ChronoUnit.DAYS.between(first, last) + 1 >= HOLIDAY_DAYS) found.add(Holiday(first, last))
-            start = null
-            lastOff = null
-        }
-        val from = firstDate ?: return found
-        var date = from
-        val today = LocalDate.now()
-        while (date <= today) {
-            when (takenOn(stat, date)) {
-                false -> {
-                    if (start == null) start = date
-                    lastOff = date
-                }
-                true -> close()
-                null -> {}
-            }
-            date = date.plusDays(1)
-        }
-        close()
-        return found
-    }
-
-    /**
-     * How Mood and the stats a break tends to shift (by name: libido, anxiety, OCD, energy) went during
-     * the medicine's breaks and the [HOLIDAY_AFTER_DAYS] days after, against the usual days it was taken.
-     * A chip per break shows just that one; tapping it again goes back to all of them.
-     */
-    private fun holidayCard() {
-        val card = Card(getString(R.string.drug_holidays))
-        val holidays = holidays()
-        if (holidays.isEmpty()) {
-            card.showNote(getString(R.string.holiday_none, HOLIDAY_DAYS))
-            return
-        }
-        val holidayColor = ContextCompat.getColor(requireContext(), R.color.holiday)
-        val afterColor = ContextCompat.getColor(requireContext(), R.color.medicineLight)
-        val rangeFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
-        // A holiday's days are the ones the missed doses affect, which for a next-day medicine are the days
-        // after; it's named by the days the doses were missed, as on the calendar above
-        val shift = if (stat.nextDay) 1L else 0L
-        fun rangeText(h: Holiday) = if (h.length == 1) h.start.minusDays(shift).format(rangeFormat)
-        else getString(R.string.graph_month_range, h.start.minusDays(shift).format(rangeFormat), h.end.minusDays(shift).format(rangeFormat))
-
-        val last = holidays.last()
-        card.headline(holidays.size.toString(),
-            resources.getQuantityString(R.plurals.holiday_count, holidays.size, holidays.size, rangeText(last), last.length))
-        card.keyItem(faint(200), getString(R.string.holiday_usual), ring = true)
-        card.keyItem(holidayColor, getString(R.string.holiday_during))
-        card.keyItem(afterColor, getString(R.string.holiday_after, HOLIDAY_AFTER_DAYS))
-
-        val measured = HOLIDAY_STATS.mapNotNull { word ->
-            stats.firstOrNull { s -> if (word == MoodStore.MOOD) s.id == MoodStore.MOOD else s.id != MoodStore.MOOD && s.name.contains(word, ignoreCase = true) }
-        }.distinct().filter { it.id != stat.id }
-        // Usual: days it was taken, away from every break and the days after one
-        val usualDays = dates.filter { date -> takenOn(stat, date) == true && holidays.none { it.contains(date) || date in it.after } }
-
-        var picked: Holiday? = null
-        fun average(s: StatInfo, days: List<LocalDate>) = days.mapNotNull { valueOf(s, it) }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
-        fun change(value: Float?, usual: Float?) = if (value == null || usual == null) "" else
-            String.format(Locale.getDefault(), " (%+.1f)", value - usual)
-
-        fun draw() {
-            val chosen = picked?.let { listOf(it) } ?: holidays
-            val during = chosen.flatMap { h -> (0 until h.length).map { h.start.plusDays(it.toLong()) } }
-            val after = chosen.flatMap { it.after }.filter { date -> chosen.none { it.contains(date) } }
-            val rows = measured.map { s -> Triple(s, average(s, usualDays), average(s, during) to average(s, after)) }
-            val shown = holidays.takeLast(HOLIDAY_CHIPS).reversed()
-            card.chipRow(shown.map { rangeText(it) to holidayColor }, shown.indexOf(picked).takeIf { it >= 0 }) { i ->
-                picked = if (picked == shown[i]) null else shown[i]
-                draw()
-            }
-            card.describe = { key ->
-                val (s, usual, values) = rows[key as Int]
-                listOf(
-                    s.name,
-                    getString(R.string.holiday_usual_value, usual?.let(::decimal) ?: "–"),
-                    getString(R.string.holiday_during_value, (values.first?.let(::decimal) ?: "–") + change(values.first, usual)),
-                    getString(R.string.holiday_after_value, (values.second?.let(::decimal) ?: "–") + change(values.second, usual)),
-                ).joinToString(" · ")
-            }
-            if (rows.isEmpty()) {
-                card.showNote(getString(R.string.holiday_no_stats))
-                return
-            }
-            card.draw { s ->
-                val labelSize = s.sp(13f)
-                val left = rows.maxOf { s.textWidth(it.first.name, labelSize) } + s.dp(14f)
-                val changeWidth = s.textWidth("+0.0", labelSize) + s.dp(10f)
-                val right = s.width - changeWidth - s.dp(8f)
-                fun x(value: Float) = left + (value - 1f) / 4f * (right - left)
-                val rowHeight = s.dp(38f)
-                var top = s.dp(18f)
-                // 1 to 5 along the top
-                (1..5).forEach { n -> s.text(n.toString(), x(n.toFloat()), s.sp(11f), faint(120), s.sp(11f)) }
-                rows.forEachIndexed { i, (row, usual, values) ->
-                    val mid = top + rowHeight / 2
-                    s.text(row.name, 0f, mid + labelSize * 0.35f, faint(220), labelSize, Paint.Align.LEFT)
-                    s.line(left, mid, right, mid, faint(35), s.dp(2f))
-                    val (during, after) = values
-                    val points = listOfNotNull(usual, during, after)
-                    if (points.size > 1) s.line(x(points.min()), mid, x(points.max()), mid, faint(90), s.dp(2f))
-                    after?.let { s.circle(x(it), mid, s.dp(6f), afterColor) }
-                    during?.let { s.circle(x(it), mid, s.dp(6f), holidayColor) }
-                    usual?.let { s.ring(x(it), mid, s.dp(7.5f), faint(220), s.dp(2f)) }
-                    if (during != null && usual != null) {
-                        val diff = during - usual
-                        s.text(String.format(Locale.getDefault(), "%+.1f", diff), s.width, mid + labelSize * 0.35f,
-                            if (abs(diff) >= 0.3f) holidayColor else faint(150), labelSize, Paint.Align.RIGHT, bold = abs(diff) >= 0.3f)
-                    }
-                    s.target(i, RectF(0f, top, s.width, top + rowHeight))
-                    top += rowHeight
-                }
-                s.height = top + s.dp(2f)
-            }
-        }
-        draw()
-    }
-
-    private fun decimal(value: Float) = String.format(Locale.getDefault(), "%.1f", value)
-
-    /**
-     * The average by week (the last 13), month (the last 12) or year, from the stat's first, with
-     * Mood faint behind it. The point still going is a ring.
+     * The average by week (the last 13), month (the last 12) or year, from the stat's first: real values
+     * (Money's as each period's total) where it has them. The point still going is a ring.
      */
     private fun trendCard() {
         val card = Card(getString(R.string.stat_trend))
-        val color = if (stat.medicine) medicineColor else stat.color
-        val moodColor = mood.color
-        val withMood = stat.id != MoodStore.MOOD
-        if (withMood) {
-            card.keyItem(color, stat.name)
-            card.keyItem(ColorUtils.setAlphaComponent(moodColor, 100), mood.name)
-        }
+        val color = if (stat.isMedicine) medicineColor else stat.themeColor
+        val totals = stat.kind == StatKind.MONEY && unit == Measure.DOLLARS
         fun draw() {
             val period = Period.entries[trendPeriod]
             card.segment(listOf(R.string.trend_weeks, R.string.trend_months, R.string.trend_years), trendPeriod) {
@@ -1876,13 +2098,18 @@ class StatPageFragment : Fragment() {
                 Period.YEARS -> periodOf(period, start)
             }
             val keyOf = { date: LocalDate -> periodOf(period, date).takeIf { it in first..last } }
-            val values = averages(stat, keyOf)
-            val moodValues = if (withMood) averages(mood, keyOf) else emptyMap()
+            val grouped = real.orEmpty().entries.mapNotNull { (date, v) -> keyOf(date)?.let { it to v } }.groupBy({ it.first }, { it.second })
+            val values: Map<Int, Float> = when {
+                totals -> grouped.mapValues { (_, list) -> list.sum() }
+                unit != null -> grouped.mapValues { (_, list) -> list.average().toFloat() }
+                else -> averages(stat, keyOf)
+            }
             val taken = if (stat.medicine) takenCounts(keyOf) else emptyMap()
-            val max = if (usage) hoursMax(values.values.maxOrNull()) else 5f
-            fun fraction(value: Float) = if (usage) value / max else (value - 1) / 4
+            val max = if (unit != null) axisMax(values.values.maxOrNull()) else 5f
+            val low = if (unit != null) 0f else 1f
+            fun fraction(value: Float) = (value - low) / (max - low)
             val ticks: List<Pair<Float, String>> = when {
-                usage -> (0..max.toInt() step 2).map { it / max to getString(R.string.hours_short, it) }
+                unit != null -> axisTicks(max).map { (v, label) -> fraction(v) to label }
                 stat.labels.isNotEmpty() -> stat.faces.mapIndexedNotNull { i, face ->
                     stat.labels[i].takeIf { it.isNotEmpty() }?.let { fraction(MoodStore.score(face, stat.inverted).toFloat()) to it }
                 }
@@ -1890,17 +2117,19 @@ class StatPageFragment : Fragment() {
             }
             card.describe = { key ->
                 val point = key as Int
-                val start = periodStart(period, point)
+                val periodStart = periodStart(period, point)
                 val title = when (period) {
-                    Period.WEEKS -> getString(R.string.week_number, start.get(WeekFields.ISO.weekOfWeekBasedYear()))
-                    Period.MONTHS -> start.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+                    Period.WEEKS -> getString(R.string.week_number, periodStart.get(WeekFields.ISO.weekOfWeekBasedYear()))
+                    Period.MONTHS -> periodStart.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
                     Period.YEARS -> point.toString()
                 }
                 val parts = mutableListOf(if (point == last) getString(R.string.graph_so_far, title) else title)
-                if (stat.medicine) taken[point]?.let { (yes, all) -> parts.add(getString(R.string.taken_of_days, yes, all)) }
-                else values[point]?.let { parts.add(getString(R.string.stat_total, stat.name, averageText(stat, it))) }
-                moodValues[point]?.let { parts.add(getString(R.string.stat_total, mood.name, averageText(mood, it))) }
-                parts.joinToString(" · ")
+                when {
+                    totals -> values[point]?.let { parts.add(getString(R.string.stat_label, getString(R.string.spent), valueText(it))) }
+                    stat.medicine && unit == null -> taken[point]?.let { (yes, all) -> parts.add(getString(R.string.stat_label, getString(R.string.taken), getString(R.string.n_of_days, yes, all))) }
+                    else -> values[point]?.let { parts.add(getString(R.string.stat_label, getString(R.string.average), averageText(stat, it))) }
+                }
+                parts.joinToString("\n")
             }
             card.draw { s ->
                 val labelSize = s.sp(11.5f)
@@ -1915,15 +2144,14 @@ class StatPageFragment : Fragment() {
                     s.line(left, y(fraction), right, y(fraction), faint(30), s.dp(1f))
                     s.text(label, left - s.dp(8f), y(fraction) + labelSize * 0.35f, faint(140), labelSize, Paint.Align.RIGHT)
                 }
-                fun series(points: Map<Int, Float>, color: Int, width: Float, radius: Float, toFraction: (Float) -> Float) {
-                    s.polyline((first..last).map { p -> points[p]?.let { PointF(x(p), y(toFraction(it))) } }, color, width)
-                    points.forEach { (p, value) ->
-                        if (p == last) s.ring(x(p), y(toFraction(value)), radius + s.dp(1.5f), color, s.dp(2.5f))
-                        else s.circle(x(p), y(toFraction(value)), radius, color)
-                    }
+                val points = (first..last).map { p -> values[p]?.let { PointF(x(p), y(fraction(it))) } }
+                // A soft fill under the line, in the stat's colour
+                points.filterNotNull().takeIf { it.size > 1 }?.let { s.area(it, bottom, ColorUtils.setAlphaComponent(color, 70)) }
+                s.polyline(points, color, s.dp(3f))
+                values.forEach { (p, value) ->
+                    if (p == last) s.ring(x(p), y(fraction(value)), s.dp(5.5f), color, s.dp(2.5f))
+                    else s.circle(x(p), y(fraction(value)), s.dp(4f), color)
                 }
-                if (withMood) series(moodValues, ColorUtils.setAlphaComponent(moodColor, 90), s.dp(2f), s.dp(3f)) { (it - 1) / 4 }
-                series(values, color, s.dp(3f), s.dp(4f), ::fraction)
                 val labelY = bottom + s.dp(20f)
                 labelIndices(count, maxOf(1, (count + 3) / 4)).forEach { i ->
                     val align = when {
@@ -1955,17 +2183,18 @@ class StatPageFragment : Fragment() {
         fun filterColor(face: Int) = if (stat.isBlank(face)) faint(140) else stat.faceColor(requireContext(), face)
         fun dayColor(date: LocalDate, today: LocalDate): Int {
             if (date > today) return faint(12)
-            val filter = overTimeFilter ?: return valueOf(stat, date)?.let { colorFor(stat, it) } ?: faint(30)
+            val filter = overTimeFilter ?: return scoreOf(stat, date)?.let { colorFor(stat, it, faces = true) } ?: faint(30)
             return if (dayOf(date)?.face(stat.id) == filter) filterColor(filter) else faint(30)
         }
         fun describeDay(date: LocalDate) = listOf(dateText(date), dayText(stat, date) ?: "–").joinToString(" · ")
         fun draw() {
             val span = Span.entries[overTimeSpan]
+            // Days with only real values (spending read before Money had a face that day, say) have no face to show
+            val start = (dates.firstOrNull { scoreOf(stat, it) != null } ?: firstDate) ?: return card.showNote(getString(R.string.no_data))
             card.segment(listOf(R.string.over_3_months, R.string.over_year, R.string.over_all), overTimeSpan) {
                 overTimeSpan = it
                 draw()
             }
-            val start = firstDate ?: return card.showNote(getString(R.string.no_data))
             val today = LocalDate.now()
             // Tapping the picked chip again shows every day again
             card.chipRow(faces.map { faceName(stat, it) to filterColor(it) }, faces.indexOf(overTimeFilter).takeIf { it >= 0 }) { i ->
@@ -2023,7 +2252,7 @@ class StatPageFragment : Fragment() {
                 }
                 Span.ALL -> {
                     val keyOf = { date: LocalDate -> date.year * 12 + date.monthValue - 1 }
-                    val values = averages(stat, keyOf)
+                    val values = averages(stat, keyOf, ::scoreOf)
                     val taken = if (stat.medicine) takenCounts(keyOf) else emptyMap()
                     val filter = overTimeFilter
                     // With a face picked, each month's days with it and days with anything
@@ -2039,7 +2268,7 @@ class StatPageFragment : Fragment() {
                         val value = when {
                             filter != null -> matching[month]?.let { (yes, all) -> getString(R.string.filter_days, faceName(stat, filter), yes, all) }
                             stat.medicine -> taken[month]?.let { (yes, all) -> getString(R.string.taken_of_days, yes, all) }
-                            else -> values[month]?.let { averageText(stat, it) }
+                            else -> values[month]?.let { decimal(it) }
                         }
                         listOf(title, value ?: "–").joinToString(" · ")
                     }
@@ -2064,8 +2293,8 @@ class StatPageFragment : Fragment() {
                                     filter != null -> if (share != null && share > 0)
                                         ColorUtils.setAlphaComponent(filterColor(filter), (70 + 185 * share).toInt()) else faint(30)
                                     value == null -> faint(30)
-                                    stat.medicine -> if ((taken[month]?.first ?: 0) > 0) colorFor(stat, value, taken = true) ?: faint(30) else faint(30)
-                                    else -> colorFor(stat, value) ?: faint(30)
+                                    stat.medicine -> if ((taken[month]?.first ?: 0) > 0) colorFor(stat, value, taken = true, faces = true) ?: faint(30) else faint(30)
+                                    else -> colorFor(stat, value, faces = true) ?: faint(30)
                                 }
                                 s.rect(x, y, x + cell - s.dp(3f), y + block, color, s.dp(4f))
                                 if (month <= thisMonth) s.target(month, RectF(x, y, x + cell - s.dp(3f), y + block), RectF(x - s.dp(1.5f), y - s.dp(1.5f), x + cell - s.dp(1.5f), y + block + s.dp(1.5f)), s.dp(5f))
@@ -2108,49 +2337,21 @@ class StatPageFragment : Fragment() {
         horizontalBars(card, rows) { it.toString() }
     }
 
-    /** The apps that were used most on the most days of the last 30. */
-    private fun topAppCard() {
-        val card = Card(getString(R.string.stat_top_app))
-        card.subtitle(getString(R.string.days_it_was_top))
-        val rows = recentDays().mapNotNull { dayOf(it)?.topApp }.groupingBy { it }.eachCount()
-            .entries.sortedByDescending { it.value }.take(TOP_APPS)
-            .map { (app, days) -> Triple(app, days, stat.color) }
-        horizontalBars(card, rows) { resources.getQuantityString(R.plurals.day_count, it, it) }
-    }
-
     private fun recentDays(): List<LocalDate> = LocalDate.now().let { today -> (0L until RECENT_DAYS).map { today.minusDays(it) } }
-
-    /** A bar per row, as long as its count, with the count after it. */
-    private fun horizontalBars(card: Card, rows: List<Triple<String, Int, Int>>, countText: (Int) -> String) {
-        val most = rows.maxOfOrNull { it.second } ?: 0
-        if (most == 0) return card.showNote(getString(R.string.no_data))
-        card.draw { s ->
-            val nameSize = s.sp(13f)
-            val textPaint = TextPaint().apply { textSize = nameSize }
-            val left = minOf(maxOf(s.dp(60f), rows.maxOf { s.textWidth(it.first, nameSize) } + s.dp(12f)), s.width / 3)
-            val longest = s.width - left - s.dp(56f)
-            val rowHeight = s.dp(28f)
-            rows.forEachIndexed { i, (name, count, color) ->
-                val y = i * rowHeight
-                val shown = TextUtils.ellipsize(name, textPaint, left - s.dp(8f), TextUtils.TruncateAt.END).toString()
-                s.text(shown, 0f, y + s.dp(16f), faint(220), nameSize, Paint.Align.LEFT)
-                val length = maxOf(longest * count / most, s.dp(3f))
-                s.rect(left, y + s.dp(4f), left + length, y + s.dp(20f), color, s.dp(5f))
-                s.text(countText(count), left + length + s.dp(8f), y + s.dp(16.5f), faint(150), s.sp(12f), Paint.Align.LEFT)
-            }
-            s.height = rows.size * rowHeight
-        }
-    }
 
     /** The average of every Monday, every Tuesday and so on. */
     private fun weekdayCard() {
         val card = Card(getString(R.string.stat_by_weekday))
-        card.subtitle(getString(if (usage) R.string.average_hours else R.string.averages))
+        card.subtitle(getString(when (unit) {
+            Measure.HOURS -> R.string.average_hours
+            Measure.DOLLARS -> R.string.average_spent
+            null -> R.string.averages
+        }))
         val byDay = DayOfWeek.values().associateWith { mutableListOf<Float>() }
         dates.forEach { date -> valueOf(stat, date)?.let { byDay.getValue(date.dayOfWeek).add(it) } }
         if (byDay.values.sumOf { it.size } < MIN_WEEKDAY_DAYS) return card.showNote(getString(R.string.needs_more_days))
         val averages = DayOfWeek.values().map { day -> byDay.getValue(day).takeIf { it.isNotEmpty() }?.average()?.toFloat() }
-        val max = if (usage) hoursMax(averages.filterNotNull().maxOrNull()) else 5f
+        val max = axisMax(averages.filterNotNull().maxOrNull())
         card.draw { s ->
             val column = s.width / 7
             val top = s.dp(18f)
@@ -2162,7 +2363,12 @@ class StatPageFragment : Fragment() {
                 else {
                     val barTop = bottom - minOf(average, max) / max * (bottom - top)
                     s.rect(x, barTop, x + barWidth, bottom, colorFor(stat, average) ?: faint(70), s.dp(6f))
-                    s.text(String.format(Locale.getDefault(), "%.1f", average), x + barWidth / 2, barTop - s.dp(6f), faint(220), s.sp(11.5f))
+                    val label = when (unit) {
+                        Measure.DOLLARS -> "$" + average.roundToInt()
+                        Measure.HOURS -> String.format(Locale.getDefault(), "%.1fh", average)
+                        null -> String.format(Locale.getDefault(), "%.1f", average)
+                    }
+                    s.text(label, x + barWidth / 2, barTop - s.dp(6f), faint(220), s.sp(11.5f))
                 }
                 s.text(DayOfWeek.of(i + 1).getDisplayName(TextStyle.NARROW, Locale.getDefault()), x + barWidth / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
             }
@@ -2178,11 +2384,11 @@ class StatPageFragment : Fragment() {
         class Row(val name: String, val color: Int, val taken: Float, val takenDays: Int, val notTaken: Float, val notDays: Int)
 
         // Screen time's hours don't share the other stats' axis
-        val pairs = if (stat.medicine) stats.filter { !it.medicine && it.id != MoodStore.USAGE }.map { it to stat }
-        else stats.filter { it.medicine && it.id != stat.id }.map { stat to it }
+        val pairs = if (stat.isMedicine) stats.filter { !it.medicine && it.id != MoodStore.USAGE }.map { it to stat }
+        else stats.filter { it.isMedicine && it.id != stat.id }.map { stat to it }
         if (pairs.isEmpty()) return
         val card = Card(getString(R.string.stat_taken_vs_not))
-        if (usage) card.subtitle(getString(R.string.hours))
+        if (unit == Measure.HOURS) card.subtitle(getString(R.string.hours))
         card.keyItem(faint(170), getString(R.string.days_not_taken), ring = true)
         card.keyItem(faint(170), getString(R.string.days_taken))
 
@@ -2198,20 +2404,20 @@ class StatPageFragment : Fragment() {
                 }
             }
             if (taken.size < MIN_TAKEN_DAYS || notTaken.size < MIN_TAKEN_DAYS) return@mapNotNull null
-            val other = if (stat.medicine) measured else med
+            val other = if (stat.isMedicine) measured else med
             Row(other.name, other.color, taken.average().toFloat(), taken.size, notTaken.average().toFloat(), notTaken.size)
         }.sortedByDescending { abs(it.taken - it.notTaken) }
         if (rows.isEmpty()) return card.showNote(getString(R.string.needs_taken_and_not))
 
-        val measuredStat = if (stat.medicine) null else stat
+        val measuredStat = if (stat.isMedicine) null else stat
         card.describe = { key ->
             val row = rows[key as Int]
             val text = { value: Float -> measuredStat?.let { averageText(it, value) } ?: String.format(Locale.getDefault(), "%.1f", value) }
             getString(R.string.taken_vs_not_detail, row.name, text(row.taken), row.takenDays, text(row.notTaken), row.notDays)
         }
-        val low = if (usage) 0f else 1f
-        val high = if (usage) hoursMax(rows.maxOf { maxOf(it.taken, it.notTaken) }) else 5f
-        val ticks = if (usage) (0..high.toInt() step 2).toList() else (1..5).toList()
+        val low = if (unit != null) 0f else 1f
+        val high = if (unit != null) axisMax(rows.maxOf { maxOf(it.taken, it.notTaken) }) else 5f
+        val ticks = if (unit != null) axisTicks(high).map { it.first.roundToInt() } else (1..5).toList()
         card.draw { s ->
             val nameSize = s.sp(13.5f)
             val textPaint = TextPaint().apply { textSize = nameSize }
@@ -2261,30 +2467,13 @@ class StatPageFragment : Fragment() {
         Period.YEARS -> point.toString()
     }
 
-    /** Every [step]th of [count] points, and the last, dropping one that would crowd it. */
-    private fun labelIndices(count: Int, step: Int): List<Int> {
-        val indices = (0 until count step step).toMutableList()
-        if (indices.last() != count - 1) {
-            if (count - 1 - indices.last() <= step / 2 && indices.size > 1) indices.removeAt(indices.lastIndex)
-            indices.add(count - 1)
-        }
-        return indices
-    }
-
     companion object {
         private const val DAILY_DAYS = 18
         private const val AVERAGE_DAYS = 7L
         private const val RECENT_DAYS = 30
-        private const val TOP_APPS = 5
         private const val MIN_TAKEN_DAYS = 3
         private const val MIN_WEEKDAY_DAYS = 14
         private const val HOUR_MS = 3_600_000f
-
-        /** Only Sertraline gets the level card for now, with its usual half-life */
-        private const val SERTRALINE = "sertraline"
-
-        /** Coffee gets cups instead of the Taken calendar, [CUP_DAYS] days at a time */
-        private const val COFFEE = "coffee"
 
         /** How many nights Sleep's cards cover, and how many with a Mood before comparing */
         private const val SLEEP_DAYS = 14
@@ -2301,28 +2490,39 @@ class StatPageFragment : Fragment() {
         private const val VIBE_DAYS = 30
         private const val VIBE_PROJECTS = 8
 
-        /** How many apps Mac screen time lists */
-        private const val MAC_APPS = 8
+        /** How many apps Screen time lists */
+        private const val APPS_SHOWN = 10
+        private val NOT_APPS = setOf("Unknown", "Home screen", "Pixel Launcher", "JLauncher", "Permission controller", "System UI",
+            "Android System", "Settings", "Quickstep", "One UI Home", "Finder", "loginwindow", "Dock")
 
         /** How many days Social's cards cover, and its staying-in dots */
         private const val SOCIAL_DAYS = 14
         private const val SOCIAL_LONG_DAYS = 30
 
         /** How many of the latest purchases Money spent lists */
-        private const val SPENDING_SHOWN = 8
+        private const val SPENDING_SHOWN = 3
+
+        /** How many days Meditation's streak dots cover */
+        private const val STREAK_DAYS = 30
+
+        /** Minutes in each block of Music's level meters */
+        private const val MUSIC_BLOCK_MINUTES = 10L
         private const val CUP_DAYS = 10
 
         /** How many cups before the rest stand out */
         private const val CUPS_HOT = 3
-        /** Sertraline's breaks: how long one has to be, how many days after it count, and how many get a chip */
-        private const val HOLIDAY_DAYS = 2
-        private const val HOLIDAY_AFTER_DAYS = 3
-        private const val HOLIDAY_CHIPS = 8
+        /** Porn: how many weeks of bars and of days, and how long in VLC counts */
+        private const val PORN_WEEKS = 10
+        private const val PORN_GRID_WEEKS = 5
+        private const val PORN_MIN_MINUTES = 2
 
-        /** What a break is measured against, by name, Mood first */
-        private val HOLIDAY_STATS = listOf(MoodStore.MOOD, "libido", "anxi", "ocd", "energy")
+        /** Late-night phone use worth counting */
+        private const val SLEEP_LATE_MS = 30 * 60_000L
+
+        private const val PHONE = "phone"
 
         /** The Trend and Over time cards' choices, kept while the app runs */
+        private var appsSpan = 0
         private var trendPeriod = 0
         private var overTimeSpan = 1
     }

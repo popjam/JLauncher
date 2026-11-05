@@ -588,4 +588,80 @@
         <item>Mildly sad</item>
         <item>Sad</item>
     </string-array>
+    <!-- The stat list and Home -->
+    <string name="stats_title">Stats</string>
+    <string name="stats_home">Home</string>
+    <string name="remember">From before</string>
+    <string name="quoted">“%1$s”</string>
+    <string name="this_week">This week</string>
+    <string name="last_week">Last week</string>
+    <string name="vs_last_week">against last week</string>
+    <string name="mood_links">Goes with a good mood</string>
+    <string name="mood_links_note">Mood when high vs low</string>
+    <string name="links_detail_high">Mood when high: %1$s (%2$d days)</string>
+    <string name="links_detail_low">Mood when low: %1$s (%2$d days)</string>
+    <string name="difference">Difference</string>
+    <string name="compare_two">Compare</string>
+    <string name="compare_against">against</string>
+    <string name="logging">Logging</string>
+    <string name="days_in_a_row">days in a row</string>
+    <string name="best_run">best run</string>
+    <string name="notes_written">notes</string>
+    <string name="bubble_all">All</string>
+    <string name="bubble_none">None</string>
+    <plurals name="stats_shown">
+        <item quantity="one">%d stat</item>
+        <item quantity="other">%d stats</item>
+    </plurals>
+    <!-- Stat pages -->
+    <string name="spent">Spent</string>
+    <string name="average">Average</string>
+    <string name="n_of_days">%1$d of %2$d days</string>
+    <string name="average_spent">average spent</string>
+    <string name="phone_pickups">Phone pickups</string>
+    <string name="total">Total</string>
+    <string name="across_devices">on your phone, MacBook and TV</string>
+    <string name="time">Time</string>
+    <string name="share_of">Share</string>
+    <string name="apps">Apps</string>
+    <string name="last_7_days">7 days</string>
+    <string name="apps_none">No app time yet</string>
+    <string name="device">Device</string>
+    <string name="porn_usage">Porn usage</string>
+    <string name="porn_needs_mac">Shows once the MacBook’s screen time comes through</string>
+    <string name="porn_days_this_week">days this week, of %1$d</string>
+    <string name="porn_watched">Watched</string>
+    <string name="porn_not">Didn’t</string>
+    <string name="week_of">Week of %1$s</string>
+    <string name="days">Days</string>
+    <string name="sleep_phone">Phone in bed</string>
+    <string name="sleep_late_avg">late, usually</string>
+    <string name="sleep_late_nights">nights 30m+ late</string>
+    <string name="sleep_morning_avg">on waking</string>
+    <string name="sleep_phone_nights">Each night</string>
+    <string name="sleep_late_row">After 11 pm</string>
+    <string name="sleep_morning_row">On waking</string>
+    <string name="plus_essentials">+%1$s essentials</string>
+    <string name="essential">Essential</string>
+    <string name="spent_each_day">Spent each day</string>
+    <string name="this_month">This month</string>
+    <string name="so_far">so far</string>
+    <string name="last_month_by_now">last month by now</string>
+    <string name="a_usual_day">a usual day</string>
+    <string name="essentials">Essentials</string>
+    <string name="where_it_went">Where it went</string>
+    <string name="other">Other</string>
+    <string name="essentials_note">on groceries and health, not counted above</string>
+    <string name="purchases">Purchases</string>
+    <string name="top_shops">Top shops</string>
+    <string name="last_time">Last time</string>
+    <string name="workouts">Workouts</string>
+    <string name="streak">Streak</string>
+    <string name="streak_caption">in a row · best %1$d</string>
+    <string name="streak_done">Did it</string>
+    <string name="streak_missed">Didn’t</string>
+    <string name="music_each_day">Each day</string>
+    <string name="music_block">each block is %1$d minutes</string>
+    <string name="steps_title">Steps</string>
+    <string name="steps_usual_heading">Steps, usually</string>
 </resources>

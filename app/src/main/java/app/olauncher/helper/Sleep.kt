@@ -21,7 +21,11 @@ import java.time.ZoneId
  */
 object Sleep {
 
-    class Night(val start: Long, val end: Long, val asleepMs: Long, val checks: Int) {
+    /**
+     * [lateMs] is the phone's screen time from [LATE_HOUR] until falling asleep, and [morningMs] its time
+     * in the first [MORNING_MS] after waking.
+     */
+    class Night(val start: Long, val end: Long, val asleepMs: Long, val checks: Int, val lateMs: Long = 0, val morningMs: Long = 0) {
         val bedtime: LocalDateTime get() = time(start)
         val wake: LocalDateTime get() = time(end)
 
@@ -35,7 +39,8 @@ object Sleep {
         return nights.keys().asSequence().mapNotNull { key ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@mapNotNull null
             val night = nights.getJSONObject(key)
-            date to Night(night.getLong("start"), night.getLong("end"), night.getLong("asleep"), night.optInt("checks"))
+            date to Night(night.getLong("start"), night.getLong("end"), night.getLong("asleep"), night.optInt("checks"),
+                night.optLong("late"), night.optLong("morning"))
         }.toMap()
     }
 
@@ -155,14 +160,16 @@ object Sleep {
         }
         val start = real[first][1]
         val end = real[last][0]
-        return Night(start, end, end - start - awake, checks)
+        fun onBetween(from: Long, to: Long) = real.sumOf { maxOf(0L, minOf(it[1], to) - maxOf(it[0], from)) }
+        val lateFrom = date.minusDays(1).atTime(LATE_HOUR, 0).atZone(zone).toInstant().toEpochMilli()
+        return Night(start, end, end - start - awake, checks, onBetween(lateFrom, start), onBetween(end, end + MORNING_MS))
     }
 
     private fun save(context: Context, nights: Map<LocalDate, Night>) {
         val json = JSONObject()
         nights.forEach { (date, night) ->
             json.put(date.toString(), JSONObject().put("start", night.start).put("end", night.end)
-                .put("asleep", night.asleepMs).put("checks", night.checks))
+                .put("asleep", night.asleepMs).put("checks", night.checks).put("late", night.lateMs).put("morning", night.morningMs))
         }
         prefs(context).edit().putString(KEY, json.toString()).apply()
     }
@@ -191,4 +198,6 @@ object Sleep {
     private const val MAX_CHECK_MS = 15 * 60 * 1000L
     private const val MIN_REST_MS = 30 * 60 * 1000L
     private const val MIN_REST_BEFORE_MS = 90 * 60 * 1000L
+    const val LATE_HOUR = 23
+    const val MORNING_MS = 60 * 60 * 1000L
 }

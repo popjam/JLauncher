@@ -161,6 +161,10 @@ class StatSceneView @JvmOverloads constructor(
 
         fun textWidth(text: String, size: Float): Float = Paint().apply { textSize = size }.measureText(text)
 
+        /** One of [StatIcons]' icons, [size] square with its top left at [left], [top] */
+        fun icon(icon: String, left: Float, top: Float, size: Float, color: Int) =
+            shapes.add { canvas, paint -> StatIcons.draw(canvas, icon, left, top, size, color, paint) }
+
         /** Tapping inside [area] picks [key], outlining [outline]. */
         fun target(key: Any, area: RectF, outline: RectF = area, corner: Float = dp(4f)) {
             targets.add(Target(key, area, outline, corner))

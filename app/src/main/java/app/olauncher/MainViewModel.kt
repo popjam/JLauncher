@@ -590,18 +590,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Saves a day's screen time with the app used most, by name in case it's uninstalled later. */
     private fun saveUsage(day: LocalDate, appStats: List<SimpleUsageStat>, timeSpent: Long) {
-        val top = appStats.groupBy { it.applicationId }
+        val byApp = appStats.groupBy { it.applicationId }
             .mapValues { (_, stats) -> stats.sumOf { it.timeUsed } }
-            .maxByOrNull { it.value }
-        val name = top?.let { (packageName, _) ->
-            try {
-                val pm = appContext.packageManager
-                pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-            } catch (e: Exception) {
-                packageName
-            }
+        val top = byApp.maxByOrNull { it.value }
+        fun label(packageName: String) = try {
+            val pm = appContext.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+        } catch (e: Exception) {
+            packageName
         }
-        moodStore.setUsage(day, timeSpent, name, top?.value)
+        moodStore.setUsage(day, timeSpent, top?.let { label(it.key) }, top?.value)
+        // Each app's time too, for Screen time's list of apps
+        runCatching {
+            val named = byApp.entries.sortedByDescending { it.value }.take(25)
+                .groupBy({ label(it.key) }, { it.value }).mapValues { (_, times) -> times.sum() }
+            app.olauncher.helper.PhoneApps.save(appContext, day, named)
+        }
     }
 
     fun getPrivateSpaceAppList() {

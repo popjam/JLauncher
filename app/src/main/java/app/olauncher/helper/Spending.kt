@@ -37,6 +37,18 @@ object Spending {
             }
             return text.split(" · ").filterNot { it.equals("CommBank", ignoreCase = true) }.joinToString(" · ").ifEmpty { text }
         }
+
+        /** The shop alone: "Google Australia" */
+        val merchant: String get() = SPENT_AT.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() } ?: shop
+
+        /** CommBank's category for it, like "Entertainment", if it gave one */
+        val category: String? get() = SPENT_AT.find(text)?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
+
+        /** Groceries and health: spent on needs, so left out of Money spent's total */
+        val essential: Boolean get() {
+            val words = listOfNotNull(category, merchant).joinToString(" ").lowercase()
+            return ESSENTIAL.any { it in words }
+        }
     }
 
     fun moneyStat(data: MoodStore.Data): MoodStore.Stat? =
@@ -59,7 +71,15 @@ object Spending {
         }.sortedByDescending { it.time }
     }
 
-    fun totalCents(context: Context, date: LocalDate) = purchases(context).filter { it.date == date }.sumOf { it.cents }
+    /** What [date] went on things that aren't essentials, which is what Money spent counts */
+    fun totalCents(context: Context, date: LocalDate) = purchases(context).filter { it.date == date && !it.essential }.sumOf { it.cents }
+
+    /** Each day's non-essential spending, from the purchases kept */
+    fun dailyCents(context: Context): Map<LocalDate, Long> =
+        purchases(context).filter { !it.essential }.groupBy { it.date }.mapValues { (_, list) -> list.sumOf { it.cents } }
+
+    /** Since when purchases have been read: the oldest one kept, or null before any */
+    fun trackedSince(context: Context): LocalDate? = purchases(context).minOfOrNull { it.date }
 
     /** Records [sbn] if it's a purchase, and updates its day's Money spent. */
     fun record(context: Context, sbn: StatusBarNotification) {
@@ -89,9 +109,9 @@ object Spending {
     fun apply(context: Context, date: LocalDate) {
         val store = MoodStore(context)
         val stat = moneyStat(store.load()) ?: return
-        val cents = totalCents(context, date)
-        if (cents <= 0) return
-        store.setFace(date, stat.id, faceFor(stat, cents))
+        // A day with only essentials bought still counts as $0 spent
+        if (purchases(context).none { it.date == date }) return
+        store.setFace(date, stat.id, faceFor(stat, totalCents(context, date)))
     }
 
     /**
@@ -155,12 +175,13 @@ object Spending {
     private val LOCK = Any()
     private const val PREFS = "spending"
     private const val KEY = "purchases"
-    private const val KEEP_DAYS = 60L
+    private const val KEEP_DAYS = 400L
     private const val DAY_MS = 24 * 60 * 60 * 1000L
     private const val SAME_PURCHASE_MS = 15 * 60 * 1000L
     private const val MAX_TEXT = 140
     private val SOURCES = setOf(COMMBANK, WALLET)
     private val NAMES = listOf("money", "spen")
+    private val ESSENTIAL = listOf("grocer", "supermarket", "health", "medical", "pharmac", "chemist", "doctor", "dental", "woolworths", "coles", "aldi", "iga")
     private val AMOUNT = Regex("""\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?""")
     private val SPENT_AT = Regex("""spent at (.+?)(?: on (.+?))?\.?$""", RegexOption.IGNORE_CASE)
     private val NUMBER = Regex("""\d+(?:\.\d+)?""")

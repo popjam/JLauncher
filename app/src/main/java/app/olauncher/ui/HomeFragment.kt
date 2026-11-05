@@ -402,7 +402,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     private fun openMoodTracker() {
         try {
-            findNavController().navigate(R.id.action_mainFragment_to_moodFragment)
+            findNavController().navigate(R.id.action_mainFragment_to_statListFragment)
         } catch (e: Exception) {
             e.printStackTrace()
         }
