@@ -391,8 +391,13 @@
     <string name="music_listening">Listening</string>
     <string name="social_homes">Homes</string>
     <string name="pickups">Pickups</string>
-    <string name="mac_screen_time">MacBook</string>
-    <string name="mac_setup">Your MacBook writes its screen time to Google Drive. Choose the folder it\'s in (My Drive › JLauncher) to add it as a stat.</string>
+    <string name="mac_screen_time">MacBook and TV</string>
+    <string name="mac_setup">Your MacBook, TV and coding time are written to Google Drive. Choose the folder they\'re in (My Drive › JLauncher) to add them to Screen time.</string>
+    <string name="device_phone">Phone</string>
+    <string name="device_mac">MacBook</string>
+    <string name="device_tv">TV</string>
+    <string name="device_split">By device</string>
+    <string name="device_share">%1$s %2$d%%</string>
     <string name="mac_choose_folder">Choose folder</string>
     <string name="mac_today">Today</string>
     <string name="mac_updated">updated %1$s</string>
@@ -522,11 +527,11 @@
     <string name="needs_taken_and_not">Shows once there are 3 days taken and 3 not</string>
     <string name="filter_days">%1$s on %2$d of %3$d days</string>
     <string-array name="usage_faces">
-        <item>Under 30m</item>
-        <item>30m–1h</item>
-        <item>1–2h</item>
+        <item>Under 2h</item>
         <item>2–4h</item>
-        <item>4h+</item>
+        <item>4–6h</item>
+        <item>6–8h</item>
+        <item>8h+</item>
     </string-array>
     <string name="taken_of_days">taken %1$d of %2$d days</string>
     <string name="a_day">%1$s a day</string>

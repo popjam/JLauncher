@@ -164,7 +164,6 @@ class StatPageFragment : Fragment() {
         }
         if (AutoStats.id(requireContext(), AutoStats.MUSIC, data) == stat.id) musicCard()
         if (AutoStats.id(requireContext(), AutoStats.STEPS, data) == stat.id) stepsCard()
-        if (AutoStats.id(requireContext(), AutoStats.MAC, data) == stat.id) macCard()
         if (AutoStats.id(requireContext(), AutoStats.VIBECODING, data) == stat.id) {
             val days = Vibecoding.days(requireContext())
             vibeTodayCard(days)
@@ -190,10 +189,14 @@ class StatPageFragment : Fragment() {
         } else {
             dailyCard()
             if (stat.id == MoodStore.USAGE) {
+                deviceSplitCard()
                 val habits = PhoneHabits.days(requireContext())
                 pickupsCard(habits)
                 doomCard(habits)
-                if (AutoStats.id(requireContext(), AutoStats.MAC, data) == null) macSetupCard()
+                val withData = DeviceTime.Device.values().filter { DeviceTime.days(requireContext(), it).isNotEmpty() }
+                withData.forEach { deviceCard(it) }
+                // Until a device's file has been found
+                if (withData.isEmpty()) macSetupCard()
             }
             trendCard()
             overTimeCard()
@@ -212,13 +215,13 @@ class StatPageFragment : Fragment() {
     /** [s]'s value on [date]: hours for Screen time, otherwise its face's score, 1 to 5. */
     private fun valueOf(s: StatInfo, date: LocalDate): Float? {
         val day = dayOf(date) ?: return null
-        if (s.id == MoodStore.USAGE) return day.usageMs?.let { it / HOUR_MS }
+        if (s.id == MoodStore.USAGE) return day.totalUsageMs?.let { it / HOUR_MS }
         return day.face(s.id)?.let { MoodStore.score(it, s.inverted).toFloat() }
     }
 
     /** The face [value] is nearest, or for a medicine [taken] at all, its nearest dose. */
     private fun faceFor(s: StatInfo, value: Float, taken: Boolean = false): Int {
-        if (s.id == MoodStore.USAGE) return MoodStore.moodForUsage((value * HOUR_MS).toLong())
+        if (s.id == MoodStore.USAGE) return MoodStore.moodForTotalUsage((value * HOUR_MS).toLong())
         val faces = if (taken) s.faces.filter { !s.isBlank(it) } else s.faces
         return faces.minBy { abs(MoodStore.score(it, s.inverted) - value) }
     }
@@ -250,7 +253,7 @@ class StatPageFragment : Fragment() {
     /** [s]'s day in words: its face's name, or Screen time's time. */
     private fun dayText(s: StatInfo, date: LocalDate): String? {
         val day = dayOf(date) ?: return null
-        if (s.id == MoodStore.USAGE) return day.usageMs?.let { requireContext().formattedTimeSpent(it) }
+        if (s.id == MoodStore.USAGE) return day.totalUsageMs?.let { requireContext().formattedTimeSpent(it) }
         return day.face(s.id)?.let { faceName(s, it) }
     }
 
@@ -1369,7 +1372,59 @@ class StatPageFragment : Fragment() {
         }
     }
 
-    // --- Mac screen time, from the file the MacBook writes to Google Drive ---
+    /**
+     * Screen time split between the phone, the Mac and the TV: today's, a stacked bar a day for the
+     * last [HABIT_DAYS] days, and each device's share of them.
+     */
+    private fun deviceSplitCard() {
+        val context = requireContext()
+        val today = LocalDate.now()
+        val days = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val devices = listOf(Triple("phone", getString(R.string.device_phone), stat.color)) +
+            DeviceTime.Device.values().map { Triple(it.key, getString(it.label), it.color) }
+        fun ms(date: LocalDate, key: String): Long = dayOf(date)?.let { if (key == "phone") it.usageMs ?: 0L else it.deviceMs[key] ?: 0L } ?: 0L
+        // Only the devices with any time in these days
+        val shown = devices.filter { (key, _, _) -> days.any { ms(it, key) > 0 } }
+        if (shown.size < 2) return
+        val card = Card(getString(R.string.device_split))
+        val totals = shown.map { (key, _, _) -> days.sumOf { ms(it, key) } }
+        val all = totals.sum().coerceAtLeast(1)
+        shown.forEachIndexed { i, (_, name, color) -> card.keyItem(color, getString(R.string.device_share, name, (totals[i] * 100f / all).roundToInt())) }
+        card.headline(duration(shown.sumOf { (key, _, _) -> ms(today, key) }),
+            shown.filter { (key, _, _) -> ms(today, key) > 0 }.joinToString(" · ") { (key, name, _) -> "$name ${duration(ms(today, key))}" }
+                .ifEmpty { getString(R.string.mac_not_today) })
+        card.describe = { key ->
+            val date = key as LocalDate
+            (listOf(dateText(date)) + shown.map { (k, name, _) -> "$name ${duration(ms(date, k))}" }).joinToString(" · ")
+        }
+        val max = days.maxOf { date -> shown.sumOf { (key, _, _) -> ms(date, key) } }.coerceAtLeast(1).toFloat()
+        card.draw { s ->
+            val top = s.dp(6f)
+            val bottom = top + s.dp(120f)
+            val column = s.width / days.size
+            s.line(0f, bottom, s.width, bottom, faint(30), s.dp(1f))
+            val gap = minOf(s.dp(2f), column * 0.15f)
+            days.forEachIndexed { i, date ->
+                val x = i * column
+                var y = bottom
+                shown.forEach { (key, _, color) ->
+                    val h = ms(date, key) / max * (bottom - top)
+                    if (h > 0f) {
+                        s.rect(x + gap, y - h, x + column - gap, y, color)
+                        y -= h
+                    }
+                }
+                if (y == bottom) s.rect(x + gap, bottom - s.dp(2f), x + column - gap, bottom, faint(45), s.dp(1f))
+                s.target(date, RectF(x, 0f, x + column, bottom + s.dp(24f)), RectF(x, top - s.dp(2f), x + column, bottom + s.dp(2f)))
+            }
+            labelIndices(days.size, 2).forEach { i ->
+                s.text(days[i].dayOfMonth.toString(), i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+            }
+            s.height = bottom + s.dp(24f)
+        }
+    }
+
+    // --- The Mac's and TV's screen time, from the files they write to Google Drive ---
 
     private val pickDeviceFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) return@registerForActivityResult
@@ -1383,19 +1438,19 @@ class StatPageFragment : Fragment() {
         }.start()
     }
 
-    /** On Screen time, until the Mac's file has been found: where to look for it. */
+    /** On Screen time, until a device's file has been found: where to look for it. */
     private fun macSetupCard() {
         val card = Card(getString(R.string.mac_screen_time))
         card.showNote(getString(R.string.mac_setup))
         card.chipRow(listOf(getString(R.string.mac_choose_folder) to ink), null) { pickDeviceFolder.launch(null) }
     }
 
-    /** Today on the Mac, a bar a day, and the apps of the last [HABIT_DAYS] days. */
-    private fun macCard() {
+    /** Today on the Mac or TV, when it was first and last used, and its apps over the last [HABIT_DAYS] days. */
+    private fun deviceCard(device: DeviceTime.Device) {
         val context = requireContext()
-        val days = DeviceTime.days(context)
-        val card = Card(getString(R.string.mac_today))
-        val updated = DeviceTime.updated(context)
+        val days = DeviceTime.days(context, device)
+        val card = Card(getString(device.label))
+        val updated = DeviceTime.updated(context, device)
         if (updated > 0) card.subtitle(getString(R.string.mac_updated, android.text.format.DateUtils.getRelativeTimeSpanString(updated, System.currentTimeMillis(), 60_000L)))
         val today = LocalDate.now()
         val day = days[today]
@@ -1403,18 +1458,12 @@ class StatPageFragment : Fragment() {
             if (day?.first != null && day.last != null) getString(R.string.sleep_span, clock(java.time.LocalTime.parse(day.first)), clock(java.time.LocalTime.parse(day.last))) else getString(R.string.mac_not_today),
             day?.apps?.maxByOrNull { it.value }?.key?.let { getString(R.string.doom_mostly, it) },
         ).joinToString(" · "))
-        dayBars(card, days.mapValues { it.value.minutes / 60f }, stat.color) { date, _ ->
-            val d = days.getValue(date)
-            listOfNotNull(duration(d.minutes * 60_000L),
-                if (d.first != null && d.last != null) getString(R.string.sleep_span, clock(java.time.LocalTime.parse(d.first)), clock(java.time.LocalTime.parse(d.last))) else null,
-                d.apps.maxByOrNull { it.value }?.key?.let { getString(R.string.doom_mostly, it) }).joinToString(" · ")
-        }
         val apps = days.filterKeys { it > today.minusDays(HABIT_DAYS.toLong()) }.values.flatMap { it.apps.entries }
             .groupBy({ it.key }, { it.value }).mapValues { (_, m) -> m.sum() }.entries.sortedByDescending { it.value }.take(MAC_APPS)
-        if (apps.isEmpty()) return
-        val appsCard = Card(getString(R.string.mac_apps))
-        appsCard.subtitle(getString(R.string.last_days, HABIT_DAYS))
+        // Its apps, under today's figure in the same card
+        val appsCard = card
         appsCard.scene.isVisible = false
+        if (apps.isEmpty()) return
         val most = apps.first().value.toFloat()
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         apps.forEach { (app, minutes) ->
@@ -1431,7 +1480,7 @@ class StatPageFragment : Fragment() {
                 addView(View(context).apply {
                     background = GradientDrawable().apply {
                         cornerRadius = 3.dpToPx().toFloat()
-                        setColor(stat.color)
+                        setColor(device.color)
                     }
                 }, LinearLayout.LayoutParams((60.dpToPx() * minutes / most).toInt().coerceAtLeast(3.dpToPx()), 6.dpToPx()).apply {
                     marginStart = 10.dpToPx()

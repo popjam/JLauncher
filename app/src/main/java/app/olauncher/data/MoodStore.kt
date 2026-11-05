@@ -20,7 +20,9 @@ class MoodStore(context: Context) {
     /** Custom stat values are faces, like [mood]: 0 (happy) to 4 (sad), keyed by [Stat.id]. */
     /**
      * [topApp] is the name of the app used most that day and [topAppMs] its time; [weatherCode] is the
-     * day's WMO weather code. Both are kept for the day's written summary.
+     * day's WMO weather code. Both are kept for the day's written summary. [usageMs] is the phone's
+     * screen time and [deviceMs] other devices' (the Mac's and TV's, by [DeviceTime.Device.key]);
+     * Screen time is them all added up.
      */
     data class Day(
         val mood: Int?,
@@ -30,14 +32,20 @@ class MoodStore(context: Context) {
         val topApp: String? = null,
         val topAppMs: Long? = null,
         val weatherCode: Int? = null,
+        val deviceMs: Map<String, Long> = emptyMap(),
     ) {
         val isEmpty
-            get() = mood == null && usageMs == null && note == null && values.isEmpty() && topApp == null && weatherCode == null
+            get() = mood == null && usageMs == null && note == null && values.isEmpty() && topApp == null && weatherCode == null &&
+                deviceMs.isEmpty()
+
+        /** Screen time: the phone's and every other device's */
+        val totalUsageMs: Long?
+            get() = if (usageMs == null && deviceMs.isEmpty()) null else (usageMs ?: 0L) + deviceMs.values.sum()
 
         /** The face for [MOOD], [USAGE] or a custom stat's id. */
         fun face(statId: String): Int? = when (statId) {
             MOOD -> mood
-            USAGE -> usageMs?.let { moodForUsage(it) }
+            USAGE -> totalUsageMs?.let { moodForTotalUsage(it) }
             else -> values[statId]
         }
     }
@@ -181,6 +189,18 @@ class MoodStore(context: Context) {
                     it.topApp == null -> it.copy(topApp = topApp, topAppMs = topAppMs)
                     else -> it
                 }
+            }
+        }
+    }
+
+    /** A device's screen time by day, replacing what it had. Not backed up straight away, like usage. */
+    fun setDeviceUsage(device: String, byDay: Map<LocalDate, Long>) {
+        val data = load()
+        val changed = byDay.filter { (date, ms) -> data.days[date.toString()]?.deviceMs?.get(device) != ms }
+        if (changed.isEmpty()) return
+        update(sync = false) { d ->
+            changed.forEach { (date, ms) ->
+                d.editDay(date.toString()) { it.copy(deviceMs = if (ms > 0) it.deviceMs + (device to ms) else it.deviceMs - device) }
             }
         }
     }
@@ -368,6 +388,10 @@ class MoodStore(context: Context) {
                     day.mood ?: local?.mood, usage, day.note ?: local?.note, local?.values.orEmpty() + day.values,
                     usageDay.topApp ?: local?.topApp, usageDay.topAppMs ?: local?.topAppMs,
                     day.weatherCode ?: local?.weatherCode,
+                    // Each device's larger, like the phone's
+                    (local?.deviceMs.orEmpty().keys + day.deviceMs.keys).associateWith { key ->
+                        maxOf(local?.deviceMs?.get(key) ?: 0L, day.deviceMs[key] ?: 0L)
+                    },
                 )
             }
             if (json.has("moodColor")) data.moodColor = backup.moodColor
@@ -435,6 +459,7 @@ class MoodStore(context: Context) {
                     day.topApp?.let { put("topApp", it) }
                     day.topAppMs?.let { put("topAppMs", it) }
                     day.weatherCode?.let { put("weather", it) }
+                    if (day.deviceMs.isNotEmpty()) put("devices", JSONObject().apply { day.deviceMs.forEach { (key, ms) -> put(key, ms) } })
                     if (day.values.isNotEmpty()) put("values", JSONObject().apply { day.values.forEach { (id, face) -> put(id, face) } })
                 })
             }
@@ -504,6 +529,7 @@ class MoodStore(context: Context) {
                 topApp = day.optString("topApp").takeIf { it.isNotBlank() },
                 topAppMs = if (day.has("topAppMs")) day.getLong("topAppMs") else null,
                 weatherCode = if (day.has("weather")) day.getInt("weather") else null,
+                deviceMs = day.optJSONObject("devices")?.let { d -> d.keys().asSequence().associateWith { d.getLong(it) } }.orEmpty(),
             )
             if (!parsed.isEmpty) data.days[key] = parsed
         }
@@ -602,6 +628,22 @@ class MoodStore(context: Context) {
         /** The face that gets [score]. */
         fun faceForScore(score: Int, inverted: Boolean = false): Int = if (inverted) score - 1 else 5 - score
 
+        /**
+         * The face for Screen time, phone and computer and TV together, which run longer than the
+         * phone's own: under 2 hours, 2–4, 4–6, 6–8, and 8 or more.
+         */
+        fun moodForTotalUsage(usageMs: Long): Int {
+            val hours = usageMs / 3_600_000.0
+            return when {
+                hours < 2 -> HAPPY
+                hours < 4 -> MILDLY_HAPPY
+                hours < 6 -> NEUTRAL
+                hours < 8 -> MILDLY_SAD
+                else -> SAD
+            }
+        }
+
+        /** The face for the phone's own screen time, as on the home screen */
         fun moodForUsage(usageMs: Long): Int {
             val minutes = usageMs / 60_000
             return when {

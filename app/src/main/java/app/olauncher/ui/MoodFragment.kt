@@ -446,9 +446,9 @@ class MoodFragment : Fragment() {
         binding.faceLabels.isVisible = !showUsage && stat.labels.isNotEmpty()
         binding.usageRow.isVisible = showUsage
         if (showUsage) {
-            val usage = day?.usageMs
+            val usage = day?.totalUsageMs
             binding.usageFace.isVisible = usage != null
-            usage?.let { binding.usageFace.mood = MoodStore.moodForUsage(it) }
+            usage?.let { binding.usageFace.mood = MoodStore.moodForTotalUsage(it) }
             binding.usageTime.text = usage?.let { requireContext().formattedTimeSpent(it) } ?: getString(R.string.no_data)
         } else {
             val faces = stat.faces
@@ -762,7 +762,7 @@ class MoodFragment : Fragment() {
                 phrase.isNotEmpty() -> phrase.replace("{}", label)
                 stat.id == MoodStore.MOOD -> getString(R.string.summary_mood, words[face])
                 stat.id == MoodStore.USAGE -> {
-                    val time = requireContext().formattedTimeSpent(day.usageMs ?: 0)
+                    val time = requireContext().formattedTimeSpent(day.totalUsageMs ?: 0)
                     // Only worth naming an app that took up a good part of the day
                     if (day.topApp != null && (day.topAppMs ?: 0) >= TOP_APP_MIN_MS) getString(R.string.summary_usage_app, time, day.topApp)
                     else getString(R.string.summary_usage, time)
