@@ -78,7 +78,8 @@ object DeviceTime {
         }.toMap()
     }
 
-    private fun readFile(context: Context, treeUri: Uri, name: String): String? = runCatching {
+    /** A file's text from the picked folder, by its name */
+    fun readFile(context: Context, treeUri: Uri, name: String): String? = runCatching {
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
         val id = context.contentResolver.query(
             children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null

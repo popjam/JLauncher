@@ -398,6 +398,27 @@
     <string name="mac_updated">updated %1$s</string>
     <string name="mac_not_today">not used today</string>
     <string name="mac_apps">Apps</string>
+    <plurals name="vibe_prompts">
+        <item quantity="one">%1$d prompt</item>
+        <item quantity="other">%1$d prompts</item>
+    </plurals>
+    <string name="vibe_your_time">your time today</string>
+    <string name="vibe_three_hours">3 hours</string>
+    <string name="vibe_tile_prompts">prompts a day</string>
+    <string name="vibe_tile_off">days off</string>
+    <string name="vibe_projects">Projects</string>
+    <string name="vibe_when">When you vibecode</string>
+    <string name="vibe_daytime">Day</string>
+    <string name="vibe_late">11 pm – 5 am</string>
+    <string name="vibe_late_share">of your time is late at night</string>
+    <string name="vibe_cost">Spend</string>
+    <string name="vibe_cost_note">estimated, at list prices</string>
+    <string name="vibe_cost_caption">over the last %1$d days · %2$sM tokens</string>
+    <string name="vibe_cost_day">%1$s · %2$sM tokens</string>
+    <string name="vibe_and_you">Vibecoding and you</string>
+    <string name="vibe_none">None</string>
+    <string name="vibe_3_plus">3h+</string>
+    <string name="vibe_late_sleep">After %1$d late nights (past 11 pm) you slept %2$s, against %3$s on other nights</string>
     <string name="pickups_today">unlocks today</string>
     <string name="usually_n">usually %1$d</string>
     <string name="usually_text">usually %1$s</string>
