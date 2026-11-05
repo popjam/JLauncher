@@ -75,8 +75,28 @@ def check(serial):
     if "mWakefulness=Awake" not in out:
         return None
     match = re.search(r"mCurrentFocus=Window\{\S+ \S+ ([\w.]+)/", out)
-    package = match.group(1) if match else ""
-    return APPS.get(package, package or "Unknown")
+    if not match:
+        # On but with nothing readable in front (mid-transition, or while something else is mirroring the
+        # screen): most likely still the app from a minute ago
+        return last_app() or "Unknown"
+    return APPS.get(match.group(1), match.group(1))
+
+
+def last_app():
+    """The app logged in the last 2 minutes, if any."""
+    if not os.path.exists(LOG):
+        return None
+    with open(LOG, "rb") as f:
+        f.seek(max(0, os.path.getsize(LOG) - 200))
+        lines = f.read().decode("utf-8", "ignore").splitlines()
+    if not lines or "\t" not in lines[-1]:
+        return None
+    stamp, app = lines[-1].split("\t", 1)
+    try:
+        ago = dt.datetime.now() - dt.datetime.strptime(stamp, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None
+    return app if ago <= dt.timedelta(minutes=2) and app != "Unknown" else None
 
 
 def summarise(out_path):

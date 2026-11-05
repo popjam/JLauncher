@@ -58,7 +58,7 @@ object Sleep {
         }
         if (found.isEmpty()) return
 
-        val id = AutoStats.ensure(context, AutoStats.SLEEP, replaces = { it.name.contains(NAME, ignoreCase = true) }) { store ->
+        val id = AutoStats.ensure(context, AutoStats.SLEEP, NAME, replaces = { it.name.contains(NAME, ignoreCase = true) }) { store ->
             store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
                 phrases = emptyList(), medicine = false, nextDay = false)
         } ?: return

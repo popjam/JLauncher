@@ -77,7 +77,7 @@ object Music {
     }
 
     private fun setFace(context: Context, date: LocalDate, ms: Long) {
-        val id = AutoStats.ensure(context, AutoStats.MUSIC) { store ->
+        val id = AutoStats.ensure(context, AutoStats.MUSIC, NAME) { store ->
             store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
                 phrases = emptyList(), medicine = true, nextDay = false)
         } ?: return

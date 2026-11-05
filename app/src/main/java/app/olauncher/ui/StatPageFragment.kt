@@ -1329,6 +1329,8 @@ class StatPageFragment : Fragment() {
             day?.doomSessions?.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.doom_sessions, it, it) },
             day?.doomApp?.let { getString(R.string.doom_mostly, it) },
         ).joinToString(" · "))
+        // Nothing to chart until there's been some
+        if (days.values.none { it.doomMs > 0 }) return
         dayBars(card, days.mapValues { it.value.doomMs / HOUR_MS }, ContextCompat.getColor(requireContext(), R.color.holiday)) { date, _ ->
             val d = days.getValue(date)
             listOfNotNull(duration(d.doomMs), d.doomSessions.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.doom_sessions, it, it) },
@@ -1626,7 +1628,10 @@ class StatPageFragment : Fragment() {
                 s.target(h, RectF(x, 0f, x + column, bottom + s.dp(24f)), RectF(x, top - s.dp(2f), x + column, bottom + s.dp(2f)))
             }
             listOf(0, 6, 12, 18).forEach { h ->
-                s.text(offsetClock(h * 60).replace(":00", ""), h * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(11f))
+                val text = offsetClock(h * 60).replace(":00", "")
+                // Midnight sits at the left edge, where a centred label would be cut off
+                if (h == 0) s.text(text, 0f, bottom + s.dp(18f), faint(140), s.sp(11f), Paint.Align.LEFT)
+                else s.text(text, h * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(11f))
             }
             s.height = bottom + s.dp(24f)
         }
@@ -1760,8 +1765,11 @@ class StatPageFragment : Fragment() {
         val holidayColor = ContextCompat.getColor(requireContext(), R.color.holiday)
         val afterColor = ContextCompat.getColor(requireContext(), R.color.medicineLight)
         val rangeFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
-        fun rangeText(h: Holiday) = if (h.length == 1) h.start.format(rangeFormat)
-        else getString(R.string.graph_month_range, h.start.format(rangeFormat), h.end.format(rangeFormat))
+        // A holiday's days are the ones the missed doses affect, which for a next-day medicine are the days
+        // after; it's named by the days the doses were missed, as on the calendar above
+        val shift = if (stat.nextDay) 1L else 0L
+        fun rangeText(h: Holiday) = if (h.length == 1) h.start.minusDays(shift).format(rangeFormat)
+        else getString(R.string.graph_month_range, h.start.minusDays(shift).format(rangeFormat), h.end.minusDays(shift).format(rangeFormat))
 
         val last = holidays.last()
         card.headline(holidays.size.toString(),
@@ -2257,7 +2265,7 @@ class StatPageFragment : Fragment() {
     private fun labelIndices(count: Int, step: Int): List<Int> {
         val indices = (0 until count step step).toMutableList()
         if (indices.last() != count - 1) {
-            if (count - 1 - indices.last() < (step + 1) / 2 && indices.size > 1) indices.removeAt(indices.lastIndex)
+            if (count - 1 - indices.last() <= step / 2 && indices.size > 1) indices.removeAt(indices.lastIndex)
             indices.add(count - 1)
         }
         return indices

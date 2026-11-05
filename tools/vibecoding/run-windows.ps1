@@ -20,7 +20,11 @@ wsl.exe -e python3 /home/james/JLauncher/tools/vibecoding/vibecoding.py --device
     --claude (ToWsl (Join-Path $env:USERPROFILE ".claude\projects")) `
     --codex (ToWsl (Join-Path $env:USERPROFILE ".codex\sessions")) `
     --rates (ToWsl (Join-Path $env:USERPROFILE ".t3\userdata\usage-model-rates.json"))
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+    # The scheduled task runs this through conhost, which hides the exit code, so leave a note
+    "$(Get-Date -Format s) vibecoding.py failed with exit code $LASTEXITCODE" | Out-File -Append -Encoding utf8 (Join-Path $local "vibecoding-errors.log")
+    exit $LASTEXITCODE
+}
 
 # Only when it changed, so Drive isn't syncing the same file every 15 minutes
 $target = Join-Path $Drive "JLauncher Vibecoding PC.json"

@@ -371,7 +371,7 @@
         <item quantity="one">checked phone once</item>
         <item quantity="other">checked phone %1$d times</item>
     </plurals>
-    <string name="sleep_usual">Usually, over the last %1$d nights</string>
+    <string name="sleep_usual">Over the last %1$d nights</string>
     <string name="sleep_usual_asleep">asleep</string>
     <string name="sleep_usual_bedtime">to bed</string>
     <string name="sleep_usual_wake">up</string>
@@ -469,7 +469,7 @@
     <string name="social_out">%1$s out</string>
     <string name="social_left_at">left %1$s</string>
     <string name="social_at">at %1$s</string>
-    <string name="social_usual">Usually, over the last %1$d days</string>
+    <string name="social_usual">Over the last %1$d days</string>
     <string name="social_tile_out">out a day</string>
     <string name="social_tile_stayed_in">stayed in</string>
     <string name="social_tile_first_out">first out</string>

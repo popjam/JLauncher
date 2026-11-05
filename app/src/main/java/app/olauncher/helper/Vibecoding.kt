@@ -52,7 +52,7 @@ object Vibecoding {
                 .putLong(UPDATED_KEY, maxOf(prefs.getLong(UPDATED_KEY, 0), json.optLong("updated"))).apply()
         }
         if (!found) return
-        val id = AutoStats.ensure(context, AutoStats.VIBECODING) { store ->
+        val id = AutoStats.ensure(context, AutoStats.VIBECODING, NAME) { store ->
             store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = true,
                 phrases = emptyList(), medicine = false, nextDay = false)
         } ?: return

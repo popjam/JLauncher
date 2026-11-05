@@ -192,7 +192,7 @@ object Social {
      * goes, earlier days once at least [MIN_TRACKED_MS] of them was tracked.
      */
     fun refresh(context: Context) {
-        val id = AutoStats.ensure(context, AutoStats.SOCIAL) { store ->
+        val id = AutoStats.ensure(context, AutoStats.SOCIAL, NAME) { store ->
             store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
                 phrases = emptyList(), medicine = false, nextDay = false)
         } ?: return

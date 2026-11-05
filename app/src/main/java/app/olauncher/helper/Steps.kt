@@ -84,7 +84,7 @@ object Steps {
 
     fun ensureStat(context: Context): String? {
         if (!hasSensor(context)) return null
-        return AutoStats.ensure(context, AutoStats.STEPS) { store ->
+        return AutoStats.ensure(context, AutoStats.STEPS, NAME) { store ->
             store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
                 phrases = emptyList(), medicine = false, nextDay = false)
         }

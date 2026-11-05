@@ -72,7 +72,9 @@ object BackupManager {
     fun restore(context: Context, backup: JSONObject): Int {
         backup.optJSONObject("settings")?.let { restoreSettings(prefs(context), it) }
         val mood = backup.optJSONObject("mood") ?: backup.takeIf { it.has("days") }
-        return mood?.let { MoodStore(context).restoreFrom(it) } ?: 0
+        val days = mood?.let { MoodStore(context).restoreFrom(it) } ?: 0
+        app.olauncher.helper.AutoStats.afterRestore(context)
+        return days
     }
 
     /** When the backup was written, if it records it (older backups don't). */

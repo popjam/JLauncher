@@ -235,7 +235,8 @@ def main():
             "spend": [(when, sum(usage.values()), cost(rates, model, usage)) for when, model, usage in spend],
         }
 
-    prompts = sorted(p for f in kept.values() for p in f["prompts"] if p[0] >= cutoff)
+    # Tuples from files read this run, lists from the cache: sorted by time only so the two can mix
+    prompts = sorted((tuple(p) for f in kept.values() for p in f["prompts"] if p[0] >= cutoff), key=lambda p: p[0])
     spend = [s for f in kept.values() for s in f["spend"] if s[0] >= cutoff]
 
     days = {}
