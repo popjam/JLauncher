@@ -126,6 +126,9 @@ class StatPageFragment : Fragment() {
     private val choices get() = trendPeriod to overTimeSpan
     private var renderedWith: Pair<Int, Int>? = null
 
+    /** Whether Screen time's page has read the Mac's and TV's files since it opened */
+    private var devicesRead = false
+
     /** Whether notification access was on when the Money spent card was drawn; null without the card */
     private var spendingShownOn: Boolean? = null
 
@@ -190,6 +193,7 @@ class StatPageFragment : Fragment() {
             dailyCard()
             if (stat.id == MoodStore.USAGE) {
                 deviceSplitCard()
+                readDevicesOnce()
                 val habits = PhoneHabits.days(requireContext())
                 pickupsCard(habits)
                 doomCard(habits)
@@ -1370,6 +1374,19 @@ class StatPageFragment : Fragment() {
                 past.count { it >= Steps.GOAL }.toString() to getString(R.string.steps_tile_goal),
             ))
         }
+    }
+
+    /** Reads the Mac's and TV's latest files once on opening Screen time, and redraws if anything came in. */
+    private fun readDevicesOnce() {
+        if (devicesRead) return
+        devicesRead = true
+        val context = requireContext().applicationContext
+        Thread {
+            val before = DeviceTime.Device.values().map { DeviceTime.updated(context, it) }
+            DeviceTime.refresh(context, force = true)
+            val after = DeviceTime.Device.values().map { DeviceTime.updated(context, it) }
+            if (before != after) _binding?.root?.post { if (_binding != null) render() }
+        }.start()
     }
 
     /**

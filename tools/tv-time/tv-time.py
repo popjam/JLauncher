@@ -2,7 +2,7 @@
 """
 JLauncher TV time: once a minute, asks the Android TV over the network (adb, with Network debugging on)
 whether its screen is on and what's in front, and logs the minute if it is. The screensaver or
-ambient mode doesn't count. Every 15 minutes the last DAYS days are summed up into the same JSON
+ambient mode doesn't count. Every 5 minutes the last DAYS days are summed up into the same JSON
 shape as Mac screen time (minutes, first, last, apps), for JLauncher on the phone.
 
     tv-time.py --tv 192.168.4.20 --out FILE
@@ -46,6 +46,10 @@ APPS = {
     "com.hbo.hbonow": "Max",
     "com.google.android.apps.tv.launcherx": "Home screen",
     "com.spocky.projengmenu": "Home screen",
+    "org.smarttube.stable": "SmartTube",
+    "org.smarttube.beta": "SmartTube",
+    "com.liskovsoft.smarttubetv": "SmartTube",
+    "com.liskovsoft.smarttubetv.beta": "SmartTube",
     "com.google.android.tvlauncher": "Home screen",
     "com.android.tv": "TV inputs",
     "com.android.tv.settings": "Settings",
@@ -109,7 +113,7 @@ def main():
     if app is not None:
         with open(LOG, "a", encoding="utf-8") as f:
             f.write("%s\t%s\n" % (dt.datetime.now().strftime("%Y-%m-%dT%H:%M"), app))
-    if dt.datetime.now().minute % 15 == 0 or not os.path.exists(opts.out):
+    if dt.datetime.now().minute % 5 == 0 or not os.path.exists(opts.out):
         summarise(opts.out)
 
 

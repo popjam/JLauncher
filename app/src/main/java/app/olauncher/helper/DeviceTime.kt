@@ -114,6 +114,6 @@ object DeviceTime {
     private const val PREFS = "device_time"
     private const val FOLDER_KEY = "folder"
     private const val LAST_KEY = "refreshed"
-    private const val REFRESH_MS = 15 * 60 * 1000L
+    private const val REFRESH_MS = 5 * 60 * 1000L
     private const val KEEP_DAYS = 400L
 }
