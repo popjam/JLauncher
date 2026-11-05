@@ -267,13 +267,13 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- A face and a label box for each face of the scale -->
+            <!-- A face and a full-width label box for each face of the scale, one per row -->
             <LinearLayout
                 android:id="@+id/statFaceLabels"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal" />
+                android:layout_marginTop="2dp"
+                android:orientation="vertical" />
 
             <LinearLayout
                 android:layout_width="match_parent"

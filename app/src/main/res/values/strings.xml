@@ -289,7 +289,6 @@
     <string name="weather_was_showers">There were showers</string>
     <string name="weather_was_snow">It snowed</string>
     <string name="weather_was_storms">There were thunderstorms</string>
-    <string name="summary_stat">%1$s was %2$s</string>
     <string name="summary_nothing">Nothing recorded</string>
     <string-array name="summary_faces">
         <item>great</item>
@@ -337,6 +336,13 @@
     <string name="stat_by_weekday">By weekday</string>
     <string name="stat_dose">Dose</string>
     <string name="stat_level">Estimated level</string>
+    <string name="stat_cups">Cups</string>
+    <string name="a_cup">a cup</string>
+    <string name="cup_past">%1$dth and after</string>
+    <plurals name="cup_count">
+        <item quantity="one">%1$d cup</item>
+        <item quantity="other">%1$d cups</item>
+    </plurals>
     <string name="half_life">half-life %1$d h</string>
     <string name="in_your_system">in your system</string>
     <string name="in_your_system_now">in your system now</string>

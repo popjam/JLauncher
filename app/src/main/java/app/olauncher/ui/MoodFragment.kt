@@ -773,7 +773,8 @@ class MoodFragment : Fragment() {
                     else getString(R.string.summary_usage, time)
                 }
                 label.isNotEmpty() -> getString(R.string.stat_label, stat.name, label)
-                else -> getString(R.string.summary_stat, stat.name, words[face])
+                // Without a label, just its number: a medicine's place in the row, otherwise its score
+                else -> getString(R.string.stat_label, stat.name, (if (stat.medicine) index else MoodStore.score(face, stat.inverted)).toString())
             }
         }
             .toMutableList()

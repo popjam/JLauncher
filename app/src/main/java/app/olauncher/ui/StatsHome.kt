@@ -126,7 +126,8 @@ class StatsHome(private val container: LinearLayout, private val openStat: (Stri
         val place = stat.faces.indexOf(face)
         stat.labels.getOrNull(place)?.takeIf { it.isNotEmpty() }?.let { return it }
         return if (stat.medicine) res.getString(if (place <= 0) R.string.none_taken else R.string.taken)
-        else moodWord(MoodStore.score(face, stat.inverted))
+        else if (stat.id == MoodStore.MOOD) moodWord(MoodStore.score(face, stat.inverted))
+        else MoodStore.score(face, stat.inverted).toString()
     }
 
     private fun dateText(date: LocalDate) = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))

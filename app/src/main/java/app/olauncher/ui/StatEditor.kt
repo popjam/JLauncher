@@ -117,10 +117,10 @@ object StatEditor {
         fun faceColor(face: Int) = PixelFaceView.faceColor(context, face, rowFaces(), binding.statMedicine.isChecked)
         fun renderLabels() {
             binding.statFaceLabels.removeAllViews()
-            MoodStore.facesFor(scale).zip(rowFaces()).forEachIndexed { i, (place, face) ->
+            MoodStore.facesFor(scale).zip(rowFaces()).forEach { (place, face) ->
                 binding.statFaceLabels.addView(faceLabelInput(context, face, faceColor(face), labels[place].orEmpty()) { labels[place] = it },
-                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                        if (i > 0) marginStart = 4.dpToPx()
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        topMargin = 6.dpToPx()
                     })
             }
         }
@@ -241,19 +241,20 @@ object StatEditor {
             .show()
     }
 
-    /** A face with a box below for its label. */
+    /** A face with a full-width box beside it for its label. */
     private fun faceLabelInput(context: Context, face: Int, faceColor: Int, text: String, onChange: (String) -> Unit) = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_HORIZONTAL
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
         addView(PixelFaceView(context).apply {
             mood = face
             color = faceColor
-        }, LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()))
+        }, LinearLayout.LayoutParams(26.dpToPx(), 26.dpToPx()))
         addView(textInput(context, text, MoodStore.MAX_LABEL_LENGTH, onChange).apply {
-            setPadding(4.dpToPx(), 8.dpToPx(), 4.dpToPx(), 8.dpToPx())
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 4.dpToPx()
+            textSize = 15f
+            setPadding(12.dpToPx(), 10.dpToPx(), 12.dpToPx(), 10.dpToPx())
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = 10.dpToPx()
         })
     }
 

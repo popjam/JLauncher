@@ -1,6 +1,7 @@
 package app.olauncher.ui
 
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -63,7 +64,7 @@ class StatPageFragment : Fragment() {
     /** Every day with something saved, oldest first */
     private var dates = emptyList<LocalDate>()
 
-    /** How many [DAILY_DAYS] stretches back from today the Daily or Taken card is */
+    /** How many stretches of its days back from today the Daily, Taken or Cups card is */
     private var stretchesBack = 0
 
     /** The face Over time is showing only the days of, picked from the chips under it */
@@ -130,7 +131,7 @@ class StatPageFragment : Fragment() {
 
         binding.cards.removeAllViews()
         if (stat.medicine) {
-            takenCard()
+            if (stat.name.contains(COFFEE, ignoreCase = true)) cupsCard() else takenCard()
             if (stat.name.contains(SERTRALINE, ignoreCase = true)) levelCard(SERTRALINE_HALF_LIFE_HOURS)
             trendCard()
             overTimeCard()
@@ -175,13 +176,14 @@ class StatPageFragment : Fragment() {
 
     private fun takenOn(med: StatInfo, date: LocalDate): Boolean? = doseFor(med, date)?.let { !med.isBlank(it) }
 
-    /** A face's label, or failing that a name for it. */
+    /** A face's label, or failing that a name for it: Mood's word, a medicine's dose, or a plain score, 1 to 5. */
     private fun faceName(s: StatInfo, face: Int): String {
         val place = s.faces.indexOf(face)
         s.labels.getOrNull(place)?.takeIf { it.isNotEmpty() }?.let { return it }
         return when {
             s.id == MoodStore.USAGE -> resources.getStringArray(R.array.usage_faces)[face]
-            !s.medicine -> resources.getStringArray(R.array.mood_names)[face]
+            s.id == MoodStore.MOOD -> resources.getStringArray(R.array.mood_names)[face]
+            !s.medicine -> MoodStore.score(face, s.inverted).toString()
             place <= 0 -> getString(R.string.none_taken)
             s.faces.size == 2 -> getString(R.string.taken)
             else -> getString(R.string.dose_number, place)
@@ -345,7 +347,7 @@ class StatPageFragment : Fragment() {
         }
 
         /** ‹ [text] ›, stepping with [onStep] (-1 back, 1 on) where [canGoBack] and [canGoForward]. */
-        fun stepper(text: String, canGoBack: Boolean, canGoForward: Boolean, onStep: (Int) -> Unit) {
+        fun stepper(text: String, canGoBack: Boolean, canGoForward: Boolean, days: Int, onStep: (Int) -> Unit) {
             headerEnd.removeAllViews()
             fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
                 this.text = symbol
@@ -353,7 +355,7 @@ class StatPageFragment : Fragment() {
                 setTextColor(ink)
                 alpha = if (enabled) 0.8f else 0.2f
                 isEnabled = enabled
-                contentDescription = getString(description, DAILY_DAYS)
+                contentDescription = getString(description, days)
                 setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
                 setOnClickListener { onStep(by) }
             }
@@ -421,23 +423,23 @@ class StatPageFragment : Fragment() {
         }
     }
 
-    /** The [DAILY_DAYS] days the Daily or Taken card shows, stepping back to the stat's first day. */
-    private fun dailyDates(card: Card, redraw: () -> Unit): List<LocalDate> {
+    /** The [count] days the Daily, Taken or Cups card shows, stepping back to the stat's first day. */
+    private fun dailyDates(card: Card, count: Int = DAILY_DAYS, redraw: () -> Unit): List<LocalDate> {
         val today = LocalDate.now()
-        val furthestBack = firstDate?.let { (ChronoUnit.DAYS.between(it, today) / DAILY_DAYS).toInt() } ?: 0
+        val furthestBack = firstDate?.let { (ChronoUnit.DAYS.between(it, today) / count).toInt() } ?: 0
         stretchesBack = stretchesBack.coerceIn(0, furthestBack)
-        val end = today.minusDays(DAILY_DAYS.toLong() * stretchesBack)
-        val start = end.minusDays(DAILY_DAYS - 1L)
-        val title = if (stretchesBack == 0) getString(R.string.last_days, DAILY_DAYS)
+        val end = today.minusDays(count.toLong() * stretchesBack)
+        val start = end.minusDays(count - 1L)
+        val title = if (stretchesBack == 0) getString(R.string.last_days, count)
         else {
             val format = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
             getString(R.string.graph_month_range, start.format(format), end.format(format))
         }
-        card.stepper(title, canGoBack = (stretchesBack < furthestBack), canGoForward = (stretchesBack > 0)) { by ->
+        card.stepper(title, canGoBack = (stretchesBack < furthestBack), canGoForward = (stretchesBack > 0), days = count) { by ->
             stretchesBack -= by
             redraw()
         }
-        return (0 until DAILY_DAYS).map { start.plusDays(it.toLong()) }
+        return (0 until count).map { start.plusDays(it.toLong()) }
     }
 
     /**
@@ -448,7 +450,7 @@ class StatPageFragment : Fragment() {
         val card = Card(getString(R.string.stat_daily))
         card.keyItem(ink, getString(R.string.seven_day_average))
         fun draw() {
-            val days = dailyDates(card, ::draw)
+            val days = dailyDates(card, redraw = ::draw)
             val today = LocalDate.now()
             val values = days.map { valueOf(stat, it) }
             val averages = days.map { date ->
@@ -515,7 +517,7 @@ class StatPageFragment : Fragment() {
     private fun takenCard() {
         val card = Card(getString(R.string.stat_taken))
         fun draw() {
-            val days = dailyDates(card, ::draw)
+            val days = dailyDates(card, redraw = ::draw)
             card.describe = { key -> listOf(dateText(key as LocalDate), dayText(stat, key) ?: "–").joinToString(" · ") }
             card.draw { s ->
                 val cell = minOf(s.width / 7.4f, s.dp(48f))
@@ -557,6 +559,63 @@ class StatPageFragment : Fragment() {
         }
         draw()
     }
+
+    /**
+     * Coffee's days as stacks of little cups, one per cup: its place in the row, so the faces go 0 to 4
+     * cups. Cups past the [CUPS_HOT]rd stand out. A dot is a day with none; a gap, a day not logged.
+     */
+    private fun cupsCard() {
+        val card = Card(getString(R.string.stat_cups))
+        card.keyItem(stat.color, getString(R.string.a_cup))
+        card.keyItem(hotCup, getString(R.string.cup_past, CUPS_HOT + 1))
+        fun cupsOn(date: LocalDate): Int? = dayOf(date)?.face(stat.id)?.let { stat.faces.indexOf(it).coerceAtLeast(0) }
+        fun draw() {
+            val days = dailyDates(card, CUP_DAYS, ::draw)
+            val cups = days.map { cupsOn(it) }
+            card.describe = { key ->
+                val date = key as LocalDate
+                val count = cupsOn(date)
+                listOf(dateText(date), count?.let { resources.getQuantityString(R.plurals.cup_count, it, it) } ?: "–").joinToString(" · ")
+            }
+            card.draw { s ->
+                val column = s.width / days.size
+                val cup = minOf(column * 0.6f, s.dp(24f))
+                val cupHeight = cup * 0.72f
+                val gap = s.dp(4f)
+                val most = maxOf(cups.maxOf { it ?: 0 }, stat.faces.size - 1)
+                val base = s.dp(4f) + most * (cupHeight + gap)
+                s.line(0f, base + s.dp(2f), s.width, base + s.dp(2f), faint(40), s.dp(1.5f))
+                cups.forEachIndexed { i, count ->
+                    val x = i * column + (column - cup) / 2 - cup * 0.06f
+                    if (count == 0) s.circle(x + cup / 2, base - s.dp(4f), s.dp(2f), faint(110))
+                    repeat(count ?: 0) { k ->
+                        val y = base - (k + 1) * (cupHeight + gap) + gap
+                        val color = if (k >= CUPS_HOT) hotCup else stat.color
+                        s.path(Path().apply {
+                            moveTo(x, y)
+                            lineTo(x + cup, y)
+                            lineTo(x + cup * 0.88f, y + cupHeight)
+                            lineTo(x + cup * 0.12f, y + cupHeight)
+                            close()
+                        }, color)
+                        s.path(Path().apply {
+                            moveTo(x + cup * 0.94f, y + cupHeight * 0.18f)
+                            quadTo(x + cup * 1.3f, y + cupHeight * 0.3f, x + cup * 0.94f, y + cupHeight * 0.78f)
+                        }, color, cup * 0.12f)
+                    }
+                    s.text(days[i].dayOfMonth.toString(), i * column + column / 2, base + s.dp(22f), faint(140), s.sp(12f))
+                }
+                s.height = base + s.dp(28f)
+                days.forEachIndexed { i, date ->
+                    val x = i * column
+                    s.target(date, RectF(x, 0f, x + column, s.height), RectF(x, 0f, x + column, base + s.dp(6f)))
+                }
+            }
+        }
+        draw()
+    }
+
+    private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
     /**
      * A rough estimate of how much of a medicine is in the body over the last [LEVEL_DAYS] days: each
@@ -1099,6 +1158,13 @@ class StatPageFragment : Fragment() {
 
         /** Only Sertraline gets the level card for now, with its usual half-life */
         private const val SERTRALINE = "sertraline"
+
+        /** Coffee gets cups instead of the Taken calendar, [CUP_DAYS] days at a time */
+        private const val COFFEE = "coffee"
+        private const val CUP_DAYS = 10
+
+        /** How many cups before the rest stand out */
+        private const val CUPS_HOT = 3
         private const val SERTRALINE_HALF_LIFE_HOURS = 26f
         private const val LEVEL_DAYS = 90
         private const val HOLIDAY_DAYS = 2
