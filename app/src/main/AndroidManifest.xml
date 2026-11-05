@@ -17,6 +17,11 @@
         tools:ignore="ProtectedPermissions" />
     <!--Used only for the home screen weather forecast-->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!--Only to read the Wi-Fi's name, for time out of the house (Social); kept on the phone-->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!--Used for Private Space support on Android 15+-->
     <uses-permission android:name="android.permission.ACCESS_HIDDEN_PROFILES" />
 

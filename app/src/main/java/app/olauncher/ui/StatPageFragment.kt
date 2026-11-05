@@ -6,6 +6,8 @@ import android.graphics.PointF
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import android.text.TextPaint
 import android.text.TextUtils
@@ -13,8 +15,11 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
@@ -27,6 +32,7 @@ import app.olauncher.databinding.FragmentStatPageBinding
 import app.olauncher.helper.AutoStats
 import app.olauncher.helper.Music
 import app.olauncher.helper.Sleep
+import app.olauncher.helper.Social
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.allStats
@@ -109,7 +115,8 @@ class StatPageFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         // Also after coming back from turning on notification access for Money spent
-        if (renderedWith != choices || (spendingShownOn != null && spendingShownOn != Spending.isEnabled(requireContext()))) render()
+        if (renderedWith != choices || (spendingShownOn != null && spendingShownOn != Spending.isEnabled(requireContext())) ||
+            (socialShownState != null && socialShownState != socialState())) render()
     }
 
     private val choices get() = trendPeriod to overTimeSpan
@@ -117,6 +124,9 @@ class StatPageFragment : Fragment() {
 
     /** Whether notification access was on when the Money spent card was drawn; null without the card */
     private var spendingShownOn: Boolean? = null
+
+    /** Location access and homes when the Social cards were drawn; null without them */
+    private var socialShownState: String? = null
 
     override fun onDestroyView() {
         super.onDestroyView()
@@ -140,6 +150,7 @@ class StatPageFragment : Fragment() {
 
         binding.cards.removeAllViews()
         spendingShownOn = null
+        socialShownState = null
         if (Spending.moneyStat(data)?.id == stat.id) spendingCard()
         if (AutoStats.id(requireContext(), AutoStats.SLEEP, data) == stat.id) {
             val nights = Sleep.nights(requireContext())
@@ -148,6 +159,14 @@ class StatPageFragment : Fragment() {
             sleepMoodCard(nights)
         }
         if (AutoStats.id(requireContext(), AutoStats.MUSIC, data) == stat.id) musicCard()
+        if (AutoStats.id(requireContext(), AutoStats.SOCIAL, data) == stat.id) {
+            val days = Social.days(requireContext())
+            socialTodayCard(days)
+            socialHomesCard(days)
+            socialTimelineCard(days)
+            socialStayInCard(days)
+            socialMoodCard(days)
+        }
         if (stat.medicine) {
             if (stat.name.contains(COFFEE, ignoreCase = true)) cupsCard() else takenCard()
             if (stat.name.contains(SERTRALINE, ignoreCase = true)) holidayCard()
@@ -922,6 +941,309 @@ class StatPageFragment : Fragment() {
         card.root.addView(list, card.root.indexOfChild(card.scene))
     }
 
+    // --- Social: time out of the house, from home Wi-Fi ---
+
+    private val askLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) { if (_binding != null) render() }
+
+    /** What the Social cards were drawn with, so they're redrawn on coming back from a permission */
+    private fun socialState(): String {
+        val context = requireContext()
+        return listOf(Social.hasLocation(context), Social.hasBackgroundLocation(context), Social.homes(context).map { it?.ssid }).toString()
+    }
+
+    private val homeColors by lazy { listOf(0xFF81C784.toInt(), 0xFFFFB74D.toInt()) }
+
+    private fun homeName(slot: Int) = Social.homes(requireContext()).getOrNull(slot)?.name ?: getString(R.string.social_home_n, slot + 1)
+
+    private fun socialDayText(date: LocalDate, day: Social.Day) = listOfNotNull(
+        dateText(date),
+        getString(R.string.social_out, duration(day.outMs)),
+        day.outings.takeIf { it.isNotEmpty() }?.let { o -> getString(R.string.social_left_at, o.joinToString(", ") { clock(it.startTime.toLocalTime()) }) },
+        day.mainHome?.let { getString(R.string.social_at, homeName(it)) },
+    ).joinToString(" · ")
+
+    /** Three figures side by side under [caption] */
+    private fun tiles(card: Card, caption: String, tiles: List<Pair<String, String>>) {
+        card.draw { s ->
+            s.text(caption, 0f, s.sp(12f), faint(140), s.sp(12f), Paint.Align.LEFT)
+            val top = s.dp(22f)
+            val gap = s.dp(8f)
+            val width = (s.width - gap * (tiles.size - 1)) / tiles.size
+            tiles.forEachIndexed { i, (value, label) ->
+                val x = i * (width + gap)
+                s.rect(x, top, x + width, top + s.dp(64f), faint(18), s.dp(14f))
+                s.text(value, x + width / 2, top + s.dp(30f), ink, s.sp(17f), bold = true)
+                s.text(label, x + width / 2, top + s.dp(50f), faint(150), s.sp(12f))
+            }
+            s.height = top + s.dp(64f)
+        }
+    }
+
+    /**
+     * The two homes' Wi-Fi, set from the Wi-Fi you're on, with where you are now and how many days of
+     * the last [SOCIAL_DAYS] were mostly at each. Until location is allowed, a way to allow it.
+     */
+    private fun socialHomesCard(days: Map<LocalDate, Social.Day>) {
+        val context = requireContext()
+        val card = Card(getString(R.string.social_homes))
+        socialShownState = socialState()
+        if (!Social.hasLocation(context)) {
+            card.showNote(getString(R.string.social_need_location))
+            card.chipRow(listOf(getString(R.string.social_allow_location) to ink), null) { askLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
+            return
+        }
+        card.scene.isVisible = false
+        val homes = Social.homes(context)
+        val today = LocalDate.now()
+        val recent = days.filterKeys { it > today.minusDays(SOCIAL_DAYS.toLong()) }
+        val mood = stats.firstOrNull { it.id == MoodStore.MOOD }
+        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        homes.forEachIndexed { slot, home ->
+            val dates = recent.filterValues { it.mainHome == slot }.keys
+            val moodText = mood?.let { m -> dates.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
+                ?.let { getString(R.string.music_mood, decimal(it)) }
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(card.textView(15f, 255).apply {
+                        text = home?.name ?: getString(R.string.social_home_n, slot + 1)
+                        setStatDot(homeColors[slot])
+                    })
+                    addView(card.textView(12f, 140).apply {
+                        text = if (home == null) getString(R.string.social_not_set)
+                        else listOfNotNull(home.ssid, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
+                        updatePadding(top = 2.dpToPx())
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(card.textView(13f, 255).apply {
+                    setText(if (home == null) R.string.social_set else R.string.edit)
+                    setBackgroundResource(R.drawable.bg_stat_chip)
+                    setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
+                    setOnClickListener { editHome(slot, home) }
+                })
+            })
+        }
+        card.root.addView(list, card.root.indexOfChild(card.scene))
+        if (homes.any { it != null }) {
+            val now = days[today]?.stretches?.lastOrNull()
+            card.subtitle(when {
+                now == null || now.place == Social.UNKNOWN -> getString(R.string.social_now_unknown)
+                now.place == Social.OUT -> getString(R.string.social_now_out, clock(now.startTime.toLocalTime()))
+                else -> getString(R.string.social_now_at, homeName(now.place))
+            })
+        }
+        if (!Social.hasBackgroundLocation(context)) {
+            card.chipRow(listOf(getString(R.string.social_allow_always) to ink), null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) askLocation.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
+            card.note.isVisible = true
+            card.note.text = getString(R.string.social_need_always)
+        }
+    }
+
+    /** Sets a home to the Wi-Fi you're on now, with a name, or takes it away. */
+    private fun editHome(slot: Int, home: Social.Home?) {
+        val context = requireContext()
+        val ssid = Social.currentSsid(context)
+        if (ssid == null && home == null) {
+            AlertDialog.Builder(context).setMessage(R.string.social_connect_first).setPositiveButton(R.string.okay, null).show()
+            return
+        }
+        val name = EditText(context).apply {
+            setText(home?.name ?: ssid)
+            setSingleLine()
+            setSelection(text.length)
+        }
+        val box = android.widget.FrameLayout(context).apply {
+            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+            addView(name)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(getString(R.string.social_home_n, slot + 1))
+            .setMessage(if (ssid != null) getString(R.string.social_uses_wifi, ssid) else getString(R.string.social_keeps_wifi, home!!.ssid))
+            .setView(box)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val wifi = ssid ?: home!!.ssid
+                Social.setHome(context, slot, Social.Home(wifi, name.text.toString().trim().ifEmpty { wifi }))
+                if (_binding != null) render()
+            }
+            .apply {
+                if (home != null) setNeutralButton(R.string.social_remove) { _, _ ->
+                    Social.setHome(context, slot, null)
+                    if (_binding != null) render()
+                }
+            }
+            .show()
+    }
+
+    /** Today's time out, when you left, and the usual of the last [SOCIAL_DAYS] days under it. */
+    private fun socialTodayCard(days: Map<LocalDate, Social.Day>) {
+        val today = LocalDate.now()
+        val day = days[today] ?: return
+        val card = Card(getString(R.string.social_today))
+        card.headline(duration(day.outMs), listOfNotNull(
+            getString(R.string.social_out_today),
+            day.outings.firstOrNull()?.let { getString(R.string.social_left_at, clock(it.startTime.toLocalTime())) },
+            day.mainHome?.let { getString(R.string.social_at, homeName(it)) },
+        ).joinToString(" · "))
+        val recent = days.filterKeys { it > today.minusDays(SOCIAL_DAYS.toLong()) && it < today }
+        if (recent.size < 2) return
+        val firstOut = recent.values.mapNotNull { d -> d.outings.firstOrNull()?.let { offset(it.startTime, it.startTime.toLocalDate()) } }
+        tiles(card, getString(R.string.social_usual, recent.size), listOf(
+            duration(recent.values.map { it.outMs }.average().toLong()) to getString(R.string.social_tile_out),
+            recent.values.count { it.stayedIn }.toString() to getString(R.string.social_tile_stayed_in),
+            (firstOut.takeIf { it.isNotEmpty() }?.average()?.roundToInt()?.let(::offsetClock) ?: "–") to getString(R.string.social_tile_first_out),
+        ))
+    }
+
+    /** The last [SOCIAL_DAYS] days as a line each through the day: out, at each home, or not known. */
+    private fun socialTimelineCard(days: Map<LocalDate, Social.Day>) {
+        val today = LocalDate.now()
+        val dates = (SOCIAL_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }.filter { days.containsKey(it) }
+        if (dates.isEmpty()) return
+        val card = Card(getString(R.string.social_when_out))
+        card.subtitle(getString(R.string.last_days, SOCIAL_DAYS))
+        card.keyItem(stat.color, getString(R.string.social_key_out))
+        Social.homes(requireContext()).forEachIndexed { slot, home -> if (home != null) card.keyItem(homeColors[slot], home.name) }
+        card.describe = { key -> socialDayText(key as LocalDate, days.getValue(key)) }
+        val zone = java.time.ZoneId.systemDefault()
+        card.draw { s ->
+            val labelSize = s.sp(12f)
+            val left = s.textWidth("Wed 30", labelSize) + s.dp(10f)
+            val row = s.dp(26f)
+            val bar = s.dp(12f)
+            var top = s.dp(16f)
+            fun x(date: LocalDate, ms: Long) = left + (ms - date.atStartOfDay(zone).toInstant().toEpochMilli()) / 86_400_000f * (s.width - left)
+            listOf(0, 6, 12, 18, 24).forEach { h ->
+                val hx = left + h / 24f * (s.width - left)
+                s.text(if (h == 24) "" else offsetClock(h * 60).replace(":00", ""), hx, s.sp(11f), faint(130), s.sp(11f),
+                    if (h == 0) Paint.Align.LEFT else Paint.Align.CENTER)
+            }
+            dates.reversed().forEach { date ->
+                val mid = top + row / 2
+                val dayLabel = date.format(DateTimeFormatter.ofPattern("EEE d", Locale.getDefault()))
+                s.text(dayLabel, 0f, mid + labelSize * 0.35f, faint(170), labelSize, Paint.Align.LEFT)
+                s.rect(left, mid - bar / 2, s.width, mid + bar / 2, faint(14), bar / 2)
+                days.getValue(date).stretches.forEach { stretch ->
+                    val color = when (stretch.place) {
+                        Social.UNKNOWN -> null
+                        Social.OUT -> stat.color
+                        else -> ColorUtils.setAlphaComponent(homeColors[stretch.place], 120)
+                    } ?: return@forEach
+                    s.rect(x(date, stretch.start), mid - bar / 2, maxOf(x(date, stretch.end), x(date, stretch.start) + s.dp(2f)), mid + bar / 2, color, s.dp(3f))
+                }
+                s.target(date, RectF(0f, top, s.width, top + row))
+                top += row
+            }
+            s.height = top
+        }
+    }
+
+    /** Days under an hour out in the last [SOCIAL_DAYS], as dots, with runs of staying in and going out. */
+    private fun socialStayInCard(days: Map<LocalDate, Social.Day>) {
+        val today = LocalDate.now()
+        val dates = (SOCIAL_LONG_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val tracked = dates.filter { days.containsKey(it) && it < today }
+        if (tracked.size < 3) return
+        val card = Card(getString(R.string.social_staying_in))
+        val stayed = tracked.count { days.getValue(it).stayedIn }
+        card.headline(stayed.toString(), getString(R.string.social_stayed_in_of, tracked.size))
+        card.keyItem(stat.color, getString(R.string.social_went_out))
+        card.keyItem(faint(200), getString(R.string.social_stayed_in), ring = true)
+        card.describe = { key -> socialDayText(key as LocalDate, days.getValue(key)) }
+        fun longestRun(stayedIn: Boolean): Int {
+            var best = 0
+            var run = 0
+            tracked.forEach { date ->
+                run = if (days.getValue(date).stayedIn == stayedIn) run + 1 else 0
+                best = maxOf(best, run)
+            }
+            return best
+        }
+        card.draw { s ->
+            val perRow = 10
+            val cell = s.width / perRow
+            val radius = minOf(cell * 0.32f, s.dp(10f))
+            dates.forEachIndexed { i, date ->
+                val cx = i % perRow * cell + cell / 2
+                val cy = i / perRow * cell + cell / 2
+                val day = days[date]
+                when {
+                    day == null || date == today -> s.circle(cx, cy, s.dp(2f), faint(70))
+                    day.stayedIn -> s.ring(cx, cy, radius, faint(200), s.dp(2f))
+                    else -> s.circle(cx, cy, radius, stat.color)
+                }
+                if (day != null) s.target(date, RectF(cx - cell / 2, cy - cell / 2, cx + cell / 2, cy + cell / 2),
+                    RectF(cx - radius - s.dp(3f), cy - radius - s.dp(3f), cx + radius + s.dp(3f), cy + radius + s.dp(3f)), radius + s.dp(3f))
+            }
+            val rows = (dates.size + perRow - 1) / perRow
+            var top = rows * cell + s.dp(14f)
+            val runs = listOf(
+                longestRun(true).toString() to getString(R.string.social_longest_in),
+                longestRun(false).toString() to getString(R.string.social_longest_out),
+            )
+            val gap = s.dp(8f)
+            val width = (s.width - gap) / 2
+            runs.forEachIndexed { i, (value, label) ->
+                val x = i * (width + gap)
+                s.rect(x, top, x + width, top + s.dp(56f), faint(18), s.dp(14f))
+                s.text(value, x + width / 2, top + s.dp(26f), ink, s.sp(17f), bold = true)
+                s.text(label, x + width / 2, top + s.dp(45f), faint(150), s.sp(12f))
+            }
+            top += s.dp(56f)
+            s.height = top
+        }
+    }
+
+    /** Mood by how long you were out that day. */
+    private fun socialMoodCard(days: Map<LocalDate, Social.Day>) {
+        val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
+        val today = LocalDate.now()
+        val past = days.filterKeys { it < today }
+        if (past.count { (date, _) -> valueOf(mood, date) != null } < SLEEP_MIN_NIGHTS) return
+        val card = Card(getString(R.string.social_and_mood))
+        card.keyItem(mood.color, mood.name)
+        val names = listOf(R.string.social_under_1, R.string.social_1_3, R.string.social_3_6, R.string.social_6_plus).map { getString(it) }
+        fun bucket(day: Social.Day): Int {
+            val hours = day.outMs / 3_600_000.0
+            return when {
+                hours < 1 -> 0
+                hours < 3 -> 1
+                hours < 6 -> 2
+                else -> 3
+            }
+        }
+        val averages = (0 until 4).map { b ->
+            past.filter { bucket(it.value) == b }.keys.mapNotNull { valueOf(mood, it) }
+                .let { values -> values.takeIf { it.isNotEmpty() }?.average()?.toFloat() to values.size }
+        }
+        card.describe = { key ->
+            val (average, count) = averages[key as Int]
+            listOf(names[key], getString(R.string.stat_total, mood.name, average?.let(::decimal) ?: "–"),
+                resources.getQuantityString(R.plurals.day_count, count, count)).joinToString(" · ")
+        }
+        card.draw { s ->
+            val top = s.dp(6f)
+            val bottom = top + s.dp(120f)
+            val column = s.width / 4
+            fun y(value: Float) = bottom - (value - 1f) / 4f * (bottom - top) - s.dp(2f)
+            listOf(1, 3, 5).forEach { g -> s.line(0f, y(g.toFloat()), s.width, y(g.toFloat()), faint(28), s.dp(1f)) }
+            val bar = minOf(column * 0.5f, s.dp(30f))
+            averages.forEachIndexed { b, (average, _) ->
+                val center = b * column + column / 2
+                if (average == null) s.rect(center - bar / 2, bottom - s.dp(2f), center + bar / 2, bottom, faint(45), s.dp(1f))
+                else s.rect(center - bar / 2, y(average), center + bar / 2, bottom, mood.faceColor(requireContext(), faceFor(mood, average)), s.dp(6f))
+                s.text(names[b], center, bottom + s.dp(18f), faint(160), s.sp(12f))
+                s.target(b, RectF(b * column, 0f, (b + 1) * column, bottom + s.dp(26f)))
+            }
+            s.height = bottom + s.dp(26f)
+        }
+    }
+
     private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
     /** A run of days a medicine wasn't taken, and the days just after it. */
@@ -1504,6 +1826,10 @@ class StatPageFragment : Fragment() {
         /** How far back Music's artists go, and how many are listed */
         private const val MUSIC_DAYS = 30
         private const val MUSIC_ARTISTS = 6
+
+        /** How many days Social's cards cover, and its staying-in dots */
+        private const val SOCIAL_DAYS = 14
+        private const val SOCIAL_LONG_DAYS = 30
 
         /** How many of the latest purchases Money spent lists */
         private const val SPENDING_SHOWN = 8

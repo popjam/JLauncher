@@ -1,0 +1,282 @@
+package app.olauncher.helper
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import app.olauncher.data.MoodStore
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+
+/**
+ * Time out of the house, from Wi-Fi: on one of up to two homes' Wi-Fi is home, off it is out. Each
+ * change is kept on the phone, and each day's time out fills in the Social stat. Android only gives
+ * the Wi-Fi's name with location access ("all the time", to read it in the background); without it
+ * nothing is counted. Dropping off Wi-Fi for under [BLIP_MS] doesn't count as going out.
+ */
+object Social {
+
+    const val OUT = -1
+    const val UNKNOWN = -2
+
+    class Home(val ssid: String, val name: String)
+
+    /** A stretch of a day in one place: [OUT], [UNKNOWN] or a home's slot */
+    class Stretch(val start: Long, val end: Long, val place: Int) {
+        val ms get() = end - start
+        val startTime: LocalDateTime get() = LocalDateTime.ofInstant(Instant.ofEpochMilli(start), ZoneId.systemDefault())
+        val endTime: LocalDateTime get() = LocalDateTime.ofInstant(Instant.ofEpochMilli(end), ZoneId.systemDefault())
+    }
+
+    class Day(val stretches: List<Stretch>) {
+        val outMs = stretches.filter { it.place == OUT }.sumOf { it.ms }
+        val trackedMs = stretches.filter { it.place != UNKNOWN }.sumOf { it.ms }
+        fun homeMs(slot: Int) = stretches.filter { it.place == slot }.sumOf { it.ms }
+
+        /** The home most of the day was spent at, if any */
+        val mainHome: Int? get() = (0 until HOMES).filter { homeMs(it) > 0 }.maxByOrNull { homeMs(it) }
+
+        /** Each time out of [LEAVE_MS] or more */
+        val outings get() = stretches.filter { it.place == OUT && it.ms >= LEAVE_MS }
+
+        /** Under an hour out */
+        val stayedIn get() = outMs < STAYED_IN_MS
+    }
+
+    // --- Homes ---
+
+    fun homes(context: Context): List<Home?> = (0 until HOMES).map { slot ->
+        val prefs = prefs(context)
+        prefs.getString("home${slot}Ssid", null)?.let { Home(it, prefs.getString("home${slot}Name", null) ?: it) }
+    }
+
+    fun setHome(context: Context, slot: Int, home: Home?) {
+        prefs(context).edit().apply {
+            if (home == null) {
+                remove("home${slot}Ssid")
+                remove("home${slot}Name")
+            } else {
+                putString("home${slot}Ssid", home.ssid)
+                putString("home${slot}Name", home.name)
+            }
+        }.apply()
+        check(context)
+    }
+
+    fun hasLocation(context: Context) = granted(context, Manifest.permission.ACCESS_FINE_LOCATION)
+
+    fun hasBackgroundLocation(context: Context) =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || granted(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+
+    private fun granted(context: Context, permission: String) =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    /** The Wi-Fi connected to now, without quotes; null when not on Wi-Fi or its name is hidden. */
+    @Suppress("DEPRECATION")
+    fun currentSsid(context: Context): String? {
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
+        return cleanSsid(wifi.connectionInfo?.ssid)
+    }
+
+    private fun cleanSsid(ssid: String?) = ssid?.removeSurrounding("\"")?.takeIf { it.isNotBlank() && it != WifiManager.UNKNOWN_SSID && it != "<unknown ssid>" }
+
+    // --- Changes ---
+
+    /** Where the phone is now, from its Wi-Fi: [ssid] if known, or whether it's on Wi-Fi at all. */
+    fun record(context: Context, onWifi: Boolean, ssid: String?) {
+        val homes = homes(context)
+        if (homes.all { it == null } || !hasLocation(context)) return
+        val place = when {
+            !onWifi -> OUT
+            ssid == null -> lastPlace(context).takeIf { it >= 0 } ?: UNKNOWN
+            else -> homes.indexOfFirst { it?.ssid == ssid }.takeIf { it >= 0 } ?: OUT
+        }
+        add(context, place)
+    }
+
+    /** Checked from the foreground too, in case the background watcher missed a change. */
+    fun check(context: Context) {
+        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val onWifi = connectivity.activeNetwork?.let { connectivity.getNetworkCapabilities(it) }
+            ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        record(context, onWifi, if (onWifi) currentSsid(context) else null)
+    }
+
+    /** Tracking stopped (the watcher let go), so the time after isn't counted as anywhere. */
+    fun stopped(context: Context) {
+        if (homes(context).any { it != null }) add(context, UNKNOWN)
+    }
+
+    private fun add(context: Context, place: Int) = synchronized(LOCK) {
+        val changes = changes(context).toMutableList()
+        if (changes.lastOrNull()?.second == place) return
+        val now = System.currentTimeMillis()
+        changes.add(now to place)
+        val cutoff = now - KEEP_DAYS * DAY_MS
+        // Keeps the last change before the cutoff, so the first day kept still knows where it started
+        val firstKept = changes.indexOfFirst { it.first >= cutoff }.let { if (it > 0) it - 1 else 0 }
+        save(context, changes.drop(firstKept))
+    }
+
+    private fun lastPlace(context: Context) = changes(context).lastOrNull()?.second ?: UNKNOWN
+
+    private fun changes(context: Context): List<Pair<Long, Int>> = synchronized(LOCK) {
+        val json = prefs(context).getString(KEY, null) ?: return emptyList()
+        val array = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
+        return List(array.length()) { array.getJSONArray(it).let { c -> c.getLong(0) to c.getInt(1) } }
+    }
+
+    private fun save(context: Context, changes: List<Pair<Long, Int>>) {
+        val array = JSONArray()
+        changes.forEach { (time, place) -> array.put(JSONArray().put(time).put(place)) }
+        prefs(context).edit().putString(KEY, array.toString()).apply()
+    }
+
+    // --- Days ---
+
+    /** Every day with something tracked, from the first change to today */
+    fun days(context: Context): Map<LocalDate, Day> {
+        val changes = changes(context)
+        if (changes.isEmpty()) return emptyMap()
+        val zone = ZoneId.systemDefault()
+        val now = System.currentTimeMillis()
+        val first = Instant.ofEpochMilli(changes.first().first).atZone(zone).toLocalDate()
+        val days = mutableMapOf<LocalDate, Day>()
+        var date = first
+        val today = LocalDate.now()
+        while (date <= today) {
+            val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+            val end = minOf(now, date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+            val stretches = changes.mapIndexedNotNull { i, (time, place) ->
+                val from = maxOf(time, start)
+                val to = minOf(changes.getOrNull(i + 1)?.first ?: now, end)
+                if (to > from) Stretch(from, to, place) else null
+            }
+            val day = Day(merge(stretches))
+            if (day.trackedMs > 0) days[date] = day
+            date = date.plusDays(1)
+        }
+        return days
+    }
+
+    /** Short drops off a home's Wi-Fi go back to that home, and stretches in the same place join up. */
+    private fun merge(stretches: List<Stretch>): List<Stretch> {
+        val fixed = stretches.mapIndexed { i, stretch ->
+            val before = stretches.getOrNull(i - 1)?.place
+            val after = stretches.getOrNull(i + 1)?.place
+            if (stretch.place == OUT && stretch.ms < BLIP_MS && before != null && before >= 0 && before == after) Stretch(stretch.start, stretch.end, before)
+            else stretch
+        }
+        val joined = mutableListOf<Stretch>()
+        fixed.forEach { stretch ->
+            val last = joined.lastOrNull()
+            if (last != null && last.place == stretch.place && last.end == stretch.start) joined[joined.lastIndex] = Stretch(last.start, stretch.end, last.place)
+            else joined.add(stretch)
+        }
+        return joined
+    }
+
+    /**
+     * Adds the Social stat the first time, and fills in the last [DAYS_BACK] days' time out: today as it
+     * goes, earlier days once at least [MIN_TRACKED_MS] of them was tracked.
+     */
+    fun refresh(context: Context) {
+        val id = AutoStats.ensure(context, AutoStats.SOCIAL) { store ->
+            store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
+                phrases = emptyList(), medicine = false, nextDay = false)
+        } ?: return
+        check(context)
+        val store = MoodStore(context)
+        val today = LocalDate.now()
+        days(context).filterKeys { it > today.minusDays(DAYS_BACK) }.forEach { (date, day) ->
+            if (date == today || day.trackedMs >= MIN_TRACKED_MS) store.setFace(date, id, faceFor(day.outMs))
+        }
+    }
+
+    /** Under an hour out is the saddest face, then 1–2, 2–4, 4–6 and 6 hours or more. */
+    fun faceFor(outMs: Long): Int {
+        val hours = outMs / HOUR_MS.toDouble()
+        return when {
+            hours < 1 -> MoodStore.SAD
+            hours < 2 -> MoodStore.MILDLY_SAD
+            hours < 4 -> MoodStore.NEUTRAL
+            hours < 6 -> MoodStore.MILDLY_HAPPY
+            else -> MoodStore.HAPPY
+        }
+    }
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    const val NAME = "Social"
+    const val HOMES = 2
+    private val COLOR = 0xFF4FC3F7.toInt()
+    private val LABELS = listOf("Under 1h", "1–2h", "2–4h", "4–6h", "6h+")
+
+    private val LOCK = Any()
+    private const val PREFS = "social"
+    private const val KEY = "changes"
+    private const val HOUR_MS = 60 * 60 * 1000L
+    private const val DAY_MS = 24 * HOUR_MS
+    private const val KEEP_DAYS = 400L
+    private const val DAYS_BACK = 7L
+    private const val MIN_TRACKED_MS = 12 * HOUR_MS
+    private const val BLIP_MS = 5 * 60 * 1000L
+    private const val LEAVE_MS = 15 * 60 * 1000L
+    private const val STAYED_IN_MS = HOUR_MS
+}
+
+/** Follows Wi-Fi coming and going while the notification listener runs, for [Social]. */
+class WifiWatcher(private val context: Context) {
+
+    private val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+
+    // Android 12 on only shares the Wi-Fi's name with a callback that asks for it
+    private val callback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        object : ConnectivityManager.NetworkCallback(FLAG_INCLUDE_LOCATION_INFO) {
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = changed(capabilities)
+            override fun onLost(network: Network) = lost()
+        }
+    } else {
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = changed(capabilities)
+            override fun onLost(network: Network) = lost()
+        }
+    }
+
+    private fun changed(capabilities: NetworkCapabilities) {
+        runCatching {
+            val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                (capabilities.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
+                    ?.takeIf { it.isNotBlank() && it != WifiManager.UNKNOWN_SSID && it != "<unknown ssid>" }
+            else null
+            Social.record(context, true, ssid ?: Social.currentSsid(context))
+        }
+    }
+
+    private fun lost() {
+        runCatching { Social.check(context) }
+    }
+
+    fun start() {
+        runCatching {
+            connectivity?.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), callback)
+            Social.check(context)
+        }
+    }
+
+    fun stop() {
+        runCatching { connectivity?.unregisterNetworkCallback(callback) }
+        runCatching { Social.stopped(context) }
+    }
+}

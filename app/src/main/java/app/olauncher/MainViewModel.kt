@@ -23,6 +23,7 @@ import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Music
 import app.olauncher.helper.Sleep
+import app.olauncher.helper.Social
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.WallpaperWorker
 import app.olauncher.helper.Weather
@@ -544,6 +545,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Sleep comes from the same usage access; quiet days for Music are filled in alongside
                 runCatching { Sleep.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Music.fillQuietDays(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { Social.refresh(appContext) }.onFailure { it.printStackTrace() }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
