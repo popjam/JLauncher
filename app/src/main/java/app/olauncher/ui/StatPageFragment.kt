@@ -31,7 +31,9 @@ import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentStatPageBinding
 import app.olauncher.helper.AutoStats
 import app.olauncher.helper.Music
+import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.Sleep
+import app.olauncher.helper.Steps
 import app.olauncher.helper.Social
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatInfo
@@ -159,6 +161,7 @@ class StatPageFragment : Fragment() {
             sleepMoodCard(nights)
         }
         if (AutoStats.id(requireContext(), AutoStats.MUSIC, data) == stat.id) musicCard()
+        if (AutoStats.id(requireContext(), AutoStats.STEPS, data) == stat.id) stepsCard()
         if (AutoStats.id(requireContext(), AutoStats.SOCIAL, data) == stat.id) {
             val days = Social.days(requireContext())
             socialTodayCard(days)
@@ -175,6 +178,11 @@ class StatPageFragment : Fragment() {
             doseCard()
         } else {
             dailyCard()
+            if (stat.id == MoodStore.USAGE) {
+                val habits = PhoneHabits.days(requireContext())
+                pickupsCard(habits)
+                doomCard(habits)
+            }
             trendCard()
             overTimeCard()
             if (stat.id == MoodStore.USAGE) topAppCard() else howOftenCard()
@@ -1244,6 +1252,111 @@ class StatPageFragment : Fragment() {
         }
     }
 
+    // --- Screen time's pickups and doomscrolling, and Steps ---
+
+    /**
+     * A bar a day for the last [HABIT_DAYS] days, today on the right, in [color], with a dashed-looking
+     * [goal] line if given. [label] is a bar's figure in words, for tapping.
+     */
+    private fun dayBars(card: Card, values: Map<LocalDate, Float>, color: Int, goal: Float? = null, label: (LocalDate, Float) -> String) {
+        val today = LocalDate.now()
+        val days = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val max = maxOf(values.filterKeys { it in days }.values.maxOrNull() ?: 0f, goal ?: 0f, 1f)
+        card.describe = { key -> (key as LocalDate).let { d -> listOf(dateText(d), values[d]?.let { label(d, it) } ?: "–").joinToString(" · ") } }
+        card.draw { s ->
+            val top = s.dp(6f)
+            val bottom = top + s.dp(110f)
+            val column = s.width / days.size
+            fun y(value: Float) = bottom - value / max * (bottom - top)
+            s.line(0f, bottom, s.width, bottom, faint(30), s.dp(1f))
+            goal?.let { g -> s.line(0f, y(g), s.width, y(g), faint(110), s.dp(1.5f)) }
+            val gap = minOf(s.dp(2f), column * 0.15f)
+            days.forEachIndexed { i, date ->
+                val x = i * column
+                val value = values[date]
+                if (value == null || value <= 0f) s.rect(x + gap, bottom - s.dp(2f), x + column - gap, bottom, faint(45), s.dp(1f))
+                else s.rect(x + gap, y(value), x + column - gap, bottom, if (date == today) color else ColorUtils.setAlphaComponent(color, 190), minOf(s.dp(4f), column / 4))
+                s.target(date, RectF(x, 0f, x + column, bottom + s.dp(24f)), RectF(x, top - s.dp(2f), x + column, bottom + s.dp(2f)))
+            }
+            labelIndices(days.size, 2).forEach { i ->
+                s.text(days[i].dayOfMonth.toString(), i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+            }
+            s.height = bottom + s.dp(24f)
+        }
+    }
+
+    /** Unlocks each day, today's against the usual. */
+    private fun pickupsCard(days: Map<LocalDate, PhoneHabits.Day>) {
+        if (days.isEmpty()) return
+        val card = Card(getString(R.string.pickups))
+        val today = LocalDate.now()
+        val usual = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }.values.map { it.pickups }.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
+        card.headline((days[today]?.pickups ?: 0).toString(),
+            listOfNotNull(getString(R.string.pickups_today), usual?.let { getString(R.string.usually_n, it) }).joinToString(" · "))
+        dayBars(card, days.mapValues { it.value.pickups.toFloat() }, stat.color) { _, value ->
+            resources.getQuantityString(R.plurals.pickup_count, value.toInt(), value.toInt())
+        }
+    }
+
+    /** Time in stretches of [PhoneHabits.DOOM_MINUTES]+ minutes in one feed app, each day. */
+    private fun doomCard(days: Map<LocalDate, PhoneHabits.Day>) {
+        if (days.isEmpty()) return
+        val card = Card(getString(R.string.doomscrolling))
+        card.subtitle(getString(R.string.doom_rule, PhoneHabits.DOOM_MINUTES))
+        val today = LocalDate.now()
+        val day = days[today]
+        card.headline(duration(day?.doomMs ?: 0), listOfNotNull(
+            getString(R.string.doom_today),
+            day?.doomSessions?.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.doom_sessions, it, it) },
+            day?.doomApp?.let { getString(R.string.doom_mostly, it) },
+        ).joinToString(" · "))
+        dayBars(card, days.mapValues { it.value.doomMs / HOUR_MS }, ContextCompat.getColor(requireContext(), R.color.holiday)) { date, _ ->
+            val d = days.getValue(date)
+            listOfNotNull(duration(d.doomMs), d.doomSessions.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.doom_sessions, it, it) },
+                d.doomApp?.let { getString(R.string.doom_mostly, it) }).joinToString(" · ")
+        }
+    }
+
+    private val askActivity = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) Steps.refresh(requireContext().applicationContext)
+        if (_binding != null) render()
+    }
+
+    /** Today's steps against the usual, a bar a day with the 10,000 line, and the last [HABIT_DAYS] days' figures. */
+    private fun stepsCard() {
+        val context = requireContext()
+        val card = Card(getString(R.string.steps_today))
+        if (!Steps.hasPermission(context)) {
+            card.showNote(getString(R.string.steps_need_permission))
+            card.chipRow(listOf(getString(R.string.steps_allow) to ink), null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) askActivity.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+            }
+            return
+        }
+        val days = Steps.days(context)
+        val today = LocalDate.now()
+        val past = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }.values
+        val format = java.text.NumberFormat.getIntegerInstance(Locale.getDefault())
+        card.headline(format.format(days[today] ?: 0), listOfNotNull(getString(R.string.steps_so_far),
+            past.takeIf { it.isNotEmpty() }?.average()?.roundToInt()?.let { getString(R.string.usually_text, format.format(it)) }).joinToString(" · "))
+        if (days.isEmpty()) {
+            card.showNote(getString(R.string.steps_none))
+            return
+        }
+        card.keyItem(faint(110), getString(R.string.steps_goal, format.format(Steps.GOAL)))
+        dayBars(card, days.mapValues { it.value.toFloat() }, stat.color, Steps.GOAL.toFloat()) { _, value ->
+            getString(R.string.steps_count, format.format(value.toInt()))
+        }
+        if (past.size >= 2) {
+            val tilesCard = Card(getString(R.string.steps_usual_title))
+            tiles(tilesCard, getString(R.string.social_usual, past.size), listOf(
+                format.format(past.average().roundToInt()) to getString(R.string.steps_tile_average),
+                format.format(past.max()) to getString(R.string.steps_tile_best),
+                past.count { it >= Steps.GOAL }.toString() to getString(R.string.steps_tile_goal),
+            ))
+        }
+    }
+
     private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
     /** A run of days a medicine wasn't taken, and the days just after it. */
@@ -1826,6 +1939,9 @@ class StatPageFragment : Fragment() {
         /** How far back Music's artists go, and how many are listed */
         private const val MUSIC_DAYS = 30
         private const val MUSIC_ARTISTS = 6
+
+        /** How many days pickups, doomscrolling and Steps show */
+        private const val HABIT_DAYS = 14
 
         /** How many days Social's cards cover, and its staying-in dots */
         private const val SOCIAL_DAYS = 14

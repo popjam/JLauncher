@@ -390,6 +390,33 @@
     <string name="sleep_8_plus">8h+</string>
     <string name="music_listening">Listening</string>
     <string name="social_homes">Homes</string>
+    <string name="pickups">Pickups</string>
+    <string name="pickups_today">unlocks today</string>
+    <string name="usually_n">usually %1$d</string>
+    <string name="usually_text">usually %1$s</string>
+    <plurals name="pickup_count">
+        <item quantity="one">%1$d pickup</item>
+        <item quantity="other">%1$d pickups</item>
+    </plurals>
+    <string name="doomscrolling">Doomscrolling</string>
+    <string name="doom_rule">%1$d+ min in a feed</string>
+    <string name="doom_today">today</string>
+    <plurals name="doom_sessions">
+        <item quantity="one">%1$d long stretch</item>
+        <item quantity="other">%1$d long stretches</item>
+    </plurals>
+    <string name="doom_mostly">mostly %1$s</string>
+    <string name="steps_today">Today</string>
+    <string name="steps_need_permission">Steps fill in by themselves from your phone\'s step counter, at next to no battery. Android asks before sharing it. Nothing leaves your phone.</string>
+    <string name="steps_allow">Allow physical activity</string>
+    <string name="steps_so_far">steps so far</string>
+    <string name="steps_none">Steps show up here as you walk</string>
+    <string name="steps_goal">%1$s steps</string>
+    <string name="steps_count">%1$s steps</string>
+    <string name="steps_usual_title">Usually</string>
+    <string name="steps_tile_average">a day</string>
+    <string name="steps_tile_best">best day</string>
+    <string name="steps_tile_goal">days over 10k</string>
     <string name="social_home_n">Home %1$d</string>
     <string name="social_need_location">Social fills in by itself from your home Wi-Fi: on it you\'re home, off it you\'re out. Android only shares the Wi-Fi\'s name with location access. Nothing leaves your phone.</string>
     <string name="social_allow_location">Allow location</string>

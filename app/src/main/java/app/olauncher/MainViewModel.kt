@@ -22,7 +22,9 @@ import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Music
+import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.Sleep
+import app.olauncher.helper.Steps
 import app.olauncher.helper.Social
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.WallpaperWorker
@@ -546,6 +548,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { Sleep.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Music.fillQuietDays(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Social.refresh(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { PhoneHabits.refresh(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
