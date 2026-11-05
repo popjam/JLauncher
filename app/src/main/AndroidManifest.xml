@@ -88,6 +88,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Reads card purchase notifications into Money spent, once notification access is on -->
+        <service
+            android:name=".helper.SpendingListener"
+            android:exported="true"
+            android:label="@string/spending_listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".helper.MyAccessibilityService"
             android:exported="false"

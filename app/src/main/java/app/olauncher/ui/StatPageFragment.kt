@@ -24,6 +24,7 @@ import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentStatPageBinding
+import app.olauncher.helper.Spending
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
@@ -103,11 +104,15 @@ class StatPageFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        if (renderedWith != choices) render()
+        // Also after coming back from turning on notification access for Money spent
+        if (renderedWith != choices || (spendingShownOn != null && spendingShownOn != Spending.isEnabled(requireContext()))) render()
     }
 
     private val choices get() = trendPeriod to overTimeSpan
     private var renderedWith: Pair<Int, Int>? = null
+
+    /** Whether notification access was on when the Money spent card was drawn; null without the card */
+    private var spendingShownOn: Boolean? = null
 
     override fun onDestroyView() {
         super.onDestroyView()
@@ -130,6 +135,8 @@ class StatPageFragment : Fragment() {
         binding.statName.compoundDrawablePadding = 10.dpToPx()
 
         binding.cards.removeAllViews()
+        spendingShownOn = null
+        if (Spending.moneyStat(data)?.id == stat.id) spendingCard()
         if (stat.medicine) {
             if (stat.name.contains(COFFEE, ignoreCase = true)) cupsCard() else takenCard()
             if (stat.name.contains(SERTRALINE, ignoreCase = true)) holidayCard()
@@ -614,6 +621,59 @@ class StatPageFragment : Fragment() {
         }
         draw()
     }
+
+    /**
+     * Purchases read from CommBank's and Google Wallet's notifications, which fill in Money spent: today's
+     * total and the latest few. Until notification access is on, a way to turn it on.
+     */
+    private fun spendingCard() {
+        val context = requireContext()
+        val card = Card(getString(R.string.spending_card))
+        val on = Spending.isEnabled(context)
+        spendingShownOn = on
+        if (!on) {
+            card.showNote(getString(R.string.spending_off))
+            card.chipRow(listOf(getString(R.string.spending_turn_on) to ink), null) { Spending.openSettings(context) }
+            return
+        }
+        card.subtitle(getString(R.string.spending_sources))
+        val purchases = Spending.purchases(context)
+        val today = LocalDate.now()
+        val todays = purchases.filter { it.date == today }
+        card.headline(money(todays.sumOf { it.cents }), resources.getQuantityString(R.plurals.spending_today, todays.size, todays.size))
+        if (purchases.isEmpty()) {
+            card.showNote(getString(R.string.spending_none))
+            return
+        }
+        card.scene.isVisible = false
+        val timeFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
+        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        purchases.take(SPENDING_SHOWN).forEach { purchase ->
+            val time = java.time.Instant.ofEpochMilli(purchase.time).atZone(java.time.ZoneId.systemDefault())
+            val `when` = if (purchase.date == today) time.format(timeFormat) else dateText(purchase.date)
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
+                addView(card.textView(15f, 255).apply {
+                    text = money(purchase.cents)
+                    setTypeface(null, Typeface.BOLD)
+                }, LinearLayout.LayoutParams(76.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(card.textView(13f, 170).apply {
+                    text = purchase.text
+                    isSingleLine = true
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(card.textView(12f, 130).apply {
+                    text = `when`
+                    updatePadding(left = 10.dpToPx())
+                })
+            })
+        }
+        card.root.addView(list, card.root.indexOfChild(card.scene))
+    }
+
+    private fun money(cents: Long) = String.format(Locale.getDefault(), "$%d.%02d", cents / 100, cents % 100)
 
     private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
@@ -1189,6 +1249,9 @@ class StatPageFragment : Fragment() {
 
         /** Coffee gets cups instead of the Taken calendar, [CUP_DAYS] days at a time */
         private const val COFFEE = "coffee"
+
+        /** How many of the latest purchases Money spent lists */
+        private const val SPENDING_SHOWN = 8
         private const val CUP_DAYS = 10
 
         /** How many cups before the rest stand out */

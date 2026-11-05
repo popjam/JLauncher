@@ -358,6 +358,16 @@
         <item>Terrible</item>
     </string-array>
     <string name="all_stats">All stats</string>
+    <string name="spending_listener">JLauncher Money spent</string>
+    <string name="spending_card">From your card</string>
+    <string name="spending_sources">CommBank · Google Wallet</string>
+    <string name="spending_off">Fill this in from CommBank\'s purchase notifications. Turn on notification access for JLauncher; nothing leaves your phone.</string>
+    <string name="spending_turn_on">Turn on</string>
+    <string name="spending_none">Purchases show up here as their notifications come in</string>
+    <plurals name="spending_today">
+        <item quantity="one">spent today · %1$d purchase</item>
+        <item quantity="other">spent today · %1$d purchases</item>
+    </plurals>
     <string name="a_cup">a cup</string>
     <string name="cup_past">%1$dth and after</string>
     <plurals name="cup_count">
