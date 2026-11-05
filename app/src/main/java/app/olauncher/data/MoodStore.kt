@@ -518,7 +518,6 @@ class MoodStore(context: Context) {
         const val MAX_NOTE_LENGTH = 2000
         const val MAX_NAME_LENGTH = 24
         const val MAX_QUESTION_LENGTH = 80
-        const val MAX_LABEL_LENGTH = 10
         const val MAX_PHRASE_LENGTH = 100
         const val PROMPT_SNOOZE_MINUTES = 30L
 
@@ -574,15 +573,15 @@ class MoodStore(context: Context) {
         fun sanitizeQuestion(question: String?): String =
             sanitizeNote(question?.replace('\n', ' '))?.take(MAX_QUESTION_LENGTH)?.trim().orEmpty()
 
-        /** One per face of [scale], each one line capped at [MAX_LABEL_LENGTH]; empty when all are blank. */
-        fun sanitizeLabels(labels: List<String>, scale: Int) = sanitizePerFace(labels, scale, MAX_LABEL_LENGTH)
+        /** One per face of [scale], each one line of any length; empty when all are blank. */
+        fun sanitizeLabels(labels: List<String>, scale: Int) = sanitizePerFace(labels, scale, null)
 
         /** Like [sanitizeLabels], capped at [MAX_PHRASE_LENGTH]. */
         fun sanitizePhrases(phrases: List<String>, scale: Int) = sanitizePerFace(phrases, scale, MAX_PHRASE_LENGTH)
 
-        private fun sanitizePerFace(texts: List<String>, scale: Int, maxLength: Int): List<String> {
+        private fun sanitizePerFace(texts: List<String>, scale: Int, maxLength: Int?): List<String> {
             val cleaned = List(scale) { i ->
-                sanitizeNote(texts.getOrNull(i)?.replace('\n', ' '))?.take(maxLength)?.trim().orEmpty()
+                sanitizeNote(texts.getOrNull(i)?.replace('\n', ' '))?.let { if (maxLength == null) it else it.take(maxLength) }?.trim().orEmpty()
             }
             return if (cleaned.all { it.isEmpty() }) emptyList() else cleaned
         }
