@@ -660,7 +660,7 @@ class StatPageFragment : Fragment() {
                     setTypeface(null, Typeface.BOLD)
                 }, LinearLayout.LayoutParams(76.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
                 addView(card.textView(13f, 170).apply {
-                    text = purchase.text
+                    text = purchase.shop
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))

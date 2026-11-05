@@ -28,6 +28,14 @@ object Spending {
 
     class Purchase(val time: Long, val cents: Long, val source: String, val text: String, val key: String) {
         val date: LocalDate get() = Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).toLocalDate()
+
+        /** Where it was spent: "Google Australia · Entertainment" from CommBank's "$0.29 spent at Google Australia on Entertainment." */
+        val shop: String get() {
+            SPENT_AT.find(text)?.let { match ->
+                return listOf(match.groupValues[1], match.groupValues[2]).map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ")
+            }
+            return text.split(" · ").filterNot { it.equals("CommBank", ignoreCase = true) }.joinToString(" · ").ifEmpty { text }
+        }
     }
 
     fun moneyStat(data: MoodStore.Data): MoodStore.Stat? =
@@ -153,6 +161,7 @@ object Spending {
     private val SOURCES = setOf(COMMBANK, WALLET)
     private val NAMES = listOf("money", "spen")
     private val AMOUNT = Regex("""\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{2}))?""")
+    private val SPENT_AT = Regex("""spent at (.+?)(?: on (.+?))?\.?$""", RegexOption.IGNORE_CASE)
     private val NUMBER = Regex("""\d+(?:\.\d+)?""")
     private val UP_TO = listOf("<", "under", "less", "up to")
 
