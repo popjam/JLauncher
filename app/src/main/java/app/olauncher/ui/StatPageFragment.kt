@@ -132,7 +132,7 @@ class StatPageFragment : Fragment() {
         binding.cards.removeAllViews()
         if (stat.medicine) {
             if (stat.name.contains(COFFEE, ignoreCase = true)) cupsCard() else takenCard()
-            if (stat.name.contains(SERTRALINE, ignoreCase = true)) levelCard(SERTRALINE_HALF_LIFE_HOURS)
+            if (stat.name.contains(SERTRALINE, ignoreCase = true)) holidayCard()
             trendCard()
             overTimeCard()
             doseCard()
@@ -617,112 +617,140 @@ class StatPageFragment : Fragment() {
 
     private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
+    /** A run of days a medicine wasn't taken, and the days just after it. */
+    private class Holiday(val start: LocalDate, val end: LocalDate) {
+        val length get() = ChronoUnit.DAYS.between(start, end).toInt() + 1
+        val after get() = (1..HOLIDAY_AFTER_DAYS).map { end.plusDays(it.toLong()) }
+        fun contains(date: LocalDate) = date in start..end
+    }
+
     /**
-     * A rough estimate of how much of a medicine is in the body over the last [LEVEL_DAYS] days: each
-     * day's dose added to what's left of the day before's, which halves every [halfLifeHours]. Doses
-     * are read from the face labels ("50 mg"); without numbers in them, each place in the row counts
-     * as one more dose. Stretches of [HOLIDAY_DAYS] or more days not taken are shaded.
+     * Breaks of [HOLIDAY_DAYS] or more days not taken, oldest first. Days with nothing logged for the
+     * medicine don't end a break, but it only counts from and to days logged as not taken.
      */
-    private fun levelCard(halfLifeHours: Float) {
-        val first = firstDate ?: return
-        val card = Card(getString(R.string.stat_level))
-        card.subtitle(getString(R.string.half_life, halfLifeHours.toInt()))
-
-        val amounts = stat.faces.mapIndexed { place, _ ->
-            stat.labels.getOrNull(place)?.let { NUMBER.find(it)?.value?.replace(',', '.')?.toFloatOrNull() }
+    private fun holidays(): List<Holiday> {
+        val found = mutableListOf<Holiday>()
+        var start: LocalDate? = null
+        var lastOff: LocalDate? = null
+        fun close() {
+            val first = start ?: return
+            val last = lastOff ?: return
+            if (ChronoUnit.DAYS.between(first, last) + 1 >= HOLIDAY_DAYS) found.add(Holiday(first, last))
+            start = null
+            lastOff = null
         }
-        val fromLabels = amounts.drop(1).all { it != null }
-        val unit = if (fromLabels) stat.labels.drop(1).firstNotNullOfOrNull { label ->
-            NUMBER.find(label)?.let { label.substring(it.range.last + 1).trim() }?.takeIf { it.isNotEmpty() }
-        }.orEmpty() else ""
-        fun amount(face: Int): Float {
-            val place = stat.faces.indexOf(face)
-            return if (place <= 0) 0f else if (fromLabels) amounts[place] ?: 0f else place.toFloat()
-        }
-
+        val from = firstDate ?: return found
+        var date = from
         val today = LocalDate.now()
-        val start = maxOf(first, today.minusDays(LEVEL_DAYS - 1L))
-        val remaining = Math.pow(0.5, 24.0 / halfLifeHours).toFloat()
-        // From the first dose, so what's carried into the shown days is right
-        var level = 0f
-        var beforeToday = 0f
-        val levels = mutableListOf<Float>()
-        var date = first
         while (date <= today) {
-            if (date == today) beforeToday = level
-            level = level * remaining + (dayOf(date)?.face(stat.id)?.let(::amount) ?: 0f)
-            if (date >= start) levels.add(level)
+            when (takenOn(stat, date)) {
+                false -> {
+                    if (start == null) start = date
+                    lastOff = date
+                }
+                true -> close()
+                null -> {}
+            }
             date = date.plusDays(1)
         }
-        val days = levels.indices.map { start.plusDays(it.toLong()) }
-
-        // Runs of days not taken, as first and last index
-        val holidays = mutableListOf<IntRange>()
-        var runStart = -1
-        days.forEachIndexed { i, day ->
-            val off = dayOf(day)?.face(stat.id)?.let { stat.isBlank(it) } == true
-            if (off && runStart < 0) runStart = i
-            if ((!off || i == days.lastIndex) && runStart >= 0) {
-                val end = if (off) i else i - 1
-                if (end - runStart + 1 >= HOLIDAY_DAYS) holidays.add(runStart..end)
-                runStart = -1
-            }
-        }
-
-        val holidayColor = ContextCompat.getColor(requireContext(), R.color.holiday)
-        card.keyItem(ContextCompat.getColor(requireContext(), R.color.medicineLight), getString(R.string.in_your_system))
-        if (holidays.isNotEmpty()) card.keyItem(ColorUtils.setAlphaComponent(holidayColor, 110), getString(R.string.holiday))
-        fun amountText(value: Float) = listOf(String.format(Locale.getDefault(), "%.0f", value), unit).filter { it.isNotEmpty() }.joinToString(" ")
-
-        // Right now: with today's dose in, as drawn; otherwise what was left by midnight, still wearing off
-        val now = if (dayOf(today)?.face(stat.id) != null) level else {
-            val hours = java.time.Duration.between(today.atStartOfDay(), java.time.LocalDateTime.now()).toMinutes() / 60.0
-            beforeToday * Math.pow(0.5, hours / halfLifeHours).toFloat()
-        }
-        card.headline(getString(R.string.about_amount, amountText(now)), getString(R.string.in_your_system_now))
-        card.describe = { key ->
-            val i = key as Int
-            listOf(dateText(days[i]), getString(R.string.about_amount, amountText(levels[i]))).joinToString(" · ")
-        }
-
-        val highest = levels.maxOrNull() ?: 0f
-        // A round top: to the next 50 for doses in mg, otherwise the next whole dose
-        val step = if (fromLabels && highest > 10) 50f else 1f
-        val top = maxOf(step, ceil(highest / step) * step)
-        card.draw { s ->
-            val labelSize = s.sp(11f)
-            val ticks = listOf(0f, top / 2, top)
-            val left = ticks.maxOf { s.textWidth(amountText(it), labelSize) } + s.dp(8f)
-            val right = s.width - s.dp(8f)
-            val chartTop = s.dp(10f)
-            val bottom = chartTop + s.dp(130f)
-            val count = levels.size
-            fun x(i: Int) = if (count == 1) (left + right) / 2 else left + i * (right - left) / (count - 1)
-            fun y(value: Float) = bottom - value / top * (bottom - chartTop)
-            val half = if (count == 1) s.dp(4f) else (right - left) / (count - 1) / 2
-            holidays.forEach { run ->
-                s.rect(x(run.first) - half, chartTop, x(run.last) + half, bottom, ColorUtils.setAlphaComponent(holidayColor, 36))
-            }
-            ticks.forEach { tick ->
-                s.line(left, y(tick), right, y(tick), faint(30), s.dp(1f))
-                s.text(amountText(tick), left - s.dp(8f), y(tick) + labelSize * 0.35f, faint(140), labelSize, Paint.Align.RIGHT)
-            }
-            val points = levels.mapIndexed { i, value -> PointF(x(i), y(value)) }
-            val light = ContextCompat.getColor(requireContext(), R.color.medicineLight)
-            s.area(points, bottom, ColorUtils.setAlphaComponent(ContextCompat.getColor(requireContext(), R.color.medicineDark), 200))
-            s.polyline(points, light, s.dp(2.5f))
-            points.lastOrNull()?.let { s.ring(it.x, it.y, s.dp(6f), light, s.dp(2.5f)) }
-            // Each month's name at its first day
-            days.forEachIndexed { i, day ->
-                if (day.dayOfMonth == 1 && x(i) > left + s.dp(10f) && x(i) < right - s.dp(14f))
-                    s.text(day.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), x(i), bottom + s.dp(18f), faint(140), s.sp(12f))
-            }
-            s.height = bottom + s.dp(24f)
-            days.indices.forEach { i ->
-                s.target(i, RectF(x(i) - half, 0f, x(i) + half, s.height), RectF(x(i) - s.dp(7f), chartTop - s.dp(4f), x(i) + s.dp(7f), bottom + s.dp(4f)), s.dp(7f))
-            }
-        }
+        close()
+        return found
     }
+
+    /**
+     * How Mood and the stats a break tends to shift (by name: libido, anxiety, OCD, energy) went during
+     * the medicine's breaks and the [HOLIDAY_AFTER_DAYS] days after, against the usual days it was taken.
+     * A chip per break shows just that one; tapping it again goes back to all of them.
+     */
+    private fun holidayCard() {
+        val card = Card(getString(R.string.drug_holidays))
+        val holidays = holidays()
+        if (holidays.isEmpty()) {
+            card.showNote(getString(R.string.holiday_none, HOLIDAY_DAYS))
+            return
+        }
+        val holidayColor = ContextCompat.getColor(requireContext(), R.color.holiday)
+        val afterColor = ContextCompat.getColor(requireContext(), R.color.medicineLight)
+        val rangeFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+        fun rangeText(h: Holiday) = if (h.length == 1) h.start.format(rangeFormat)
+        else getString(R.string.graph_month_range, h.start.format(rangeFormat), h.end.format(rangeFormat))
+
+        val last = holidays.last()
+        card.headline(holidays.size.toString(),
+            resources.getQuantityString(R.plurals.holiday_count, holidays.size, holidays.size, rangeText(last), last.length))
+        card.keyItem(faint(200), getString(R.string.holiday_usual), ring = true)
+        card.keyItem(holidayColor, getString(R.string.holiday_during))
+        card.keyItem(afterColor, getString(R.string.holiday_after, HOLIDAY_AFTER_DAYS))
+
+        val measured = HOLIDAY_STATS.mapNotNull { word ->
+            stats.firstOrNull { s -> if (word == MoodStore.MOOD) s.id == MoodStore.MOOD else s.id != MoodStore.MOOD && s.name.contains(word, ignoreCase = true) }
+        }.distinct().filter { it.id != stat.id }
+        // Usual: days it was taken, away from every break and the days after one
+        val usualDays = dates.filter { date -> takenOn(stat, date) == true && holidays.none { it.contains(date) || date in it.after } }
+
+        var picked: Holiday? = null
+        fun average(s: StatInfo, days: List<LocalDate>) = days.mapNotNull { valueOf(s, it) }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+        fun change(value: Float?, usual: Float?) = if (value == null || usual == null) "" else
+            String.format(Locale.getDefault(), " (%+.1f)", value - usual)
+
+        fun draw() {
+            val chosen = picked?.let { listOf(it) } ?: holidays
+            val during = chosen.flatMap { h -> (0 until h.length).map { h.start.plusDays(it.toLong()) } }
+            val after = chosen.flatMap { it.after }.filter { date -> chosen.none { it.contains(date) } }
+            val rows = measured.map { s -> Triple(s, average(s, usualDays), average(s, during) to average(s, after)) }
+            val shown = holidays.takeLast(HOLIDAY_CHIPS).reversed()
+            card.chipRow(shown.map { rangeText(it) to holidayColor }, shown.indexOf(picked).takeIf { it >= 0 }) { i ->
+                picked = if (picked == shown[i]) null else shown[i]
+                draw()
+            }
+            card.describe = { key ->
+                val (s, usual, values) = rows[key as Int]
+                listOf(
+                    s.name,
+                    getString(R.string.holiday_usual_value, usual?.let(::decimal) ?: "–"),
+                    getString(R.string.holiday_during_value, (values.first?.let(::decimal) ?: "–") + change(values.first, usual)),
+                    getString(R.string.holiday_after_value, (values.second?.let(::decimal) ?: "–") + change(values.second, usual)),
+                ).joinToString(" · ")
+            }
+            if (rows.isEmpty()) {
+                card.showNote(getString(R.string.holiday_no_stats))
+                return
+            }
+            card.draw { s ->
+                val labelSize = s.sp(13f)
+                val left = rows.maxOf { s.textWidth(it.first.name, labelSize) } + s.dp(14f)
+                val changeWidth = s.textWidth("+0.0", labelSize) + s.dp(10f)
+                val right = s.width - changeWidth - s.dp(8f)
+                fun x(value: Float) = left + (value - 1f) / 4f * (right - left)
+                val rowHeight = s.dp(38f)
+                var top = s.dp(18f)
+                // 1 to 5 along the top
+                (1..5).forEach { n -> s.text(n.toString(), x(n.toFloat()), s.sp(11f), faint(120), s.sp(11f)) }
+                rows.forEachIndexed { i, (row, usual, values) ->
+                    val mid = top + rowHeight / 2
+                    s.text(row.name, 0f, mid + labelSize * 0.35f, faint(220), labelSize, Paint.Align.LEFT)
+                    s.line(left, mid, right, mid, faint(35), s.dp(2f))
+                    val (during, after) = values
+                    val points = listOfNotNull(usual, during, after)
+                    if (points.size > 1) s.line(x(points.min()), mid, x(points.max()), mid, faint(90), s.dp(2f))
+                    after?.let { s.circle(x(it), mid, s.dp(6f), afterColor) }
+                    during?.let { s.circle(x(it), mid, s.dp(6f), holidayColor) }
+                    usual?.let { s.ring(x(it), mid, s.dp(7.5f), faint(220), s.dp(2f)) }
+                    if (during != null && usual != null) {
+                        val diff = during - usual
+                        s.text(String.format(Locale.getDefault(), "%+.1f", diff), s.width, mid + labelSize * 0.35f,
+                            if (abs(diff) >= 0.3f) holidayColor else faint(150), labelSize, Paint.Align.RIGHT, bold = abs(diff) >= 0.3f)
+                    }
+                    s.target(i, RectF(0f, top, s.width, top + rowHeight))
+                    top += rowHeight
+                }
+                s.height = top + s.dp(2f)
+            }
+        }
+        draw()
+    }
+
+    private fun decimal(value: Float) = String.format(Locale.getDefault(), "%.1f", value)
 
     /**
      * The average by week (the last 13), month (the last 12) or year, from the stat's first, with
@@ -1165,10 +1193,13 @@ class StatPageFragment : Fragment() {
 
         /** How many cups before the rest stand out */
         private const val CUPS_HOT = 3
-        private const val SERTRALINE_HALF_LIFE_HOURS = 26f
-        private const val LEVEL_DAYS = 90
+        /** Sertraline's breaks: how long one has to be, how many days after it count, and how many get a chip */
         private const val HOLIDAY_DAYS = 2
-        private val NUMBER = Regex("\\d+(?:[.,]\\d+)?")
+        private const val HOLIDAY_AFTER_DAYS = 3
+        private const val HOLIDAY_CHIPS = 8
+
+        /** What a break is measured against, by name, Mood first */
+        private val HOLIDAY_STATS = listOf(MoodStore.MOOD, "libido", "anxi", "ocd", "energy")
 
         /** The Trend and Over time cards' choices, kept while the app runs */
         private var trendPeriod = 0

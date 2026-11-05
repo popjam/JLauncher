@@ -254,6 +254,18 @@
                     android:textColor="?attr/primaryColor"
                     android:textSize="14sp" />
 
+                <!-- Fills every label box with Terrible to Great -->
+                <TextView
+                    android:id="@+id/statDefaultLabels"
+                    style="@style/TextSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackground"
+                    android:padding="6dp"
+                    android:text="@string/stat_default_labels"
+                    android:textColor="?attr/primaryColor"
+                    android:textSize="13sp" />
+
                 <!-- Empties every label box -->
                 <TextView
                     android:id="@+id/statClearLabels"

@@ -155,6 +155,13 @@ object StatEditor {
             binding.statPhrases.findFocus()?.hideKeyboard()
             renderPhrases()
         }
+        // Terrible to Great by the face shown in each place, so an inverted stat's run the other way
+        binding.statDefaultLabels.setOnClickListener {
+            val words = context.resources.getStringArray(R.array.default_face_labels)
+            MoodStore.facesFor(scale).zip(rowFaces()).forEach { (place, face) -> labels[place] = words[face] }
+            binding.statFaceLabels.findFocus()?.hideKeyboard()
+            renderLabels()
+        }
         binding.statClearLabels.setOnClickListener {
             labels.clear()
             binding.statFaceLabels.findFocus()?.hideKeyboard()

@@ -335,19 +335,35 @@
     <string name="stat_how_often">How often</string>
     <string name="stat_by_weekday">By weekday</string>
     <string name="stat_dose">Dose</string>
-    <string name="stat_level">Estimated level</string>
     <string name="stat_cups">Cups</string>
+    <string name="drug_holidays">Drug holidays</string>
+    <string name="holiday_none">No breaks of %1$d days or more yet</string>
+    <string name="holiday_no_stats">Add stats like Libido, Anxiety, OCD or Energy to see how breaks affect them</string>
+    <plurals name="holiday_count">
+        <item quantity="one">break · %2$s, %3$d days</item>
+        <item quantity="other">breaks · last %2$s, %3$d days</item>
+    </plurals>
+    <string name="holiday_usual">Usual</string>
+    <string name="holiday_during">During</string>
+    <string name="holiday_after">%1$d days after</string>
+    <string name="holiday_usual_value">usual %1$s</string>
+    <string name="holiday_during_value">during %1$s</string>
+    <string name="holiday_after_value">after %1$s</string>
+    <string name="stat_default_labels">Default</string>
+    <string-array name="default_face_labels">
+        <item>Great</item>
+        <item>Good</item>
+        <item>Okay</item>
+        <item>Bad</item>
+        <item>Terrible</item>
+    </string-array>
+    <string name="all_stats">All stats</string>
     <string name="a_cup">a cup</string>
     <string name="cup_past">%1$dth and after</string>
     <plurals name="cup_count">
         <item quantity="one">%1$d cup</item>
         <item quantity="other">%1$d cups</item>
     </plurals>
-    <string name="half_life">half-life %1$d h</string>
-    <string name="in_your_system">in your system</string>
-    <string name="in_your_system_now">in your system now</string>
-    <string name="holiday">holiday</string>
-    <string name="about_amount">about %1$s</string>
     <string name="stat_top_app">Top app</string>
     <string name="stat_taken_vs_not">On days taken vs not</string>
     <string name="last_days">last %1$d days</string>
