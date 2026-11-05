@@ -13,6 +13,7 @@ object AutoStats {
     const val MUSIC = "music"
     const val SOCIAL = "social"
     const val STEPS = "steps"
+    const val MAC = "mac"
 
     /** The stat's id, or null if it hasn't been added or was deleted. */
     fun id(context: Context, key: String, data: MoodStore.Data = MoodStore(context).load()): String? =

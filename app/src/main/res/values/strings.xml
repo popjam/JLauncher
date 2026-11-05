@@ -391,6 +391,13 @@
     <string name="music_listening">Listening</string>
     <string name="social_homes">Homes</string>
     <string name="pickups">Pickups</string>
+    <string name="mac_screen_time">MacBook</string>
+    <string name="mac_setup">Your MacBook writes its screen time to Google Drive. Choose the folder it\'s in (My Drive › JLauncher) to add it as a stat.</string>
+    <string name="mac_choose_folder">Choose folder</string>
+    <string name="mac_today">Today</string>
+    <string name="mac_updated">updated %1$s</string>
+    <string name="mac_not_today">not used today</string>
+    <string name="mac_apps">Apps</string>
     <string name="pickups_today">unlocks today</string>
     <string name="usually_n">usually %1$d</string>
     <string name="usually_text">usually %1$s</string>

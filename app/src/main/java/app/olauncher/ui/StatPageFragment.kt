@@ -31,6 +31,7 @@ import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentStatPageBinding
 import app.olauncher.helper.AutoStats
 import app.olauncher.helper.Music
+import app.olauncher.helper.DeviceTime
 import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.Sleep
 import app.olauncher.helper.Steps
@@ -162,6 +163,7 @@ class StatPageFragment : Fragment() {
         }
         if (AutoStats.id(requireContext(), AutoStats.MUSIC, data) == stat.id) musicCard()
         if (AutoStats.id(requireContext(), AutoStats.STEPS, data) == stat.id) stepsCard()
+        if (AutoStats.id(requireContext(), AutoStats.MAC, data) == stat.id) macCard()
         if (AutoStats.id(requireContext(), AutoStats.SOCIAL, data) == stat.id) {
             val days = Social.days(requireContext())
             socialTodayCard(days)
@@ -182,6 +184,7 @@ class StatPageFragment : Fragment() {
                 val habits = PhoneHabits.days(requireContext())
                 pickupsCard(habits)
                 doomCard(habits)
+                if (AutoStats.id(requireContext(), AutoStats.MAC, data) == null) macSetupCard()
             }
             trendCard()
             overTimeCard()
@@ -1357,6 +1360,81 @@ class StatPageFragment : Fragment() {
         }
     }
 
+    // --- Mac screen time, from the file the MacBook writes to Google Drive ---
+
+    private val pickDeviceFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        val context = requireContext().applicationContext
+        runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        DeviceTime.setFolder(context, uri)
+        Thread {
+            DeviceTime.refresh(context, force = true)
+            binding.root.post { if (_binding != null) render() }
+        }.start()
+    }
+
+    /** On Screen time, until the Mac's file has been found: where to look for it. */
+    private fun macSetupCard() {
+        val card = Card(getString(R.string.mac_screen_time))
+        card.showNote(getString(R.string.mac_setup))
+        card.chipRow(listOf(getString(R.string.mac_choose_folder) to ink), null) { pickDeviceFolder.launch(null) }
+    }
+
+    /** Today on the Mac, a bar a day, and the apps of the last [HABIT_DAYS] days. */
+    private fun macCard() {
+        val context = requireContext()
+        val days = DeviceTime.days(context)
+        val card = Card(getString(R.string.mac_today))
+        val updated = DeviceTime.updated(context)
+        if (updated > 0) card.subtitle(getString(R.string.mac_updated, android.text.format.DateUtils.getRelativeTimeSpanString(updated, System.currentTimeMillis(), 60_000L)))
+        val today = LocalDate.now()
+        val day = days[today]
+        card.headline(duration((day?.minutes ?: 0) * 60_000L), listOfNotNull(
+            if (day?.first != null && day.last != null) getString(R.string.sleep_span, clock(java.time.LocalTime.parse(day.first)), clock(java.time.LocalTime.parse(day.last))) else getString(R.string.mac_not_today),
+            day?.apps?.maxByOrNull { it.value }?.key?.let { getString(R.string.doom_mostly, it) },
+        ).joinToString(" · "))
+        dayBars(card, days.mapValues { it.value.minutes / 60f }, stat.color) { date, _ ->
+            val d = days.getValue(date)
+            listOfNotNull(duration(d.minutes * 60_000L),
+                if (d.first != null && d.last != null) getString(R.string.sleep_span, clock(java.time.LocalTime.parse(d.first)), clock(java.time.LocalTime.parse(d.last))) else null,
+                d.apps.maxByOrNull { it.value }?.key?.let { getString(R.string.doom_mostly, it) }).joinToString(" · ")
+        }
+        val apps = days.filterKeys { it > today.minusDays(HABIT_DAYS.toLong()) }.values.flatMap { it.apps.entries }
+            .groupBy({ it.key }, { it.value }).mapValues { (_, m) -> m.sum() }.entries.sortedByDescending { it.value }.take(MAC_APPS)
+        if (apps.isEmpty()) return
+        val appsCard = Card(getString(R.string.mac_apps))
+        appsCard.subtitle(getString(R.string.last_days, HABIT_DAYS))
+        appsCard.scene.isVisible = false
+        val most = apps.first().value.toFloat()
+        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        apps.forEach { (app, minutes) ->
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
+                addView(appsCard.textView(14f, 255).apply {
+                    text = app
+                    isSingleLine = true
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                // A bar as long as its share of the most-used app's time
+                addView(View(context).apply {
+                    background = GradientDrawable().apply {
+                        cornerRadius = 3.dpToPx().toFloat()
+                        setColor(stat.color)
+                    }
+                }, LinearLayout.LayoutParams((60.dpToPx() * minutes / most).toInt().coerceAtLeast(3.dpToPx()), 6.dpToPx()).apply {
+                    marginStart = 10.dpToPx()
+                })
+                addView(appsCard.textView(13f, 150).apply {
+                    text = duration(minutes * 60_000L)
+                    gravity = Gravity.END
+                }, LinearLayout.LayoutParams(64.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+            })
+        }
+        appsCard.root.addView(list, appsCard.root.indexOfChild(appsCard.scene))
+    }
+
     private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
     /** A run of days a medicine wasn't taken, and the days just after it. */
@@ -1942,6 +2020,9 @@ class StatPageFragment : Fragment() {
 
         /** How many days pickups, doomscrolling and Steps show */
         private const val HABIT_DAYS = 14
+
+        /** How many apps Mac screen time lists */
+        private const val MAC_APPS = 8
 
         /** How many days Social's cards cover, and its staying-in dots */
         private const val SOCIAL_DAYS = 14

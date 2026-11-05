@@ -22,6 +22,7 @@ import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Music
+import app.olauncher.helper.DeviceTime
 import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.Sleep
 import app.olauncher.helper.Steps
@@ -550,6 +551,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { Social.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { PhoneHabits.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { DeviceTime.refresh(appContext) }.onFailure { it.printStackTrace() }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
