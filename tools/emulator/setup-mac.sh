@@ -9,8 +9,18 @@ ARCH=$([ "$(uname -m)" = arm64 ] && echo arm64-v8a || echo x86_64)
 IMAGE="system-images;android-34;google_apis;$ARCH"
 
 command -v brew >/dev/null || { echo "Install Homebrew first: https://brew.sh"; exit 1; }
-/usr/libexec/java_home -v 17+ >/dev/null 2>&1 || brew install --cask temurin@17
-export JAVA_HOME=$(/usr/libexec/java_home -v 17+)
+# Java 17+: Android Studio's own if it's installed, else any installed, else Homebrew's (no password needed)
+STUDIO_JDK="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+if [ -x "$STUDIO_JDK/bin/java" ]; then
+    export JAVA_HOME="$STUDIO_JDK"
+elif /usr/libexec/java_home -v 17+ >/dev/null 2>&1; then
+    export JAVA_HOME=$(/usr/libexec/java_home -v 17+)
+else
+    brew install openjdk@17
+    export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+fi
+# T3 Code's Device panel installs its helpers with pnpm
+command -v pnpm >/dev/null || brew install pnpm
 
 if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
     tmp=$(mktemp -d)
