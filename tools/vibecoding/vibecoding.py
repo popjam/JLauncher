@@ -25,7 +25,7 @@ PROMPT_BEFORE = 3 * 60
 PROMPT_AFTER = 5 * 60
 JOIN = 15 * 60
 DAYS = 60
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def parse_time(stamp):
@@ -36,12 +36,17 @@ def parse_time(stamp):
 
 
 def project_name(cwd):
-    """The project folder's name; T3 Code's scratch threads all count as Scratch."""
+    """The project folder's name. T3 Code's scratch threads and the Codex app's chat folders
+    (Documents/Codex/<date>/<chat> or Documents/Codex/<date>-<chat>) all count as Scratch."""
     if not cwd:
         return "Other"
     parts = [p for p in re.split(r"[\\/]+", cwd) if p]
-    if any(p.lower() == "scratch" for p in parts) and ".t3" in [p.lower() for p in parts]:
+    lower = [p.lower() for p in parts]
+    if "scratch" in lower and ".t3" in lower:
         return "Scratch"
+    for i in range(len(lower) - 2):
+        if lower[i:i + 2] == ["documents", "codex"] and re.match(r"\d{4}-\d{2}-\d{2}", parts[i + 2]):
+            return "Scratch"
     return parts[-1] if parts else "Other"
 
 
@@ -90,8 +95,14 @@ def read_claude(path):
     return prompts, spend
 
 
+# Context Codex adds as user messages before your prompt
+CODEX_CONTEXT = ("# AGENTS.md", "<environment_context", "<user_instructions", "<recommended_plugins", "<permissions")
+
+
 def read_codex(path):
-    prompts, cwd = [], None
+    """Prompts from user_message events, or in newer Codex, which has none, each turn's first
+    user message that isn't added context."""
+    prompts, turn_prompts, cwd, turn_open = [], [], None, False
     with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
@@ -107,7 +118,17 @@ def read_codex(path):
                 when = parse_time(entry.get("timestamp"))
                 if when is not None and is_prompt_text(payload.get("message", "")):
                     prompts.append((when, project_name(cwd)))
-    return prompts, []
+            elif entry.get("type") == "event_msg" and payload.get("type") == "task_started":
+                turn_open = True
+            elif (turn_open and entry.get("type") == "response_item" and payload.get("type") == "message"
+                  and payload.get("role") == "user"):
+                content = payload.get("content")
+                text = " ".join(b.get("text", "") for b in content if isinstance(b, dict)) if isinstance(content, list) else ""
+                when = parse_time(entry.get("timestamp"))
+                if when is not None and is_prompt_text(text) and not text.lstrip().startswith(CODEX_CONTEXT):
+                    turn_prompts.append((when, project_name(cwd)))
+                    turn_open = False
+    return prompts or turn_prompts, []
 
 
 def session_files(root, read):
