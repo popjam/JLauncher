@@ -1,6 +1,7 @@
 package app.olauncher.helper
 
 import android.app.Notification
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -183,8 +184,13 @@ object Spending {
     )
 }
 
-/** Hands CommBank's and Google Wallet's notifications to [Spending]. Android runs it once notification access is on. */
+/**
+ * Hands CommBank's and Google Wallet's notifications to [Spending], and follows what's playing for
+ * [Music]. Android runs it once notification access is on.
+ */
 class SpendingListener : NotificationListenerService() {
+
+    private var music: MusicTracker? = null
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         runCatching { Spending.record(applicationContext, sbn) }
@@ -193,5 +199,18 @@ class SpendingListener : NotificationListenerService() {
     // Catches purchases notified while it wasn't connected, if they're still showing
     override fun onListenerConnected() {
         runCatching { activeNotifications?.forEach { Spending.record(applicationContext, it) } }
+        music?.stop()
+        music = MusicTracker(applicationContext, ComponentName(this, SpendingListener::class.java)).also { it.start() }
+    }
+
+    override fun onListenerDisconnected() {
+        music?.stop()
+        music = null
+    }
+
+    override fun onDestroy() {
+        music?.stop()
+        music = null
+        super.onDestroy()
     }
 }

@@ -358,11 +358,42 @@
         <item>Terrible</item>
     </string-array>
     <string name="all_stats">All stats</string>
-    <string name="spending_listener">JLauncher Money spent</string>
+    <string name="spending_listener">JLauncher stats (Money spent, Music)</string>
     <string name="spending_card">From your card</string>
     <string name="spending_sources">CommBank · Google Wallet</string>
     <string name="spending_off">Fill this in from CommBank\'s purchase notifications. Turn on notification access for JLauncher; nothing leaves your phone.</string>
     <string name="spending_turn_on">Turn on</string>
+    <string name="sleep_last_night">Last night</string>
+    <string name="sleep_none">Sleep fills in by itself from when your screen was on. It shows here after your first night.</string>
+    <string name="sleep_span">%1$s – %2$s</string>
+    <string name="sleep_asleep">%1$s asleep</string>
+    <plurals name="sleep_checks">
+        <item quantity="one">checked phone once</item>
+        <item quantity="other">checked phone %1$d times</item>
+    </plurals>
+    <string name="sleep_usual">Usually, over the last %1$d nights</string>
+    <string name="sleep_usual_asleep">asleep</string>
+    <string name="sleep_usual_bedtime">to bed</string>
+    <string name="sleep_usual_wake">up</string>
+    <string name="sleep_times">Bed and wake times</string>
+    <string name="sleep_usual_times">usual bedtime and wake-up</string>
+    <string name="sleep_and_day">Sleep and the next day</string>
+    <string name="sleep_by_bedtime">Bedtime</string>
+    <string name="sleep_by_hours">Hours</string>
+    <string name="sleep_before_11">Before 11</string>
+    <string name="sleep_11_12">11–12</string>
+    <string name="sleep_12_1">12–1</string>
+    <string name="sleep_after_1">After 1</string>
+    <string name="sleep_under_6">Under 6h</string>
+    <string name="sleep_6_7">6–7h</string>
+    <string name="sleep_7_8">7–8h</string>
+    <string name="sleep_8_plus">8h+</string>
+    <string name="music_listening">Listening</string>
+    <string name="music_off">Music fills in by itself from what\'s playing. Turn on notification access for JLauncher; nothing leaves your phone.</string>
+    <string name="music_today">listened today</string>
+    <string name="music_today_top">listened today · mostly %1$s</string>
+    <string name="music_none">Artists you listen to show up here</string>
+    <string name="music_mood">mood %1$s</string>
     <string name="spending_none">Purchases show up here as their notifications come in</string>
     <plurals name="spending_today">
         <item quantity="one">spent today · %1$d purchase</item>

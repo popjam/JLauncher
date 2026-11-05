@@ -24,6 +24,9 @@ import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentStatPageBinding
+import app.olauncher.helper.AutoStats
+import app.olauncher.helper.Music
+import app.olauncher.helper.Sleep
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.allStats
@@ -42,6 +45,7 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.ceil
 
 /**
@@ -137,6 +141,13 @@ class StatPageFragment : Fragment() {
         binding.cards.removeAllViews()
         spendingShownOn = null
         if (Spending.moneyStat(data)?.id == stat.id) spendingCard()
+        if (AutoStats.id(requireContext(), AutoStats.SLEEP, data) == stat.id) {
+            val nights = Sleep.nights(requireContext())
+            sleepCard(nights)
+            sleepTimesCard(nights)
+            sleepMoodCard(nights)
+        }
+        if (AutoStats.id(requireContext(), AutoStats.MUSIC, data) == stat.id) musicCard()
         if (stat.medicine) {
             if (stat.name.contains(COFFEE, ignoreCase = true)) cupsCard() else takenCard()
             if (stat.name.contains(SERTRALINE, ignoreCase = true)) holidayCard()
@@ -674,6 +685,242 @@ class StatPageFragment : Fragment() {
     }
 
     private fun money(cents: Long) = String.format(Locale.getDefault(), "$%d.%02d", cents / 100, cents % 100)
+
+    // --- Sleep and Music, filled in by themselves ---
+
+    private fun clock(time: java.time.LocalTime) = time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
+
+    /** Minutes from midnight on the morning woken up: before it (going to bed) is negative. */
+    private fun offset(time: java.time.LocalDateTime, date: LocalDate) = ChronoUnit.MINUTES.between(date.atStartOfDay(), time).toInt()
+
+    private fun offsetClock(minutes: Int) = clock(java.time.LocalTime.MIDNIGHT.plusMinutes(Math.floorMod(minutes, 1440).toLong()))
+
+    private fun duration(ms: Long) = requireContext().formattedTimeSpent(ms)
+
+    private fun nightText(date: LocalDate, night: Sleep.Night) = listOfNotNull(
+        dateText(date),
+        getString(R.string.sleep_span, clock(night.bedtime.toLocalTime()), clock(night.wake.toLocalTime())),
+        getString(R.string.sleep_asleep, duration(night.asleepMs)),
+        night.checks.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.sleep_checks, it, it) },
+    ).joinToString(" · ")
+
+    /** Last night: how long, from when to when, and the usual of the last [SLEEP_DAYS] nights under it. */
+    private fun sleepCard(nights: Map<LocalDate, Sleep.Night>) {
+        val card = Card(getString(R.string.sleep_last_night))
+        val latest = nights.maxByOrNull { it.key }
+        if (latest == null) {
+            card.showNote(getString(R.string.sleep_none))
+            return
+        }
+        val (date, night) = latest
+        card.subtitle(dateText(date))
+        card.headline(duration(night.asleepMs), listOfNotNull(
+            getString(R.string.sleep_span, clock(night.bedtime.toLocalTime()), clock(night.wake.toLocalTime())),
+            night.checks.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.sleep_checks, it, it) },
+        ).joinToString(" · "))
+        val recent = nights.filterKeys { it > LocalDate.now().minusDays(SLEEP_DAYS.toLong()) }
+        if (recent.size < 2) return
+        val asleep = recent.values.map { it.asleepMs }.average().toLong()
+        val bed = recent.map { (d, n) -> offset(n.bedtime, d) }.average().roundToInt()
+        val wake = recent.map { (d, n) -> offset(n.wake, d) }.average().roundToInt()
+        val tiles = listOf(
+            duration(asleep) to getString(R.string.sleep_usual_asleep),
+            offsetClock(bed) to getString(R.string.sleep_usual_bedtime),
+            offsetClock(wake) to getString(R.string.sleep_usual_wake),
+        )
+        card.draw { s ->
+            s.text(getString(R.string.sleep_usual, recent.size), 0f, s.sp(12f), faint(140), s.sp(12f), Paint.Align.LEFT)
+            val top = s.dp(22f)
+            val gap = s.dp(8f)
+            val width = (s.width - gap * 2) / 3
+            tiles.forEachIndexed { i, (value, label) ->
+                val x = i * (width + gap)
+                s.rect(x, top, x + width, top + s.dp(64f), faint(18), s.dp(14f))
+                s.text(value, x + width / 2, top + s.dp(30f), ink, s.sp(17f), bold = true)
+                s.text(label, x + width / 2, top + s.dp(50f), faint(150), s.sp(12f))
+            }
+            s.height = top + s.dp(64f)
+        }
+    }
+
+    /**
+     * The last [SLEEP_DAYS] nights as bars from going to bed to waking up, in the night's face colour,
+     * with the usual bedtime and wake-up behind them.
+     */
+    private fun sleepTimesCard(nights: Map<LocalDate, Sleep.Night>) {
+        val today = LocalDate.now()
+        val days = (SLEEP_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val shown = days.mapNotNull { date -> nights[date]?.let { date to it } }
+        if (shown.size < 2) return
+        val card = Card(getString(R.string.sleep_times))
+        card.subtitle(getString(R.string.last_days, SLEEP_DAYS))
+        card.keyItem(faint(160), getString(R.string.sleep_usual_times))
+        card.describe = { key -> nightText(key as LocalDate, nights.getValue(key)) }
+        val beds = shown.map { (d, n) -> offset(n.bedtime, d) }
+        val wakes = shown.map { (d, n) -> offset(n.wake, d) }
+        // Whole hours either side of the earliest bedtime and latest wake-up
+        val from = Math.floorDiv(beds.min(), 60) * 60
+        val to = -Math.floorDiv(-wakes.max(), 60) * 60
+        val usualBed = beds.average().toFloat()
+        val usualWake = wakes.average().toFloat()
+        card.draw { s ->
+            val labelSize = s.sp(11f)
+            val left = s.textWidth("12:00 am", labelSize) + s.dp(8f)
+            val top = s.dp(6f)
+            val bottom = top + s.dp(170f)
+            val column = (s.width - left) / days.size
+            fun y(minutes: Float) = top + (minutes - from) / (to - from) * (bottom - top)
+            val step = if (to - from > 10 * 60) 180 else 120
+            var hour = from
+            while (hour <= to) {
+                s.line(left, y(hour.toFloat()), s.width, y(hour.toFloat()), faint(28), s.dp(1f))
+                s.text(offsetClock(hour).replace(":00", ""), left - s.dp(8f), y(hour.toFloat()) + labelSize * 0.35f, faint(130), labelSize, Paint.Align.RIGHT)
+                hour += step
+            }
+            listOf(usualBed, usualWake).forEach { s.line(left, y(it), s.width, y(it), faint(150), s.dp(1.5f)) }
+            val bar = minOf(column * 0.55f, s.dp(14f))
+            days.forEachIndexed { i, date ->
+                val x = left + i * column + column / 2
+                nights[date]?.let { night ->
+                    val face = Sleep.faceFor(night.asleepMs)
+                    s.rect(x - bar / 2, y(offset(night.bedtime, date).toFloat()), x + bar / 2, y(offset(night.wake, date).toFloat()),
+                        stat.faceColor(requireContext(), face), bar / 2)
+                    s.target(date, RectF(left + i * column, 0f, left + (i + 1) * column, bottom + s.dp(24f)),
+                        RectF(x - bar / 2 - s.dp(3f), y(offset(night.bedtime, date).toFloat()) - s.dp(3f), x + bar / 2 + s.dp(3f), y(offset(night.wake, date).toFloat()) + s.dp(3f)), bar / 2 + s.dp(3f))
+                }
+            }
+            labelIndices(days.size, 2).forEach { i ->
+                s.text(days[i].dayOfMonth.toString(), left + i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+            }
+            s.height = bottom + s.dp(24f)
+        }
+    }
+
+    /**
+     * Mood (and Energy, if there's a stat for it) on the day after each night, by when you went to bed
+     * or how long you slept.
+     */
+    private fun sleepMoodCard(nights: Map<LocalDate, Sleep.Night>) {
+        val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
+        val energy = stats.firstOrNull { it.id != MoodStore.MOOD && it.name.contains("energy", ignoreCase = true) }
+        if (nights.count { (date, _) -> valueOf(mood, date) != null } < SLEEP_MIN_NIGHTS) return
+        val card = Card(getString(R.string.sleep_and_day))
+        card.keyItem(mood.color, mood.name)
+        energy?.let { card.keyItem(it.color, it.name) }
+        val bedBuckets = listOf(R.string.sleep_before_11, R.string.sleep_11_12, R.string.sleep_12_1, R.string.sleep_after_1)
+        val hourBuckets = listOf(R.string.sleep_under_6, R.string.sleep_6_7, R.string.sleep_7_8, R.string.sleep_8_plus)
+        var byHours = false
+        fun bucket(date: LocalDate, night: Sleep.Night): Int = if (byHours) {
+            val hours = night.asleepMs / 3_600_000.0
+            when {
+                hours < 6 -> 0
+                hours < 7 -> 1
+                hours < 8 -> 2
+                else -> 3
+            }
+        } else {
+            val bed = offset(night.bedtime, date)
+            when {
+                bed < -60 -> 0
+                bed < 0 -> 1
+                bed < 60 -> 2
+                else -> 3
+            }
+        }
+        fun draw() {
+            card.segment(listOf(R.string.sleep_by_bedtime, R.string.sleep_by_hours), if (byHours) 1 else 0) {
+                byHours = it == 1
+                draw()
+            }
+            val names = (if (byHours) hourBuckets else bedBuckets).map { getString(it) }
+            val measured = listOfNotNull(mood, energy)
+            // Per bucket, per stat: the average and how many days
+            val averages = (0 until 4).map { b ->
+                measured.map { s ->
+                    nights.filter { (date, night) -> bucket(date, night) == b }.keys.mapNotNull { valueOf(s, it) }
+                        .let { values -> values.takeIf { it.isNotEmpty() }?.average()?.toFloat() to values.size }
+                }
+            }
+            card.describe = { key ->
+                val b = key as Int
+                (listOf(names[b]) + measured.mapIndexed { i, s ->
+                    val (average, count) = averages[b][i]
+                    getString(R.string.stat_total, s.name, average?.let(::decimal) ?: "–") + " · " + resources.getQuantityString(R.plurals.day_count, count, count)
+                }).joinToString("\n")
+            }
+            card.draw { s ->
+                val top = s.dp(6f)
+                val bottom = top + s.dp(120f)
+                val column = s.width / 4
+                fun y(value: Float) = bottom - (value - 1f) / 4f * (bottom - top) - s.dp(2f)
+                listOf(1, 3, 5).forEach { g -> s.line(0f, y(g.toFloat()), s.width, y(g.toFloat()), faint(28), s.dp(1f)) }
+                val bar = minOf(column / (measured.size + 1), s.dp(22f))
+                (0 until 4).forEach { b ->
+                    val center = b * column + column / 2
+                    val start = center - bar * measured.size / 2
+                    measured.forEachIndexed { i, st ->
+                        val (average, _) = averages[b][i]
+                        val x = start + i * bar
+                        if (average == null) s.rect(x + s.dp(2f), bottom - s.dp(2f), x + bar - s.dp(2f), bottom, faint(45), s.dp(1f))
+                        else s.rect(x + s.dp(2f), y(average), x + bar - s.dp(2f), bottom, st.color, s.dp(5f))
+                    }
+                    s.text(names[b], center, bottom + s.dp(18f), faint(160), s.sp(12f))
+                    s.target(b, RectF(b * column, 0f, (b + 1) * column, bottom + s.dp(26f)))
+                }
+                s.height = bottom + s.dp(26f)
+            }
+        }
+        draw()
+    }
+
+    /** Today's listening, and the artists of the last [MUSIC_DAYS] days with Mood on the days they played. */
+    private fun musicCard() {
+        val context = requireContext()
+        val card = Card(getString(R.string.music_listening))
+        if (!Spending.isEnabled(context)) {
+            spendingShownOn = false
+            card.showNote(getString(R.string.music_off))
+            card.chipRow(listOf(getString(R.string.spending_turn_on) to ink), null) { Spending.openSettings(context) }
+            return
+        }
+        spendingShownOn = true
+        val days = Music.days(context)
+        val today = LocalDate.now()
+        val todays = days[today]
+        card.subtitle(getString(R.string.last_days, MUSIC_DAYS))
+        card.headline(duration(todays?.ms ?: 0), todays?.artists?.maxByOrNull { it.value }?.key
+            ?.let { getString(R.string.music_today_top, it) } ?: getString(R.string.music_today))
+        val recent = days.filterKeys { it > today.minusDays(MUSIC_DAYS.toLong()) }
+        val artists = recent.values.flatMap { it.artists.entries }.groupBy({ it.key }, { it.value })
+            .mapValues { (_, times) -> times.sum() }.entries.sortedByDescending { it.value }.take(MUSIC_ARTISTS)
+        if (artists.isEmpty()) {
+            card.showNote(getString(R.string.music_none))
+            return
+        }
+        card.scene.isVisible = false
+        val mood = stats.firstOrNull { it.id == MoodStore.MOOD }
+        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        artists.forEach { (artist, ms) ->
+            val playedOn = recent.filterValues { it.artists.containsKey(artist) }.keys
+            val moodText = mood?.let { m -> playedOn.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
+                ?.let { getString(R.string.music_mood, decimal(it)) }
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
+                addView(card.textView(14f, 255).apply {
+                    text = artist
+                    isSingleLine = true
+                    ellipsize = TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(card.textView(13f, 150).apply {
+                    text = listOfNotNull(duration(ms), moodText).joinToString(" · ")
+                    updatePadding(left = 10.dpToPx())
+                })
+            })
+        }
+        card.root.addView(list, card.root.indexOfChild(card.scene))
+    }
 
     private val hotCup by lazy { ContextCompat.getColor(requireContext(), R.color.holiday) }
 
@@ -1249,6 +1496,14 @@ class StatPageFragment : Fragment() {
 
         /** Coffee gets cups instead of the Taken calendar, [CUP_DAYS] days at a time */
         private const val COFFEE = "coffee"
+
+        /** How many nights Sleep's cards cover, and how many with a Mood before comparing */
+        private const val SLEEP_DAYS = 14
+        private const val SLEEP_MIN_NIGHTS = 3
+
+        /** How far back Music's artists go, and how many are listed */
+        private const val MUSIC_DAYS = 30
+        private const val MUSIC_ARTISTS = 6
 
         /** How many of the latest purchases Money spent lists */
         private const val SPENDING_SHOWN = 8
