@@ -678,4 +678,14 @@
     <string name="week_limit_over_key">Over</string>
     <string name="week_limit_over_by">Over by</string>
     <string name="week_limit_under_by">Under by</string>
+    <string name="week_limit_carry">Carry leftover or debt into next week</string>
+    <string name="week_limit_on_home">Show what’s left on the home screen</string>
+    <string name="week_limit_carried">%1$s carried over</string>
+    <string name="week_limit_debt">%1$s debt from last week</string>
+    <string name="week_limit_allowed">Allowed</string>
+    <string name="money_left_description">%1$s left this week, %2$s</string>
+    <plurals name="days_left">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
 </resources>

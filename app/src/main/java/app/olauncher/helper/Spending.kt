@@ -11,6 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import app.olauncher.data.MoodStore
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -175,12 +176,59 @@ object Spending {
 
     fun setWeekLimitCents(context: Context, cents: Long) = prefs(context).edit().putLong(WEEK_LIMIT, cents.coerceAtLeast(0)).apply()
 
+    /** Whether a week's leftover (or overspend) is added to (or taken from) the next week's limit */
+    fun carryOver(context: Context) = prefs(context).getBoolean(CARRY, false)
+
+    /** Turning it on starts counting from this week, so weeks before don't bring a surplus or debt with them */
+    fun setCarryOver(context: Context, on: Boolean) {
+        if (on == carryOver(context)) return
+        prefs(context).edit().putBoolean(CARRY, on)
+            .putString(CARRY_SINCE, LocalDate.now().with(DayOfWeek.MONDAY).toString()).apply()
+    }
+
+    /** Whether what's left this week shows on the home screen, under the mood */
+    fun showOnHome(context: Context) = prefs(context).getBoolean(ON_HOME, true)
+
+    fun setShowOnHome(context: Context, on: Boolean) = prefs(context).edit().putBoolean(ON_HOME, on).apply()
+
+    /** The non-essential spending in the week from [monday] */
+    fun weekSpentCents(daily: Map<LocalDate, Long>, monday: LocalDate) = (0..6L).sumOf { daily[monday.plusDays(it)] ?: 0L }
+
+    /**
+     * What the week from [monday] can spend: the limit, and with [carryOver] plus what each week before
+     * left unspent, or less what it went over by.
+     */
+    fun allowanceCents(context: Context, monday: LocalDate, daily: Map<LocalDate, Long> = dailyCents(context)): Long {
+        val limit = weekLimitCents(context)
+        if (!carryOver(context)) return limit
+        val since = prefs(context).getString(CARRY_SINCE, null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return limit
+        var allowance = limit
+        var week = since
+        while (week < monday) {
+            allowance = limit + allowance - weekSpentCents(daily, week)
+            week = week.plusWeeks(1)
+        }
+        return allowance
+    }
+
+    /** This week's allowance and what's left of it (below 0 when over), or null without a limit */
+    fun thisWeek(context: Context): Pair<Long, Long>? {
+        if (weekLimitCents(context) <= 0) return null
+        val daily = dailyCents(context)
+        val monday = LocalDate.now().with(DayOfWeek.MONDAY)
+        val allowance = allowanceCents(context, monday, daily)
+        return allowance to allowance - weekSpentCents(daily, monday)
+    }
+
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private val LOCK = Any()
     private const val PREFS = "spending"
     private const val KEY = "purchases"
     private const val WEEK_LIMIT = "week_limit"
+    private const val CARRY = "carry_over"
+    private const val CARRY_SINCE = "carry_since"
+    private const val ON_HOME = "on_home"
     private const val KEEP_DAYS = 400L
     private const val DAY_MS = 24 * 60 * 60 * 1000L
     private const val SAME_PURCHASE_MS = 15 * 60 * 1000L

@@ -32,6 +32,13 @@
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
         <action
+            android:id="@+id/action_mainFragment_to_statFragment"
+            app:destination="@id/statFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+        <action
             android:id="@+id/action_mainFragment_to_weatherFragment"
             app:destination="@id/weatherFragment"
             app:enterAnim="@anim/fade_enter"

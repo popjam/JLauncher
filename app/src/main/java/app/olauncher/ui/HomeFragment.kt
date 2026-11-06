@@ -36,6 +36,7 @@ import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
 import app.olauncher.helper.MoodPrompt
+import app.olauncher.helper.Spending
 import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
@@ -140,6 +141,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
             R.id.moodAvatar -> openMoodTracker()
             R.id.weatherIcon, R.id.tvWeather -> openWeather()
+            R.id.moneyWidget -> openMoney()
 
             else -> {
                 try { // Launch app
@@ -298,6 +300,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.tvScreenTime.setOnClickListener(this)
         binding.tvScreenTime.setOnLongClickListener(this)
         binding.moodAvatar.setOnClickListener(this)
+        binding.moneyWidget.setOnClickListener(this)
         binding.weatherIcon.setOnClickListener(this)
         binding.tvWeather.setOnClickListener(this)
     }
@@ -378,8 +381,61 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.tvScreenTime.setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 10.dpToPx())
     }
 
+    /** What's left to spend this week, in pixel dollars, and the days until the week starts again */
+    private fun populateMoney() {
+        val context = requireContext()
+        val week = Spending.thisWeek(context)?.takeIf { Spending.showOnHome(context) }
+        binding.moneyWidget.isVisible = week != null
+        week ?: return
+        val (allowance, left) = week
+        binding.moneyLeft.text = PixelMoneyView.figure(left)
+        binding.moneyLeft.color = PixelMoneyView.colorFor(context, left, allowance)
+        val today = LocalDate.now()
+        val days = java.time.temporal.ChronoUnit.DAYS.between(today, today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))).toInt()
+        binding.tvMoneyDays.text = resources.getQuantityString(R.plurals.days_left, days, days)
+        binding.moneyWidget.contentDescription = getString(R.string.money_left_description, PixelMoneyView.figure(left), binding.tvMoneyDays.text)
+    }
+
+    /** Puts the money widget under the mood and screen time, centred on them; it may sit beside the apps. */
+    private fun placeMoneyWidget() {
+        val binding = _binding ?: return
+        val money = binding.moneyWidget
+        if (!money.isVisible || money.width == 0) return
+        val layout = binding.screenTimeLayout
+        val column = binding.screenTimeColumn.takeIf { it.isVisible } ?: binding.weatherColumn.takeIf { it.isVisible }
+        val top: Int
+        val centre: Int
+        if (layout.isVisible && column != null) {
+            top = layout.top + layout.height
+            centre = layout.left + column.left + column.width / 2
+        } else {
+            val margin = 10.dpToPx() + money.width / 2
+            top = 72.dpToPx()
+            centre = if (prefs.homeAlignment == Gravity.END) margin else binding.mainLayout.width - margin
+        }
+        val params = money.layoutParams as FrameLayout.LayoutParams
+        val left = (centre - money.width / 2).coerceAtLeast(0)
+        if (params.topMargin != top || params.leftMargin != left || params.gravity != (Gravity.TOP or Gravity.LEFT)) {
+            params.gravity = Gravity.TOP or Gravity.LEFT
+            params.topMargin = top
+            params.leftMargin = left
+            money.layoutParams = params
+        }
+    }
+
+    private fun openMoney() {
+        val id = Spending.moneyStat(MoodStore(requireContext()).load())?.id
+        try {
+            if (id == null) findNavController().navigate(R.id.action_mainFragment_to_statListFragment)
+            else findNavController().navigate(R.id.action_mainFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to id))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     /** Keeps the avatar + screen time column vertically centred on the time and date. */
     private fun alignScreenTimeWithDateTime() {
+        placeMoneyWidget()
         val binding = _binding ?: return
         val dateTime = binding.dateTimeLayout
         val screenTime = binding.screenTimeLayout
@@ -453,6 +509,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         populatePageIndicator()
 
         populateScreenTime()
+        populateMoney()
 
         populateHomeApps()
     }

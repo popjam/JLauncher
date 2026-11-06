@@ -237,6 +237,35 @@
         android:visibility="gone"
         tools:visibility="visible" />
 
+    <!-- What's left of the week's spending limit, under the mood (placed in HomeFragment) -->
+    <LinearLayout
+        android:id="@+id/moneyWidget"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <app.olauncher.ui.PixelMoneyView
+            android:id="@+id/moneyLeft"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:contentDescription="@string/week_limit" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tvMoneyDays"
+            style="@style/TextSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingHorizontal="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="10dp"
+            android:textSize="@dimen/date_size"
+            tools:text="2 days" />
+    </LinearLayout>
+
     <!-- Set default launcher -->
     <TextView
         android:id="@+id/setDefaultLauncher"

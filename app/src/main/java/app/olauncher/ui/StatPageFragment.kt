@@ -697,24 +697,34 @@ class StatPageFragment : CardPageFragment() {
         val monday = today.with(DayOfWeek.MONDAY)
         val first = maxOf(spent.keys.minOrNull()?.with(DayOfWeek.MONDAY) ?: monday, monday.minusWeeks(LIMIT_WEEKS - 1L))
         val weeks = generateSequence(first) { it.plusWeeks(1) }.takeWhile { it <= monday }.toList()
-        val weekCents = weeks.map { start -> (0..6).sumOf { ((spent[start.plusDays(it.toLong())] ?: 0f) * 100).roundToInt().toLong() } }
+        val daily = Spending.dailyCents(context)
+        val weekCents = weeks.map { Spending.weekSpentCents(daily, it) }
+        // With carry-over each week has its own allowance
+        val allowances = weeks.map { Spending.allowanceCents(context, it, daily) }
+        val carry = Spending.carryOver(context)
         val thisWeek = weekCents.last()
+        val allowance = allowances.last()
         val over = LIMIT_OVER_COLOR
-        val limitText = if (limit % 100 == 0L) "$" + String.format(Locale.getDefault(), "%,d", limit / 100) else money(limit)
-        if (thisWeek <= limit) card.headline(money(limit - thisWeek), getString(R.string.week_limit_left, limitText))
-        else card.headline(money(thisWeek - limit), getString(R.string.week_limit_over, limitText))
-        val past = weekCents.dropLast(1)
-        if (past.isNotEmpty()) card.subtitle(getString(R.string.week_limit_broken, past.count { it > limit }, past.size))
+        fun dollars(cents: Long) = if (cents % 100 == 0L) "$" + String.format(Locale.getDefault(), "%,d", cents / 100) else money(cents)
+        val carried = (allowance - limit).takeIf { carry && it != 0L }?.let {
+            getString(if (it > 0) R.string.week_limit_carried else R.string.week_limit_debt, dollars(abs(it)))
+        }
+        if (thisWeek <= allowance) card.headline(money(allowance - thisWeek), listOfNotNull(getString(R.string.week_limit_left, dollars(allowance)), carried).joinToString(" · "))
+        else card.headline(money(thisWeek - allowance), listOfNotNull(getString(R.string.week_limit_over, dollars(allowance)), carried).joinToString(" · "))
+        val pastOver = weekCents.indices.count { it < weeks.lastIndex && weekCents[it] > allowances[it] }
+        if (weeks.size > 1) card.subtitle(getString(R.string.week_limit_broken, pastOver, weeks.size - 1))
         card.keyItem(moneyGold, getString(R.string.week_limit_under))
         card.keyItem(over, getString(R.string.week_limit_over_key))
         card.chipRow(listOf(getString(R.string.week_limit_change, moneyShort(limit)) to moneyGold), null) { askWeekLimit() }
         card.describe = { key ->
             val i = key as Int
             val cents = weekCents[i]
-            listOf(getString(R.string.week_of, weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))),
+            val allowed = allowances[i]
+            listOfNotNull(getString(R.string.week_of, weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))),
                 getString(R.string.stat_label, getString(R.string.spent), money(cents)),
-                if (cents > limit) getString(R.string.stat_label, getString(R.string.week_limit_over_by), money(cents - limit))
-                else getString(R.string.stat_label, getString(R.string.week_limit_under_by), money(limit - cents))).joinToString("\n")
+                if (allowed != limit) getString(R.string.stat_label, getString(R.string.week_limit_allowed), money(allowed)) else null,
+                if (cents > allowed) getString(R.string.stat_label, getString(R.string.week_limit_over_by), money(cents - allowed))
+                else getString(R.string.stat_label, getString(R.string.week_limit_under_by), money(allowed - cents))).joinToString("\n")
         }
         val most = maxOf(weekCents.maxOrNull() ?: 0L, limit) * 1.1f
         card.draw { s ->
@@ -726,7 +736,7 @@ class StatPageFragment : CardPageFragment() {
             weeks.forEachIndexed { i, start ->
                 val x = left + i * column
                 val cents = weekCents[i]
-                val color = if (cents > limit) over else moneyGold
+                val color = if (cents > allowances[i]) over else moneyGold
                 val h = cents / most * (bottom - top)
                 if (cents == 0L) s.rect(x + s.dp(3f), bottom - s.dp(2f), x + column - s.dp(3f), bottom, faint(45), s.dp(1f))
                 else s.rect(x + s.dp(3f), bottom - h, x + column - s.dp(3f), bottom,
@@ -757,9 +767,20 @@ class StatPageFragment : CardPageFragment() {
             if (current > 0) setText(if (current % 100 == 0L) (current / 100).toString() else String.format(Locale.US, "%.2f", current / 100.0))
             setSelection(text.length)
         }
-        val box = android.widget.FrameLayout(context).apply {
+        val carry = android.widget.CheckBox(context).apply {
+            setText(R.string.week_limit_carry)
+            isChecked = Spending.carryOver(context)
+        }
+        val onHome = android.widget.CheckBox(context).apply {
+            setText(R.string.week_limit_on_home)
+            isChecked = Spending.showOnHome(context)
+        }
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
             setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
             addView(input)
+            addView(carry)
+            addView(onHome)
         }
         AlertDialog.Builder(context)
             .setTitle(R.string.week_limit_ask)
@@ -767,6 +788,8 @@ class StatPageFragment : CardPageFragment() {
             .setPositiveButton(R.string.okay) { _, _ ->
                 val dollars = input.text.toString().replace("$", "").replace(",", "").trim().toDoubleOrNull()
                 if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, (dollars * 100).roundToInt().toLong())
+                Spending.setCarryOver(context, carry.isChecked)
+                Spending.setShowOnHome(context, onHome.isChecked)
                 if (isAdded) render()
             }
             .apply { if (current > 0) setNeutralButton(R.string.week_limit_remove) { _, _ -> Spending.setWeekLimitCents(context, 0); if (isAdded) render() } }
