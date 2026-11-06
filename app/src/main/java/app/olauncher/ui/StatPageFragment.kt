@@ -1542,8 +1542,9 @@ class StatPageFragment : CardPageFragment() {
     ).joinToString(" · ")
 
     /**
-     * The two homes' Wi-Fi, set from the Wi-Fi you're on, with where you are now and how many days of
-     * the last [SOCIAL_DAYS] were mostly at each. Until location is allowed, a way to allow it.
+     * Where the last [SOCIAL_LONG_DAYS] days were spent: each home's share of the time at a home, as a
+     * bar in its colour, the most first. Under it the two homes' Wi-Fi, set from the Wi-Fi you're on.
+     * Until location is allowed, a way to allow it.
      */
     private fun socialHomesCard(days: Map<LocalDate, Social.Day>) {
         val context = requireContext()
@@ -1557,10 +1558,40 @@ class StatPageFragment : CardPageFragment() {
         card.scene.isVisible = false
         val homes = Social.homes(context)
         val today = LocalDate.now()
-        val recent = days.filterKeys { it > today.minusDays(SOCIAL_DAYS.toLong()) }
+        val recent = days.filterKeys { it > today.minusDays(SOCIAL_LONG_DAYS.toLong()) }
+        // Each home's time, the most first
+        val homeMs = homes.indices.associateWith { slot -> recent.values.sumOf { it.homeMs(slot) } }
+        val atHomes = homeMs.values.sum()
+        val ranked = homeMs.entries.filter { it.value > 0 }.sortedByDescending { it.value }
+        fun share(slot: Int) = if (atHomes == 0L) 0 else ((homeMs[slot] ?: 0L) * 100f / atHomes).roundToInt()
+        if (ranked.isNotEmpty()) {
+            val top = ranked.first().key
+            card.headline("${share(top)}%", getString(R.string.social_mostly_at, homeName(top), SOCIAL_LONG_DAYS))
+            card.describe = { key ->
+                val slot = key as Int
+                listOf(homeName(slot), getString(R.string.stat_label, getString(R.string.share), "${share(slot)}%"),
+                    getString(R.string.stat_label, getString(R.string.time), duration(homeMs[slot] ?: 0L))).joinToString("\n")
+            }
+            card.draw { sc ->
+                val h = sc.dp(28f)
+                var x = 0f
+                ranked.forEachIndexed { i, (slot, ms) ->
+                    val w = sc.width * ms / atHomes
+                    sc.rect(x + if (i > 0) sc.dp(2f) else 0f, 0f, x + w, h, homeColors[slot], sc.dp(8f))
+                    val label = "${share(slot)}%"
+                    if (sc.textWidth(label, sc.sp(13f)) + sc.dp(12f) < w)
+                        sc.text(label, x + w / 2, h / 2 + sc.sp(4.5f), 0xFF161616.toInt(), sc.sp(13f), bold = true)
+                    sc.target(slot, RectF(x, 0f, x + w, h + sc.dp(6f)))
+                    x += w
+                }
+                sc.height = h + sc.dp(6f)
+            }
+        }
         val mood = stats.firstOrNull { it.id == MoodStore.MOOD }
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        homes.forEachIndexed { slot, home ->
+        // The homes in order of time spent at them, ones not set last
+        homes.indices.sortedByDescending { homeMs[it] ?: -1L }.forEach { slot ->
+            val home = homes[slot]
             val dates = recent.filterValues { it.mainHome == slot }.keys
             val moodText = mood?.let { m -> dates.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
                 ?.let { getString(R.string.music_mood, decimal(it)) }
@@ -1576,7 +1607,7 @@ class StatPageFragment : CardPageFragment() {
                     })
                     addView(card.textView(12f, 140).apply {
                         text = if (home == null) getString(R.string.social_not_set)
-                        else listOfNotNull(home.ssid, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
+                        else listOfNotNull(home.ssid, "${share(slot)}%".takeIf { atHomes > 0 }, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
                         updatePadding(top = 2.dpToPx())
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1588,7 +1619,7 @@ class StatPageFragment : CardPageFragment() {
                 })
             })
         }
-        card.root.addView(list, card.root.indexOfChild(card.scene))
+        card.root.addView(list, card.root.indexOfChild(card.scene) + 1)
         if (homes.any { it != null }) {
             val now = days[today]?.stretches?.lastOrNull()
             card.subtitle(when {

@@ -717,4 +717,5 @@
     <string name="music_some">under 1h</string>
     <string name="music_lots">1h or more</string>
     <string name="music_apps">Listening on</string>
+    <string name="social_mostly_at">at %1$s over the last %2$d days</string>
 </resources>
