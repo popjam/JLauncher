@@ -33,12 +33,12 @@ class PixelMoneyView @JvmOverloads constructor(
     /** The face's pixel: 32dp over its 16 cells */
     private val cell get() = 2.dpToPx()
 
-    private fun columns() = (text.sumOf { (GLYPHS[it]?.first()?.length ?: 0) + 1 } - 1).coerceAtLeast(1)
+    private fun columns() = (text.sumOf { (GLYPHS[it]?.first()?.length ?: 0) + GAP } - GAP).coerceAtLeast(1)
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(
             resolveSize(columns() * cell, widthMeasureSpec),
-            resolveSize(32.dpToPx(), heightMeasureSpec)
+            resolveSize(ROWS * cell, heightMeasureSpec)
         )
     }
 
@@ -47,35 +47,35 @@ class PixelMoneyView @JvmOverloads constructor(
         var x = (width - columns() * cell) / 2f
         val top = (height - ROWS * cell) / 2f
         text.forEach { char ->
-            val glyph = GLYPHS[char]?.let { lines -> STRETCH.map { lines[it] } } ?: return@forEach
+            val glyph = GLYPHS[char] ?: return@forEach
             glyph.forEachIndexed { row, line ->
                 line.forEachIndexed { col, on ->
                     if (on == '1') canvas.drawRect(x + col * cell, top + row * cell, x + (col + 1) * cell, top + (row + 1) * cell, paint)
                 }
             }
-            x += (glyph.first().length + 1) * cell
+            x += (glyph.first().length + GAP) * cell
         }
     }
 
     companion object {
-        /** The 7-row glyphs drawn 11 rows tall, so they stand about as high as the face with its thin lines */
-        private val STRETCH = listOf(0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6)
-        private val ROWS = STRETCH.size
+        /** Digits drawn with one-pixel lines, like the face, 11 pixels tall */
+        private const val ROWS = 11
+        private const val GAP = 2
 
         private val GLYPHS = mapOf(
-            '0' to listOf("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
-            '1' to listOf("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
-            '2' to listOf("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
-            '3' to listOf("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
-            '4' to listOf("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
-            '5' to listOf("11111", "10000", "11110", "00001", "00001", "10001", "01110"),
-            '6' to listOf("00110", "01000", "10000", "11110", "10001", "10001", "01110"),
-            '7' to listOf("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
-            '8' to listOf("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
-            '9' to listOf("01110", "10001", "10001", "01111", "00001", "00010", "01100"),
-            '$' to listOf("00100", "01111", "10100", "01110", "00101", "11110", "00100"),
-            '-' to listOf("000", "000", "000", "111", "000", "000", "000"),
-            'k' to listOf("1000", "1000", "1001", "1010", "1100", "1010", "1001"),
+            '0' to listOf("011110", "100001", "100001", "100001", "100001", "100001", "100001", "100001", "100001", "100001", "011110"),
+            '1' to listOf("001100", "010100", "000100", "000100", "000100", "000100", "000100", "000100", "000100", "000100", "011111"),
+            '2' to listOf("011110", "100001", "000001", "000001", "000010", "000100", "001000", "010000", "100000", "100000", "111111"),
+            '3' to listOf("011110", "100001", "000001", "000001", "000001", "001110", "000001", "000001", "000001", "100001", "011110"),
+            '4' to listOf("000010", "000110", "001010", "010010", "100010", "100010", "111111", "000010", "000010", "000010", "000010"),
+            '5' to listOf("111111", "100000", "100000", "100000", "111110", "000001", "000001", "000001", "000001", "100001", "011110"),
+            '6' to listOf("011110", "100000", "100000", "100000", "111110", "100001", "100001", "100001", "100001", "100001", "011110"),
+            '7' to listOf("111111", "000001", "000001", "000010", "000010", "000100", "000100", "001000", "001000", "001000", "001000"),
+            '8' to listOf("011110", "100001", "100001", "100001", "100001", "011110", "100001", "100001", "100001", "100001", "011110"),
+            '9' to listOf("011110", "100001", "100001", "100001", "100001", "011111", "000001", "000001", "000001", "100001", "011110"),
+            '$' to listOf("00100", "01111", "10100", "10100", "10100", "01110", "00101", "00101", "00101", "11110", "00100"),
+            '-' to listOf("0000", "0000", "0000", "0000", "0000", "1111", "0000", "0000", "0000", "0000", "0000"),
+            'k' to listOf("10000", "10000", "10000", "10001", "10010", "10100", "11000", "10100", "10010", "10001", "10001"),
         )
 
         /** "$21", "-$20", "$12k" for [cents] (whole dollars, rounded down) */
