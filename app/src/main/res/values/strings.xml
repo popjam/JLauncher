@@ -692,4 +692,29 @@
     <string name="swipe_right_opens">Swipe right opens</string>
     <string name="swipe_an_app">An app…</string>
     <string name="swipe_stats_home">Stats home</string>
+    <string name="music_streak">days in a row</string>
+    <string name="music_when">When you listen</string>
+    <string name="music_peak">%1$s–%2$s</string>
+    <string name="music_peak_note">your busiest three hours, %1$d%% of your listening</string>
+    <string name="music_hour">%1$s–%2$s</string>
+    <string name="music_top_artists">Top artists</string>
+    <string name="music_on_repeat">On repeat</string>
+    <plurals name="music_plays">
+        <item quantity="one">%d play</item>
+        <item quantity="other">%d plays</item>
+    </plurals>
+    <string name="music_new">New finds</string>
+    <plurals name="music_new_count">
+        <item quantity="one">%d artist new to you</item>
+        <item quantity="other">%d artists new to you</item>
+    </plurals>
+    <string name="music_first_heard">First heard</string>
+    <string name="music_and_mood">Music and mood</string>
+    <string name="music_mood_better">higher mood on days with %1$s of music than with none</string>
+    <string name="music_mood_worse">lower mood on days with %1$s of music than with none</string>
+    <string name="music_mood_caption">Average mood</string>
+    <string name="music_none_day">no music</string>
+    <string name="music_some">under 1h</string>
+    <string name="music_lots">1h or more</string>
+    <string name="music_apps">Listening on</string>
 </resources>

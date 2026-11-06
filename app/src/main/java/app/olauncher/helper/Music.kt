@@ -19,7 +19,24 @@ import java.time.ZoneId
  */
 object Music {
 
-    class Day(val ms: Long, val artists: Map<String, Long>)
+    /**
+     * A day's listening: in all, by artist, by track ([trackKey]: time and plays of 30s or more), by
+     * hour of the day (24, from midnight) and by the app playing it (package name).
+     */
+    class Day(
+        val ms: Long,
+        val artists: Map<String, Long>,
+        val tracks: Map<String, Long> = emptyMap(),
+        val plays: Map<String, Int> = emptyMap(),
+        val hours: List<Long> = emptyList(),
+        val apps: Map<String, Long> = emptyMap(),
+    )
+
+    /** A track as kept: its title and artist in one key */
+    fun trackKey(title: String, artist: String?) = title + TRACK_SEPARATOR + artist.orEmpty()
+
+    /** A [trackKey]'s title and artist (empty if none) */
+    fun splitTrack(key: String): Pair<String, String> = key.substringBefore(TRACK_SEPARATOR) to key.substringAfter(TRACK_SEPARATOR, "")
 
     fun days(context: Context): Map<LocalDate, Day> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyMap()
@@ -27,21 +44,47 @@ object Music {
         return days.keys().asSequence().mapNotNull { key ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@mapNotNull null
             val day = days.getJSONObject(key)
-            val artists = day.optJSONObject("artists")?.let { a -> a.keys().asSequence().associateWith { a.getLong(it) } }.orEmpty()
-            date to Day(day.getLong("ms"), artists)
+            fun longs(name: String) = day.optJSONObject(name)?.let { a -> a.keys().asSequence().associateWith { a.getLong(it) } }.orEmpty()
+            val plays = day.optJSONObject("plays")?.let { a -> a.keys().asSequence().associateWith { a.getInt(it) } }.orEmpty()
+            val hours = day.optJSONArray("hours")?.let { a -> (0 until a.length()).map { a.getLong(it) } }.orEmpty()
+            date to Day(day.getLong("ms"), longs("artists"), longs("tracks"), plays, hours, longs("apps"))
         }.toMap()
     }
 
-    /** Adds [ms] of listening to [artist], counted on the day it ended, and updates that day's Music. */
-    fun add(context: Context, endTime: Long, ms: Long, artist: String?) {
+    /**
+     * Adds [ms] of listening to [artist] and [title], counted on the day it ended, and updates that day's
+     * Music. [play] counts it as one more play of the track; [app] is the package playing it.
+     */
+    fun add(context: Context, endTime: Long, ms: Long, artist: String?, title: String? = null, app: String? = null, play: Boolean = false) {
         if (ms < MIN_MS) return
-        val date = Instant.ofEpochMilli(endTime).atZone(ZoneId.systemDefault()).toLocalDate()
+        val zone = ZoneId.systemDefault()
+        val date = Instant.ofEpochMilli(endTime).atZone(zone).toLocalDate()
         val total = synchronized(LOCK) {
             val all = days(context).toMutableMap()
             val day = all[date]
             val artists = day?.artists.orEmpty().toMutableMap()
             artist?.takeIf { it.isNotBlank() }?.let { artists[it] = (artists[it] ?: 0) + ms }
-            all[date] = Day((day?.ms ?: 0) + ms, artists)
+            val tracks = day?.tracks.orEmpty().toMutableMap()
+            val plays = day?.plays.orEmpty().toMutableMap()
+            title?.takeIf { it.isNotBlank() }?.let { trackKey(it, artist?.takeIf { a -> a.isNotBlank() }) }?.let { key ->
+                tracks[key] = (tracks[key] ?: 0) + ms
+                if (play) plays[key] = (plays[key] ?: 0) + 1
+            }
+            // A day keeps its most played tracks only
+            val kept = tracks.entries.sortedByDescending { it.value }.take(MAX_TRACKS).associate { it.key to it.value }
+            val apps = day?.apps.orEmpty().toMutableMap()
+            app?.let { apps[it] = (apps[it] ?: 0) + ms }
+            // Split across the hours it spanned
+            val hours = day?.hours?.takeIf { it.size == 24 }?.toMutableList() ?: MutableList(24) { 0L }
+            var at = endTime - ms
+            while (at < endTime) {
+                val time = Instant.ofEpochMilli(at).atZone(zone)
+                val nextHour = time.withMinute(0).withSecond(0).withNano(0).plusHours(1).toInstant().toEpochMilli()
+                val until = minOf(nextHour, endTime)
+                hours[time.hour] += until - at
+                at = until
+            }
+            all[date] = Day((day?.ms ?: 0) + ms, artists, kept, plays.filterKeys { it in kept }, hours, apps)
             val cutoff = LocalDate.now().minusDays(KEEP_DAYS)
             save(context, all.filterKeys { it >= cutoff })
             all.getValue(date).ms
@@ -102,7 +145,12 @@ object Music {
         days.forEach { (date, day) ->
             val artists = JSONObject()
             day.artists.forEach { (name, ms) -> artists.put(name, ms) }
-            json.put(date.toString(), JSONObject().put("ms", day.ms).put("artists", artists))
+            val tracks = JSONObject().also { o -> day.tracks.forEach { (k, v) -> o.put(k, v) } }
+            val plays = JSONObject().also { o -> day.plays.forEach { (k, v) -> o.put(k, v) } }
+            val apps = JSONObject().also { o -> day.apps.forEach { (k, v) -> o.put(k, v) } }
+            val entry = JSONObject().put("ms", day.ms).put("artists", artists).put("tracks", tracks).put("plays", plays).put("apps", apps)
+            if (day.hours.size == 24) entry.put("hours", org.json.JSONArray(day.hours))
+            json.put(date.toString(), entry)
         }
         prefs(context).edit().putString(KEY, json.toString()).apply()
     }
@@ -120,6 +168,11 @@ object Music {
     private const val KEEP_DAYS = 400L
     private const val QUIET_DAYS_BACK = 7
     private const val MIN_MS = 5_000L
+    private const val MAX_TRACKS = 40
+    private const val TRACK_SEPARATOR = "␟"
+
+    /** How long a track plays before it counts as a play */
+    const val PLAY_MS = 30_000L
 }
 
 /**
@@ -135,11 +188,19 @@ class MusicTracker(private val context: Context, private val listener: Component
     private inner class Tracked(val controller: MediaController) : MediaController.Callback() {
         var playingSince: Long? = null
         var artist: String? = artistOf(controller.metadata)
+        var title: String? = controller.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+
+        /** This track's time so far, and whether it's been counted as a play */
+        var trackMs = 0L
+        var counted = false
 
         fun flush() {
             val since = playingSince ?: return
             val now = System.currentTimeMillis()
-            Music.add(context, now, now - since, artist)
+            trackMs += now - since
+            val play = !counted && trackMs >= Music.PLAY_MS
+            if (play) counted = true
+            Music.add(context, now, now - since, artist, title, controller.packageName, play)
             playingSince = now
         }
 
@@ -157,7 +218,14 @@ class MusicTracker(private val context: Context, private val listener: Component
         override fun onMetadataChanged(metadata: MediaMetadata?) = runSafely {
             // The time so far goes to the track that was playing
             flush()
-            artist = artistOf(metadata)
+            val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            val newArtist = artistOf(metadata)
+            if (newTitle != title || newArtist != artist) {
+                trackMs = 0
+                counted = false
+            }
+            artist = newArtist
+            title = newTitle
         }
 
         override fun onSessionDestroyed() = runSafely {
