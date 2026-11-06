@@ -5,10 +5,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.graphics.ColorUtils
 import app.olauncher.helper.dpToPx
 
-/** A short figure like "$21" in one-colour pixel digits, as tall as [PixelFaceView]'s face sits. */
+/** A short figure like "$21" in one-colour pixel digits, drawn with the same size pixels as [PixelFaceView]'s face. */
 class PixelMoneyView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -31,7 +30,8 @@ class PixelMoneyView @JvmOverloads constructor(
             invalidate()
         }
 
-    private val cell get() = 3.dpToPx()
+    /** The face's pixel: 32dp over its 16 cells */
+    private val cell get() = 2.dpToPx()
 
     private fun columns() = (text.sumOf { (GLYPHS[it]?.first()?.length ?: 0) + 1 } - 1).coerceAtLeast(1)
 
@@ -47,7 +47,7 @@ class PixelMoneyView @JvmOverloads constructor(
         var x = (width - columns() * cell) / 2f
         val top = (height - ROWS * cell) / 2f
         text.forEach { char ->
-            val glyph = GLYPHS[char] ?: return@forEach
+            val glyph = GLYPHS[char]?.let { lines -> STRETCH.map { lines[it] } } ?: return@forEach
             glyph.forEachIndexed { row, line ->
                 line.forEachIndexed { col, on ->
                     if (on == '1') canvas.drawRect(x + col * cell, top + row * cell, x + (col + 1) * cell, top + (row + 1) * cell, paint)
@@ -58,7 +58,9 @@ class PixelMoneyView @JvmOverloads constructor(
     }
 
     companion object {
-        private const val ROWS = 7
+        /** The 7-row glyphs drawn 11 rows tall, so they stand about as high as the face with its thin lines */
+        private val STRETCH = listOf(0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6)
+        private val ROWS = STRETCH.size
 
         private val GLYPHS = mapOf(
             '0' to listOf("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
@@ -83,13 +85,17 @@ class PixelMoneyView @JvmOverloads constructor(
             return (if (cents < 0 && dollars > 0) "-$" else "$") + number
         }
 
-        /** Green with all of it left, through yellow, to red at $0 and below */
+        /** The mood face's colours: its green with most of it left, through yellow, to its red at $0 and below */
         fun colorFor(context: Context, left: Long, allowance: Long): Int {
-            val share = if (allowance <= 0) 0f else (left.toFloat() / allowance).coerceIn(0f, 1f)
-            val place = (1 - share) * 4
-            val from = place.toInt().coerceIn(0, 4)
-            val to = (from + 1).coerceAtMost(4)
-            return ColorUtils.blendARGB(PixelFaceView.moodColor(context, from), PixelFaceView.moodColor(context, to), place - from)
+            val share = if (allowance <= 0 || left <= 0) 0f else (left.toFloat() / allowance).coerceIn(0f, 1f)
+            val mood = when {
+                left <= 0 -> 4
+                share >= 0.6f -> 0
+                share >= 0.4f -> 1
+                share >= 0.2f -> 2
+                else -> 3
+            }
+            return PixelFaceView.moodColor(context, mood)
         }
     }
 }
