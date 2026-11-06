@@ -1542,8 +1542,8 @@ class StatPageFragment : CardPageFragment() {
     ).joinToString(" · ")
 
     /**
-     * Where the last [SOCIAL_LONG_DAYS] days were spent: each home's share of the time at a home, as a
-     * bar in its colour, the most first. Under it the two homes' Wi-Fi, set from the Wi-Fi you're on.
+     * Where each of the last [SOCIAL_LONG_DAYS] days was spent: a calendar with a house in the colour of
+     * the home most of the day was at. Under it the two homes' Wi-Fi, set from the Wi-Fi you're on.
      * Until location is allowed, a way to allow it.
      */
     private fun socialHomesCard(days: Map<LocalDate, Social.Day>) {
@@ -1559,40 +1559,52 @@ class StatPageFragment : CardPageFragment() {
         val homes = Social.homes(context)
         val today = LocalDate.now()
         val recent = days.filterKeys { it > today.minusDays(SOCIAL_LONG_DAYS.toLong()) }
-        // Each home's time, the most first
-        val homeMs = homes.indices.associateWith { slot -> recent.values.sumOf { it.homeMs(slot) } }
-        val atHomes = homeMs.values.sum()
-        val ranked = homeMs.entries.filter { it.value > 0 }.sortedByDescending { it.value }
-        fun share(slot: Int) = if (atHomes == 0L) 0 else ((homeMs[slot] ?: 0L) * 100f / atHomes).roundToInt()
-        if (ranked.isNotEmpty()) {
-            val top = ranked.first().key
-            card.headline("${share(top)}%", getString(R.string.social_mostly_at, homeName(top), SOCIAL_LONG_DAYS))
+        // Each day goes to the home most of it was spent at; days at neither are left plain
+        val dates = (SOCIAL_LONG_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        val stayed = dates.associateWith { days[it]?.mainHome }
+        val nights = homes.indices.associateWith { slot -> stayed.values.count { it == slot } }
+        if (stayed.values.any { it != null }) {
             card.describe = { key ->
-                val slot = key as Int
-                listOf(homeName(slot), getString(R.string.stat_label, getString(R.string.share), "${share(slot)}%"),
-                    getString(R.string.stat_label, getString(R.string.time), duration(homeMs[slot] ?: 0L))).joinToString("\n")
+                val date = key as LocalDate
+                val day = days[date]
+                listOfNotNull(dateText(date), stayed[date]?.let { getString(R.string.social_at, homeName(it)) } ?: getString(R.string.social_neither),
+                    day?.let { d -> stayed[date]?.let { getString(R.string.stat_label, getString(R.string.time), duration(d.homeMs(it))) } }).joinToString("\n")
             }
             card.draw { sc ->
-                val h = sc.dp(28f)
-                var x = 0f
-                ranked.forEachIndexed { i, (slot, ms) ->
-                    val w = sc.width * ms / atHomes
-                    sc.rect(x + if (i > 0) sc.dp(2f) else 0f, 0f, x + w, h, homeColors[slot], sc.dp(8f))
-                    val label = "${share(slot)}%"
-                    if (sc.textWidth(label, sc.sp(13f)) + sc.dp(12f) < w)
-                        sc.text(label, x + w / 2, h / 2 + sc.sp(4.5f), 0xFF161616.toInt(), sc.sp(13f), bold = true)
-                    sc.target(slot, RectF(x, 0f, x + w, h + sc.dp(6f)))
-                    x += w
+                val cell = minOf(sc.width / 7.4f, sc.dp(48f))
+                val left = (sc.width - cell * 7) / 2
+                val gap = sc.dp(3f)
+                var weekday = DayOfWeek.MONDAY
+                repeat(7) { i ->
+                    sc.text(weekday.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, sc.sp(12f), faint(140), sc.sp(12f))
+                    weekday = weekday.plus(1)
                 }
-                sc.height = h + sc.dp(6f)
+                val gridTop = sc.dp(24f)
+                val lead = dates.first().dayOfWeek.value - 1
+                dates.forEachIndexed { i, date ->
+                    val place = i + lead
+                    val x = left + place % 7 * cell + gap
+                    val y = gridTop + place / 7 * cell + gap
+                    val size = cell - gap * 2
+                    val slot = stayed[date]
+                    if (slot != null) {
+                        val icon = size * 0.6f
+                        sc.icon(StatIcons.HOME, x + (size - icon) / 2, y + (size - icon) / 2 - sc.dp(3f), icon, homeColors[slot])
+                        sc.text(date.dayOfMonth.toString(), x + size / 2, y + size - sc.dp(2f), faint(150), sc.sp(9.5f))
+                    } else {
+                        sc.text(date.dayOfMonth.toString(), x + size / 2, y + size / 2 + sc.sp(4.5f), faint(70), sc.sp(12.5f))
+                    }
+                    sc.target(date, RectF(x - gap, y - gap, x + size + gap, y + size + gap), RectF(x - gap / 2, y - gap / 2, x + size + gap / 2, y + size + gap / 2), sc.dp(9f))
+                }
+                sc.height = gridTop + (dates.size + lead + 6) / 7 * cell + sc.dp(2f)
             }
         }
         val mood = stats.firstOrNull { it.id == MoodStore.MOOD }
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         // The homes in order of time spent at them, ones not set last
-        homes.indices.sortedByDescending { homeMs[it] ?: -1L }.forEach { slot ->
+        homes.indices.sortedByDescending { if (homes[it] == null) -1 else nights.getValue(it) }.forEach { slot ->
             val home = homes[slot]
-            val dates = recent.filterValues { it.mainHome == slot }.keys
+            val dates = stayed.filterValues { it == slot }.keys
             val moodText = mood?.let { m -> dates.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
                 ?.let { getString(R.string.music_mood, decimal(it)) }
             list.addView(LinearLayout(context).apply {
@@ -1607,7 +1619,7 @@ class StatPageFragment : CardPageFragment() {
                     })
                     addView(card.textView(12f, 140).apply {
                         text = if (home == null) getString(R.string.social_not_set)
-                        else listOfNotNull(home.ssid, "${share(slot)}%".takeIf { atHomes > 0 }, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
+                        else listOfNotNull(home.ssid, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
                         updatePadding(top = 2.dpToPx())
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
