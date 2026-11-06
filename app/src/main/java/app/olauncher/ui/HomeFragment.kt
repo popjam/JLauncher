@@ -393,6 +393,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val today = LocalDate.now()
         val days = java.time.temporal.ChronoUnit.DAYS.between(today, today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))).toInt()
         binding.tvMoneyDays.text = resources.getQuantityString(R.plurals.days_left, days, days)
+        binding.tvMoneyDays.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size) * 0.88f)
         binding.moneyWidget.contentDescription = getString(R.string.money_left_description, PixelMoneyView.figure(left), binding.tvMoneyDays.text)
     }
 

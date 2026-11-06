@@ -33,12 +33,15 @@ class PixelMoneyView @JvmOverloads constructor(
     /** The face's pixel: 32dp over its 16 cells */
     private val cell get() = 2.dpToPx()
 
+    /** A little more than the face's lines: each pixel grows this much, half on each side */
+    private val bold get() = resources.displayMetrics.density * 0.7f
+
     private fun columns() = (text.sumOf { (GLYPHS[it]?.first()?.length ?: 0) + GAP } - GAP).coerceAtLeast(1)
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(
-            resolveSize(columns() * cell, widthMeasureSpec),
-            resolveSize(ROWS * cell, heightMeasureSpec)
+            resolveSize(columns() * cell + kotlin.math.ceil(bold).toInt(), widthMeasureSpec),
+            resolveSize(ROWS * cell + kotlin.math.ceil(bold).toInt(), heightMeasureSpec)
         )
     }
 
@@ -46,11 +49,12 @@ class PixelMoneyView @JvmOverloads constructor(
         val cell = cell
         var x = (width - columns() * cell) / 2f
         val top = (height - ROWS * cell) / 2f
+        val half = bold / 2
         text.forEach { char ->
             val glyph = GLYPHS[char] ?: return@forEach
             glyph.forEachIndexed { row, line ->
                 line.forEachIndexed { col, on ->
-                    if (on == '1') canvas.drawRect(x + col * cell, top + row * cell, x + (col + 1) * cell, top + (row + 1) * cell, paint)
+                    if (on == '1') canvas.drawRect(x + col * cell - half, top + row * cell - half, x + (col + 1) * cell + half, top + (row + 1) * cell + half, paint)
                 }
             }
             x += (glyph.first().length + GAP) * cell
