@@ -721,8 +721,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
         val options = androidx.navigation.NavOptions.Builder()
             .setEnterAnim(if (left) R.anim.slide_in_right else R.anim.slide_in_left)
-            .setExitAnim(R.anim.fade_exit)
-            .setPopEnterAnim(R.anim.fade_enter)
+            .setExitAnim(R.anim.quick_fade_exit)
+            .setPopEnterAnim(R.anim.quick_fade_enter)
             .setPopExitAnim(0)
             .build()
         try {

@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<translate xmlns:android="http://schemas.android.com/apk/res/android"
-    android:duration="200"
-    android:fromXDelta="-100%"
-    android:interpolator="@android:anim/decelerate_interpolator"
-    android:toXDelta="0" />
+<!-- A short slide from the side swiped from, quick enough not to feel like a wait -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="110"
+    android:interpolator="@android:anim/decelerate_interpolator">
+    <translate
+        android:fromXDelta="-30%"
+        android:toXDelta="0" />
+    <alpha
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+</set>
