@@ -15,6 +15,7 @@ object AutoStats {
     const val STEPS = "steps"
     const val MAC = "mac"
     const val VIBECODING = "vibecoding"
+    const val BUSPIRONE = "buspirone"
 
     /** Which of these [id] is ([SLEEP], [MUSIC] and so on), or null for a stat filled in by hand. */
     fun keyOf(context: Context, id: String): String? =

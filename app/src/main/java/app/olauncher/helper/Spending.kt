@@ -170,11 +170,17 @@ object Spending {
         prefs(context).edit().putString(KEY, array.toString()).apply()
     }
 
+    /** The most to spend a week (Monday to Sunday, leaving out essentials), or 0 for none */
+    fun weekLimitCents(context: Context) = prefs(context).getLong(WEEK_LIMIT, 0L)
+
+    fun setWeekLimitCents(context: Context, cents: Long) = prefs(context).edit().putLong(WEEK_LIMIT, cents.coerceAtLeast(0)).apply()
+
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private val LOCK = Any()
     private const val PREFS = "spending"
     private const val KEY = "purchases"
+    private const val WEEK_LIMIT = "week_limit"
     private const val KEEP_DAYS = 400L
     private const val DAY_MS = 24 * 60 * 60 * 1000L
     private const val SAME_PURCHASE_MS = 15 * 60 * 1000L

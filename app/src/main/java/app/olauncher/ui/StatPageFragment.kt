@@ -194,6 +194,7 @@ class StatPageFragment : CardPageFragment() {
             }
             StatKind.MONEY -> {
                 spendingCard()
+                weekLimitCard()
                 moneyCalendarCard()
                 moneyMonthCard()
                 moneyCategoriesCard(essential = false)
@@ -676,6 +677,103 @@ class StatPageFragment : CardPageFragment() {
             })
         }
         card.addBody(list)
+    }
+
+    /**
+     * The weekly limit: what's left of it this week, and the weeks spent (leaving out essentials) as bars
+     * against it, the ones over it in red. Without a limit, a way to set one.
+     */
+    private fun weekLimitCard() {
+        val context = requireContext()
+        val spent = real ?: return
+        val card = Card(getString(R.string.week_limit))
+        val limit = Spending.weekLimitCents(context)
+        if (limit <= 0) {
+            card.showNote(getString(R.string.week_limit_none))
+            card.chipRow(listOf(getString(R.string.week_limit_set) to moneyGold), null) { askWeekLimit() }
+            return
+        }
+        val today = LocalDate.now()
+        val monday = today.with(DayOfWeek.MONDAY)
+        val first = maxOf(spent.keys.minOrNull()?.with(DayOfWeek.MONDAY) ?: monday, monday.minusWeeks(LIMIT_WEEKS - 1L))
+        val weeks = generateSequence(first) { it.plusWeeks(1) }.takeWhile { it <= monday }.toList()
+        val weekCents = weeks.map { start -> (0..6).sumOf { ((spent[start.plusDays(it.toLong())] ?: 0f) * 100).roundToInt().toLong() } }
+        val thisWeek = weekCents.last()
+        val over = LIMIT_OVER_COLOR
+        val limitText = if (limit % 100 == 0L) "$" + String.format(Locale.getDefault(), "%,d", limit / 100) else money(limit)
+        if (thisWeek <= limit) card.headline(money(limit - thisWeek), getString(R.string.week_limit_left, limitText))
+        else card.headline(money(thisWeek - limit), getString(R.string.week_limit_over, limitText))
+        val past = weekCents.dropLast(1)
+        if (past.isNotEmpty()) card.subtitle(getString(R.string.week_limit_broken, past.count { it > limit }, past.size))
+        card.keyItem(moneyGold, getString(R.string.week_limit_under))
+        card.keyItem(over, getString(R.string.week_limit_over_key))
+        card.chipRow(listOf(getString(R.string.week_limit_change, moneyShort(limit)) to moneyGold), null) { askWeekLimit() }
+        card.describe = { key ->
+            val i = key as Int
+            val cents = weekCents[i]
+            listOf(getString(R.string.week_of, weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))),
+                getString(R.string.stat_label, getString(R.string.spent), money(cents)),
+                if (cents > limit) getString(R.string.stat_label, getString(R.string.week_limit_over_by), money(cents - limit))
+                else getString(R.string.stat_label, getString(R.string.week_limit_under_by), money(limit - cents))).joinToString("\n")
+        }
+        val most = maxOf(weekCents.maxOrNull() ?: 0L, limit) * 1.1f
+        card.draw { s ->
+            val top = s.dp(14f)
+            val bottom = top + s.dp(96f)
+            val column = s.width / LIMIT_WEEKS
+            val left = s.width - column * weeks.size
+            s.line(0f, bottom, s.width, bottom, faint(30), s.dp(1f))
+            weeks.forEachIndexed { i, start ->
+                val x = left + i * column
+                val cents = weekCents[i]
+                val color = if (cents > limit) over else moneyGold
+                val h = cents / most * (bottom - top)
+                if (cents == 0L) s.rect(x + s.dp(3f), bottom - s.dp(2f), x + column - s.dp(3f), bottom, faint(45), s.dp(1f))
+                else s.rect(x + s.dp(3f), bottom - h, x + column - s.dp(3f), bottom,
+                    if (i == weeks.lastIndex) color else ColorUtils.setAlphaComponent(color, 170), s.dp(4f))
+                s.target(i, RectF(x, 0f, x + column, bottom + s.dp(20f)), RectF(x + s.dp(1f), top - s.dp(2f), x + column - s.dp(1f), bottom + s.dp(2f)))
+            }
+            // The limit across them all
+            val y = bottom - limit / most * (bottom - top)
+            var x = 0f
+            while (x < s.width) {
+                s.line(x, y, minOf(x + s.dp(5f), s.width), y, faint(150), s.dp(1.5f))
+                x += s.dp(9f)
+            }
+            s.text(moneyShort(limit), 0f, y - s.dp(5f), faint(170), s.sp(11f), Paint.Align.LEFT)
+            labelIndices(weeks.size, 3).forEach { i ->
+                s.text(weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())), left + i * column + column / 2, bottom + s.dp(16f), faint(140), s.sp(11f))
+            }
+            s.height = bottom + s.dp(22f)
+        }
+    }
+
+    private fun askWeekLimit() {
+        val context = requireContext()
+        val current = Spending.weekLimitCents(context)
+        val input = EditText(context).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            hint = "$"
+            if (current > 0) setText(if (current % 100 == 0L) (current / 100).toString() else String.format(Locale.US, "%.2f", current / 100.0))
+            setSelection(text.length)
+        }
+        val box = android.widget.FrameLayout(context).apply {
+            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.week_limit_ask)
+            .setView(box)
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val dollars = input.text.toString().replace("$", "").replace(",", "").trim().toDoubleOrNull()
+                if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, (dollars * 100).roundToInt().toLong())
+                if (isAdded) render()
+            }
+            .apply { if (current > 0) setNeutralButton(R.string.week_limit_remove) { _, _ -> Spending.setWeekLimitCents(context, 0); if (isAdded) render() } }
+            .setNegativeButton(R.string.close, null)
+            .show()
+            .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        input.requestFocus()
     }
 
     private val moneyGold get() = StatKind.MONEY.shades!!.let { ColorUtils.blendARGB(it.first, it.second, 0.3f) }
@@ -1723,11 +1821,11 @@ class StatPageFragment : CardPageFragment() {
         val watched = { date: LocalDate -> (minutes[date] ?: 0) >= PORN_MIN_MINUTES }
         val tracked = { date: LocalDate -> date >= (days.keys.minOrNull() ?: today) }
         val week = (0..6).map { today.with(DayOfWeek.MONDAY).plusDays(it.toLong()) }.filter { it <= today }
-        card.headline(week.count(watched).toString(), getString(R.string.porn_days_this_week, week.size))
         val color = stat.themeColor
         val monday = today.with(DayOfWeek.MONDAY)
         val weeks = (PORN_WEEKS - 1 downTo 0).map { monday.minusWeeks(it.toLong()) }
         val weekMinutes = weeks.map { start -> (0..6).sumOf { minutes[start.plusDays(it.toLong())] ?: 0 } }
+        card.headline(duration(week.sumOf { minutes[it] ?: 0 } * 60_000L), getString(R.string.porn_time_this_week))
         val weekDays = weeks.map { start -> (0..6).count { watched(start.plusDays(it.toLong())) } }
         card.keyItem(color, getString(R.string.porn_watched))
         card.keyItem(faint(170), getString(R.string.porn_not), ring = true)
@@ -2513,6 +2611,8 @@ class StatPageFragment : CardPageFragment() {
         private const val CUPS_HOT = 3
         /** Porn: how many weeks of bars and of days, and how long in VLC counts */
         private const val PORN_WEEKS = 10
+        private const val LIMIT_WEEKS = 10
+        private const val LIMIT_OVER_COLOR = 0xFFE5736F.toInt()
         private const val PORN_GRID_WEEKS = 5
         private const val PORN_MIN_MINUTES = 2
 

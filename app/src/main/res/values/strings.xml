@@ -607,6 +607,7 @@
     <string name="days_in_a_row">days in a row</string>
     <string name="best_run">best run</string>
     <string name="notes_written">notes</string>
+    <string name="bubble_default">Default</string>
     <string name="bubble_all">All</string>
     <string name="bubble_none">None</string>
     <plurals name="stats_shown">
@@ -629,7 +630,7 @@
     <string name="device">Device</string>
     <string name="porn_usage">Porn usage</string>
     <string name="porn_needs_mac">Shows once the MacBook’s screen time comes through</string>
-    <string name="porn_days_this_week">days this week, of %1$d</string>
+    <string name="porn_time_this_week">watched this week</string>
     <string name="porn_watched">Watched</string>
     <string name="porn_not">Didn’t</string>
     <string name="week_of">Week of %1$s</string>
@@ -664,4 +665,17 @@
     <string name="music_block">each block is %1$d minutes</string>
     <string name="steps_title">Steps</string>
     <string name="steps_usual_heading">Steps, usually</string>
+    <string name="week_limit">Weekly limit</string>
+    <string name="week_limit_none">Set a limit to see what’s left each week and which weeks went over</string>
+    <string name="week_limit_set">Set a limit</string>
+    <string name="week_limit_change">Limit %1$s · Change</string>
+    <string name="week_limit_ask">Most to spend a week</string>
+    <string name="week_limit_remove">Remove</string>
+    <string name="week_limit_left">left this week, of %1$s</string>
+    <string name="week_limit_over">over this week’s %1$s</string>
+    <string name="week_limit_broken">%1$d of %2$d weeks over</string>
+    <string name="week_limit_under">Under</string>
+    <string name="week_limit_over_key">Over</string>
+    <string name="week_limit_over_by">Over by</string>
+    <string name="week_limit_under_by">Under by</string>
 </resources>

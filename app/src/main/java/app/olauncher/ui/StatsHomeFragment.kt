@@ -71,6 +71,7 @@ class StatsHomeFragment : CardPageFragment() {
     private var noteInput: EditText? = null
 
     private lateinit var bubble: LinearLayout
+    private lateinit var scrim: View
     private var bubbleOpen = false
 
     /** The cards that follow the picked stats, redrawn when the pick changes */
@@ -94,10 +95,20 @@ class StatsHomeFragment : CardPageFragment() {
             addView(cardList)
         }
         bubble = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        // Over the cards while the bubble's open: touching anywhere outside it closes it
+        scrim = View(context).apply {
+            isVisible = false
+            setBackgroundColor(0x33000000)
+            setOnTouchListener { _, event ->
+                if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) closeBubble()
+                true
+            }
+        }
         val page = FrameLayout(context).apply {
             setBackgroundColor(context.getColorFromAttr(R.attr.primaryShadeDarkColor))
             isClickable = true
             addView(scroll)
+            addView(scrim, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(bubble, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply {
                 setMargins(16.dpToPx(), 0, 16.dpToPx(), 28.dpToPx())
             })
@@ -664,10 +675,11 @@ class StatsHomeFragment : CardPageFragment() {
         val dark = ColorUtils.calculateLuminance(ink) > 0.5
         bubble.background = GradientDrawable().apply {
             cornerRadius = 26.dpToPx().toFloat()
-            setColor(if (dark) 0xF2202024.toInt() else 0xF2F4F4F6.toInt())
+            setColor(if (dark) 0xFF202024.toInt() else 0xFFF4F4F6.toInt())
             setStroke(1.dpToPx(), faint(40))
         }
         bubble.elevation = 8.dpToPx().toFloat()
+        scrim.isVisible = bubbleOpen
         val picked = shown
         if (!bubbleOpen) {
             (bubble.layoutParams as? FrameLayout.LayoutParams)?.apply {
@@ -710,13 +722,17 @@ class StatsHomeFragment : CardPageFragment() {
                 setTextColor(ink)
                 setTypeface(null, Typeface.BOLD)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            listOf(R.string.bubble_all to { setHidden(emptySet()) }, R.string.bubble_none to { setHidden(stats.map { it.id }.toSet() - MoodStore.MOOD) }).forEach { (label, action) ->
+            listOf(
+                R.string.bubble_default to { setHidden(stats.map { it.id }.toSet() - defaultPicks()) },
+                R.string.bubble_all to { setHidden(emptySet()) },
+                R.string.bubble_none to { setHidden(stats.map { it.id }.toSet() - MoodStore.MOOD) },
+            ).forEach { (label, action) ->
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     setText(label)
                     textSize = 13f
                     setTextColor(ink)
                     alpha = 0.75f
-                    setPadding(10.dpToPx(), 6.dpToPx(), 10.dpToPx(), 6.dpToPx())
+                    setPadding(8.dpToPx(), 6.dpToPx(), 8.dpToPx(), 6.dpToPx())
                     setOnClickListener { action() }
                 })
             }
@@ -726,11 +742,7 @@ class StatsHomeFragment : CardPageFragment() {
                 setTextColor(ink)
                 setPadding(12.dpToPx(), 2.dpToPx(), 6.dpToPx(), 2.dpToPx())
                 contentDescription = getString(R.string.close)
-                setOnClickListener {
-                    bubbleOpen = false
-                    bubble.setPadding(0, 0, 0, 0)
-                    renderBubble()
-                }
+                setOnClickListener { closeBubble() }
             })
         })
         bubble.addView(FlowLayout(context).apply {
@@ -756,6 +768,17 @@ class StatsHomeFragment : CardPageFragment() {
         bubble.requestLayout()
     }
 
+    private fun closeBubble() {
+        if (!bubbleOpen) return
+        bubbleOpen = false
+        bubble.setPadding(0, 0, 0, 0)
+        renderBubble()
+    }
+
+    /** Mood, Screen time, Energy, Libido and Anxiety: the ones shown by Default */
+    private fun defaultPicks(): Set<String> =
+        stats.filter { it.id == MoodStore.MOOD || it.id == MoodStore.USAGE || it.name.lowercase() in DEFAULT_NAMES }.map { it.id }.toSet()
+
     private fun setHidden(ids: Set<String>) {
         requireContext().getSharedPreferences(PREFS, 0).edit().putBoolean(PICKED, true).apply()
         store.setHiddenInGraph(ids)
@@ -772,6 +795,7 @@ class StatsHomeFragment : CardPageFragment() {
     companion object {
         private val WEEKS = WeekFields.ISO
         private const val GRID_DAYS = 18
+        private val DEFAULT_NAMES = setOf("energy", "libido", "anxiety")
         private const val REMEMBER_AFTER_DAYS = 7L
         private const val MIN_LINK_DAYS = 4
         private const val LINKS_SHOWN = 6

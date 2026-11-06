@@ -27,6 +27,7 @@ import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.Sleep
 import app.olauncher.helper.Steps
 import app.olauncher.helper.Vibecoding
+import app.olauncher.helper.Medicines
 import app.olauncher.helper.Social
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.WallpaperWorker
@@ -554,6 +555,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { DeviceTime.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Vibecoding.refresh(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { Medicines.ensure(appContext) }.onFailure { it.printStackTrace() }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
