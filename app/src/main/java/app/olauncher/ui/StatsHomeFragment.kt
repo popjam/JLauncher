@@ -470,6 +470,8 @@ class StatsHomeFragment : CardPageFragment() {
                 val before = byDate.filterKeys { it >= monday.minusDays(7) && it < monday }.values.takeIf { it.isNotEmpty() }?.average()
                 Triple(stat, now.toFloat(), before?.toFloat())
             }
+                // Biggest rise first, down to the biggest fall; new ones (no last week) after
+                .sortedWith(compareBy<Triple<StatInfo, Float, Float?>> { it.third == null }.thenByDescending { (_, now, before) -> before?.let { now - it } ?: 0f })
             if (rows.isEmpty()) return card.showNote(getString(R.string.no_data))
             card.describe = { key ->
                 val (stat, now, before) = rows[key as Int]
