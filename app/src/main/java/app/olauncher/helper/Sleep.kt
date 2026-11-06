@@ -35,14 +35,21 @@ object Sleep {
     /** By the date woken up */
     fun nights(context: Context): Map<LocalDate, Night> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyMap()
+        // Read once for each time it's saved
+        if (json === parsedJson) return parsedNights
         val nights = runCatching { JSONObject(json) }.getOrNull() ?: return emptyMap()
-        return nights.keys().asSequence().mapNotNull { key ->
+        parsedJson = json
+        parsedNights = nights.keys().asSequence().mapNotNull { key ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@mapNotNull null
             val night = nights.getJSONObject(key)
             date to Night(night.getLong("start"), night.getLong("end"), night.getLong("asleep"), night.optInt("checks"),
                 night.optLong("late"), night.optLong("morning"))
         }.toMap()
+        return parsedNights
     }
+
+    private var parsedJson: String? = null
+    private var parsedNights: Map<LocalDate, Night> = emptyMap()
 
     /**
      * Reads the last [NIGHTS_BACK] nights, adding the Sleep stat (in place of an old one) the first time.

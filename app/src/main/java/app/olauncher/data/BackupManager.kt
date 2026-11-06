@@ -62,6 +62,10 @@ object BackupManager {
         put("version", VERSION)
         put("settings", settingsToJson(prefs(context)))
         put("mood", MoodStore(context).toBackupJson())
+        // Everything else kept on the phone: purchases, music, places, sleep, steps and the like
+        put("extras", JSONObject().apply {
+            EXTRA_PREFS.forEach { name -> put(name, settingsToJson(context.getSharedPreferences(name, 0))) }
+        })
     }
 
     /**
@@ -73,6 +77,17 @@ object BackupManager {
         backup.optJSONObject("settings")?.let { restoreSettings(prefs(context), it) }
         val mood = backup.optJSONObject("mood") ?: backup.takeIf { it.has("days") }
         val days = mood?.let { MoodStore(context).restoreFrom(it) } ?: 0
+        // Histories fill in what the phone hasn't got, so restoring an older backup never loses newer data
+        backup.optJSONObject("extras")?.let { extras ->
+            extras.keys().forEach { name ->
+                if (name !in EXTRA_PREFS) return@forEach
+                val prefs = context.getSharedPreferences(name, 0)
+                val missing = extras.optJSONObject(name)?.let { entries ->
+                    JSONObject().apply { entries.keys().forEach { key -> if (!prefs.contains(key)) put(key, entries.get(key)) } }
+                } ?: return@forEach
+                restoreSettings(prefs, missing)
+            }
+        }
         app.olauncher.helper.AutoStats.afterRestore(context)
         return days
     }
@@ -140,6 +155,11 @@ object BackupManager {
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(Prefs.FILE_NAME, 0)
+
+    /** The other settings files backed up: histories JLauncher keeps itself, and the choices made on its pages */
+    private val EXTRA_PREFS = listOf(
+        "spending", "music", "social", "sleep", "steps", "phone_apps", "phone_habits", "auto_stats", "swipe_targets", "stats_home",
+    )
 
     // --- Backup folder ---
 

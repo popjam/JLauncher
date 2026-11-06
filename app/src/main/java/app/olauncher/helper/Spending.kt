@@ -28,7 +28,19 @@ object Spending {
     const val COMMBANK = "com.commbank.netbank"
     const val WALLET = "com.google.android.apps.walletnfcrel"
 
-    class Purchase(val time: Long, val cents: Long, val source: String, val text: String, val key: String) {
+    /**
+     * A purchase. [mark] is it set by hand as essential or not, and [groupRule] the same for everything in
+     * its [group]; without either, it's essential when its category or shop reads like a need.
+     */
+    class Purchase(
+        val time: Long,
+        val cents: Long,
+        val source: String,
+        val text: String,
+        val key: String,
+        val mark: Boolean? = null,
+        val groupRule: Boolean? = null,
+    ) {
         val date: LocalDate get() = Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).toLocalDate()
 
         /** Where it was spent: "Google Australia · Entertainment" from CommBank's "$0.29 spent at Google Australia on Entertainment." */
@@ -45,11 +57,17 @@ object Spending {
         /** CommBank's category for it, like "Entertainment", if it gave one */
         val category: String? get() = SPENT_AT.find(text)?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
 
-        /** Groceries and health: spent on needs, so left out of Money spent's total */
-        val essential: Boolean get() {
+        /** What a set of rules goes by: its category, or the shop when there isn't one */
+        val group: String get() = category ?: merchant
+
+        /** Whether it reads like a need (groceries, health) by its words alone */
+        val usuallyEssential: Boolean get() {
             val words = listOfNotNull(category, merchant).joinToString(" ").lowercase()
             return ESSENTIAL.any { it in words }
         }
+
+        /** Spent on needs, so left out of Money spent's total: as marked, else as its group is, else by its words */
+        val essential: Boolean get() = mark ?: groupRule ?: usuallyEssential
     }
 
     fun moneyStat(data: MoodStore.Data): MoodStore.Stat? =
@@ -66,11 +84,54 @@ object Spending {
     /** Newest first, from the last [KEEP_DAYS] days. */
     fun purchases(context: Context): List<Purchase> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyList()
+        val rulesJson = prefs(context).getString(GROUP_RULES, null)
+        // Read once for each time they're saved: the same strings come back until they change
+        if (json === parsedJson && rulesJson === parsedRules) return parsedPurchases
         val array = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
-        return List(array.length()) { array.getJSONObject(it) }.map {
-            Purchase(it.getLong("time"), it.getLong("cents"), it.getString("source"), it.optString("text"), it.optString("key"))
+        val rules = groupRules(rulesJson)
+        parsedPurchases = List(array.length()) { array.getJSONObject(it) }.map {
+            val base = Purchase(it.getLong("time"), it.getLong("cents"), it.getString("source"), it.optString("text"), it.optString("key"),
+                if (it.has("essential")) it.getBoolean("essential") else null)
+            Purchase(base.time, base.cents, base.source, base.text, base.key, base.mark, rules[base.group])
         }.sortedByDescending { it.time }
+        parsedJson = json
+        parsedRules = rulesJson
+        return parsedPurchases
     }
+
+    private var parsedJson: String? = null
+    private var parsedRules: String? = null
+    private var parsedPurchases: List<Purchase> = emptyList()
+
+    private fun groupRules(json: String?): Map<String, Boolean> {
+        val rules = json?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return emptyMap()
+        return rules.keys().asSequence().associateWith { rules.getBoolean(it) }
+    }
+
+    /** Marks one purchase as essential or not, or (null) back to how its group goes; its day's total follows */
+    fun setEssential(context: Context, purchase: Purchase, essential: Boolean?) {
+        synchronized(LOCK) {
+            save(context, purchases(context).map {
+                if (it.key == purchase.key && it.time == purchase.time) Purchase(it.time, it.cents, it.source, it.text, it.key, essential, it.groupRule) else it
+            })
+        }
+        apply(context, purchase.date)
+        app.olauncher.data.BackupManager.requestSync(context)
+    }
+
+    /** Everything in [group] counts as essential or not from now on, or (null) as its words say; their days' totals follow */
+    fun setGroupEssential(context: Context, group: String, essential: Boolean?) {
+        synchronized(LOCK) {
+            val rules = groupRules(prefs(context).getString(GROUP_RULES, null)).toMutableMap()
+            if (essential == null) rules.remove(group) else rules[group] = essential
+            prefs(context).edit().putString(GROUP_RULES, JSONObject(rules as Map<*, *>).toString()).commit()
+        }
+        purchases(context).filter { it.group == group }.map { it.date }.distinct().forEach { apply(context, it) }
+        app.olauncher.data.BackupManager.requestSync(context)
+    }
+
+    /** How [group] is set to count, if it's been set */
+    fun groupRule(context: Context, group: String): Boolean? = groupRules(prefs(context).getString(GROUP_RULES, null))[group]
 
     /** What [date] went on things that aren't essentials, which is what Money spent counts */
     fun totalCents(context: Context, date: LocalDate) = purchases(context).filter { it.date == date && !it.essential }.sumOf { it.cents }
@@ -166,9 +227,12 @@ object Spending {
     private fun save(context: Context, purchases: List<Purchase>) {
         val array = JSONArray()
         purchases.forEach {
-            array.put(JSONObject().put("time", it.time).put("cents", it.cents).put("source", it.source).put("text", it.text).put("key", it.key))
+            val entry = JSONObject().put("time", it.time).put("cents", it.cents).put("source", it.source).put("text", it.text).put("key", it.key)
+            it.mark?.let { mark -> entry.put("essential", mark) }
+            array.put(entry)
         }
-        prefs(context).edit().putString(KEY, array.toString()).apply()
+        // Written straight away, so the totals worked out next read it
+        prefs(context).edit().putString(KEY, array.toString()).commit()
     }
 
     /** The most to spend a week (Monday to Sunday, leaving out essentials), or 0 for none */
@@ -226,6 +290,7 @@ object Spending {
     private const val PREFS = "spending"
     private const val KEY = "purchases"
     private const val WEEK_LIMIT = "week_limit"
+    private const val GROUP_RULES = "group_rules"
     private const val CARRY = "carry_over"
     private const val CARRY_SINCE = "carry_since"
     private const val ON_HOME = "on_home"

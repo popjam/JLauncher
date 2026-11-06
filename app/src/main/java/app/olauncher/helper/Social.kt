@@ -133,7 +133,23 @@ object Social {
             else -> homes.indexOfFirst { it?.ssid == ssid }.takeIf { it >= 0 } ?: OUT
         }
         add(context, place)
+        markAlive(context)
     }
+
+    /**
+     * After the phone starts up: if it was off since it was last seen running, that time is marked
+     * unknown, from when it was last seen, so it doesn't count as wherever it was before.
+     */
+    fun afterStart(context: Context) = synchronized(LOCK) {
+        val bootedAt = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
+        val alive = prefs(context).getLong(ALIVE, 0L)
+        val changes = changes(context)
+        val last = changes.lastOrNull() ?: return
+        if (alive in last.first until bootedAt && last.second != UNKNOWN) save(context, changes + (alive to UNKNOWN))
+    }
+
+    /** Notes the phone is running now, for [afterStart] */
+    private fun markAlive(context: Context) = prefs(context).edit().putLong(ALIVE, System.currentTimeMillis()).apply()
 
     /** Checked from the foreground too, in case the background watcher missed a change. */
     fun check(context: Context) {
@@ -163,9 +179,19 @@ object Social {
 
     private fun changes(context: Context): List<Pair<Long, Int>> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyList()
+        // Read once for each list saved: the same string comes back until it changes
+        if (json === parsedJson) return parsedChanges
         val array = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
-        return List(array.length()) { array.getJSONArray(it).let { c -> c.getLong(0) to c.getInt(1) } }
+        return List(array.length()) { array.getJSONArray(it).let { c -> c.getLong(0) to c.getInt(1) } }.also {
+            parsedJson = json
+            parsedChanges = it
+        }
     }
+
+    private var parsedJson: String? = null
+    private var parsedChanges: List<Pair<Long, Int>> = emptyList()
+    private var daysKey: Pair<List<Pair<Long, Int>>, Long>? = null
+    private var daysCache: Map<LocalDate, Day> = emptyMap()
 
     private fun save(context: Context, changes: List<Pair<Long, Int>>) {
         val array = JSONArray()
@@ -179,6 +205,18 @@ object Social {
     fun days(context: Context): Map<LocalDate, Day> {
         val changes = changes(context)
         if (changes.isEmpty()) return emptyMap()
+        // Worked out again when the changes do, or a minute on (today grows as it goes)
+        val key = changes to System.currentTimeMillis() / 60_000
+        synchronized(LOCK) { if (daysKey?.let { it.first === key.first && it.second == key.second } == true) return daysCache }
+        return computeDays(changes).also {
+            synchronized(LOCK) {
+                daysKey = key
+                daysCache = it
+            }
+        }
+    }
+
+    private fun computeDays(changes: List<Pair<Long, Int>>): Map<LocalDate, Day> {
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis()
         val first = Instant.ofEpochMilli(changes.first().first).atZone(zone).toLocalDate()
@@ -273,6 +311,7 @@ object Social {
 
     const val NAME = "Social"
     const val WORK_NAME = "Work"
+    private const val ALIVE = "alive"
     private val WORK_COLOR = 0xFF7986CB.toInt()
     private val WORK_LABELS = listOf("Off", "Worked")
     private const val WORK_SINCE = "workSince"
@@ -327,15 +366,25 @@ class WifiWatcher(private val context: Context) {
         runCatching { Social.check(context) }
     }
 
+    /** Switching off: from now until it's back is unknown */
+    private val shutdown = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: android.content.Intent) {
+            runCatching { Social.stopped(context) }
+        }
+    }
+
     fun start() {
         runCatching {
+            Social.afterStart(context)
             connectivity?.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), callback)
+            ContextCompat.registerReceiver(context, shutdown, android.content.IntentFilter(android.content.Intent.ACTION_SHUTDOWN), ContextCompat.RECEIVER_NOT_EXPORTED)
             Social.check(context)
         }
     }
 
     fun stop() {
         runCatching { connectivity?.unregisterNetworkCallback(callback) }
+        runCatching { context.unregisterReceiver(shutdown) }
         runCatching { Social.stopped(context) }
     }
 }

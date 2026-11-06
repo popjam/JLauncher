@@ -257,7 +257,7 @@ class StatPageFragment : CardPageFragment() {
             stat.medicine -> doseCard()
             else -> howOftenCard()
         }
-        if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE || stat.kind == StatKind.WORK) weekdayCard()
+        if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE) weekdayCard()
         // Set against the medicines, or on a medicine's page every stat set against it; not for things counted like Coffee
         if (stat.isMedicine || !stat.medicine) takenVsNotCard()
     }
@@ -664,6 +664,11 @@ class StatPageFragment : CardPageFragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 updatePadding(top = 7.dpToPx(), bottom = 7.dpToPx())
                 alpha = if (purchase.essential) 0.6f else 1f
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                setOnLongClickListener {
+                    askEssential(purchase)
+                    true
+                }
                 addView(card.textView(15f, 255).apply {
                     text = money(purchase.cents)
                     setTypeface(null, Typeface.BOLD)
@@ -809,6 +814,33 @@ class StatPageFragment : CardPageFragment() {
             .show()
             .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
         input.requestFocus()
+    }
+
+    /**
+     * Holding a purchase: count it (or everything in its category, or at its shop without one) as an
+     * essential or not, or put it back to how it would go by itself.
+     */
+    private fun askEssential(purchase: Spending.Purchase) {
+        val context = requireContext()
+        val group = purchase.group
+        val rule = Spending.groupRule(context, group)
+        val options = mutableListOf<Pair<String, () -> Unit>>()
+        options += getString(if (purchase.essential) R.string.essential_not_this else R.string.essential_this) to {
+            Spending.setEssential(context, purchase, !purchase.essential)
+        }
+        val groupEssential = rule ?: purchase.usuallyEssential
+        options += getString(if (groupEssential) R.string.essential_not_group else R.string.essential_group, group) to {
+            Spending.setGroupEssential(context, group, !groupEssential)
+        }
+        if (purchase.mark != null) options += getString(R.string.essential_reset_this) to { Spending.setEssential(context, purchase, null) }
+        if (rule != null) options += getString(R.string.essential_reset_group, group) to { Spending.setGroupEssential(context, group, null) }
+        AlertDialog.Builder(context)
+            .setTitle(getString(R.string.essential_title, purchase.merchant, money(purchase.cents)))
+            .setItems(options.map { it.first }.toTypedArray()) { _, which ->
+                options[which].second()
+                if (_binding != null) render()
+            }
+            .show()
     }
 
     private val moneyGold get() = StatKind.MONEY.shades!!.let { ColorUtils.blendARGB(it.first, it.second, 0.3f) }
@@ -2608,7 +2640,56 @@ class StatPageFragment : CardPageFragment() {
      * The average by week (the last 13), month (the last 12) or year, from the stat's first: real values
      * (Money's as each period's total) where it has them. The point still going is a ring.
      */
+    /** Work's trend: days worked each week, as bars, with the hours there on tapping one */
+    private fun workTrendCard() {
+        val card = Card(getString(R.string.stat_trend))
+        val today = LocalDate.now()
+        val monday = today.with(DayOfWeek.MONDAY)
+        val first = firstDate ?: return card.showNote(getString(R.string.no_data))
+        val count = minOf(WORK_TREND_WEEKS.toLong(), ChronoUnit.WEEKS.between(first.with(DayOfWeek.MONDAY), monday) + 1).toInt()
+        val weeks = (count - 1 downTo 0).map { monday.minusWeeks(it.toLong()) }
+        val social = Social.days(requireContext())
+        fun daysIn(start: LocalDate) = (0..6L).map { start.plusDays(it) }.filter { it <= today }
+        val worked = weeks.map { start -> daysIn(start).count { date -> dayOf(date)?.face(stat.id)?.let { !stat.isBlank(it) } == true } }
+        val hours = weeks.map { start -> daysIn(start).sumOf { social[it]?.workMs ?: 0L } }
+        card.subtitle(getString(R.string.work_days_a_week))
+        card.describe = { key ->
+            val i = key as Int
+            listOf(getString(R.string.week_of, weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))),
+                getString(R.string.stat_label, getString(R.string.days), worked[i].toString()),
+                getString(R.string.stat_label, getString(R.string.time), duration(hours[i]))).joinToString("\n")
+        }
+        val color = stat.themeColor
+        card.draw { s ->
+            val top = s.dp(18f)
+            val bottom = top + s.dp(100f)
+            val axis = s.dp(18f)
+            val column = (s.width - axis) / weeks.size
+            fun yOf(days: Int) = bottom - days / 7f * (bottom - top)
+            listOf(0, 5, 7).forEach { d ->
+                s.line(axis, yOf(d), s.width, yOf(d), faint(if (d == 0) 40 else 22), s.dp(1f))
+                s.text(d.toString(), 0f, yOf(d) + s.sp(4f), faint(130), s.sp(11f), Paint.Align.LEFT)
+            }
+            weeks.forEachIndexed { i, _ ->
+                val x = axis + i * column
+                val bar = minOf(column * 0.6f, s.dp(26f))
+                val cx = x + column / 2
+                if (worked[i] == 0) s.rect(cx - bar / 2, bottom - s.dp(2f), cx + bar / 2, bottom, faint(45), s.dp(1f))
+                else {
+                    s.rect(cx - bar / 2, yOf(worked[i]), cx + bar / 2, bottom, if (i == weeks.lastIndex) color else ColorUtils.setAlphaComponent(color, 170), s.dp(5f))
+                    s.text(worked[i].toString(), cx, yOf(worked[i]) - s.dp(5f), faint(170), s.sp(11f))
+                }
+                s.target(i, RectF(x, 0f, x + column, bottom + s.dp(20f)))
+            }
+            labelIndices(weeks.size, 3).forEach { i ->
+                s.text(weeks[i].format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())), axis + i * column + column / 2, bottom + s.dp(16f), faint(140), s.sp(11f))
+            }
+            s.height = bottom + s.dp(22f)
+        }
+    }
+
     private fun trendCard() {
+        if (stat.kind == StatKind.WORK) return workTrendCard()
         val card = Card(getString(R.string.stat_trend))
         val color = if (stat.isMedicine) medicineColor else stat.themeColor
         val totals = stat.kind == StatKind.MONEY && unit == Measure.DOLLARS
@@ -3059,6 +3140,7 @@ class StatPageFragment : CardPageFragment() {
         /** Porn: how many weeks of bars and of days, and how long in VLC counts */
         private const val PORN_WEEKS = 10
         private const val LIMIT_WEEKS = 10
+        private const val WORK_TREND_WEEKS = 12
         private const val LIMIT_OVER_COLOR = 0xFFE5736F.toInt()
         private const val PORN_GRID_WEEKS = 5
         private const val PORN_MIN_MINUTES = 2

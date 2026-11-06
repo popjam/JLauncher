@@ -40,8 +40,11 @@ object Music {
 
     fun days(context: Context): Map<LocalDate, Day> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyMap()
+        // Read once for each time it's saved: the same string comes back until it changes
+        if (json === parsedJson) return parsedDays
         val days = runCatching { JSONObject(json) }.getOrNull() ?: return emptyMap()
-        return days.keys().asSequence().mapNotNull { key ->
+        parsedJson = json
+        parsedDays = days.keys().asSequence().mapNotNull { key ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@mapNotNull null
             val day = days.getJSONObject(key)
             fun longs(name: String) = day.optJSONObject(name)?.let { a -> a.keys().asSequence().associateWith { a.getLong(it) } }.orEmpty()
@@ -49,7 +52,11 @@ object Music {
             val hours = day.optJSONArray("hours")?.let { a -> (0 until a.length()).map { a.getLong(it) } }.orEmpty()
             date to Day(day.getLong("ms"), longs("artists"), longs("tracks"), plays, hours, longs("apps"))
         }.toMap()
+        return parsedDays
     }
+
+    private var parsedJson: String? = null
+    private var parsedDays: Map<LocalDate, Day> = emptyMap()
 
     /**
      * Adds [ms] of listening to [artist] and [title], counted on the day it ended, and updates that day's

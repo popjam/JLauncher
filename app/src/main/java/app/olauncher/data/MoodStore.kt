@@ -129,22 +129,48 @@ class MoodStore(context: Context) {
         }
     }
 
-    fun load(): Data = synchronized(LOCK) {
-        if (!file.exists()) return Data()
-        return try {
-            fromJson(JSONObject(file.readText()))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Data()
-        }
+    /** The last good copy, kept beside the file each time it's replaced */
+    private val previous get() = File(file.parentFile, "$FILE_NAME.bak")
+
+    private fun read(from: File): Data? = try {
+        fromJson(JSONObject(from.readText()))
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
     }
 
-    /** [sync] = false skips the backup; used for usage, which changes too often to back up every time. */
-    fun update(sync: Boolean = true, block: (Data) -> Unit) {
+    /**
+     * The stats, or the last good copy if the file can't be read. Empty only when there's nothing at
+     * all yet, or neither can be read (and then [update] won't save over them).
+     */
+    fun load(): Data = synchronized(LOCK) { loadForWrite() ?: Data() }
+
+    /** Like [load], but null when there's a file that can't be read and no good copy, so nothing is saved over it */
+    private fun loadForWrite(): Data? {
+        if (file.exists()) read(file)?.let { return it }
+        if (previous.exists()) read(previous)?.let { return it }
+        return if (file.exists()) null else Data()
+    }
+
+    /**
+     * [sync] = false skips the backup; used for usage, which changes too often to back up every time.
+     * Nothing is saved while the stats can't be read, so a bad read can never wipe them; [force] (a
+     * restore) starts afresh instead.
+     */
+    fun update(sync: Boolean = true, force: Boolean = false, block: (Data) -> Unit) {
         synchronized(LOCK) {
-            val data = load()
+            val data = loadForWrite() ?: if (force) {
+                // Restoring a backup over a file that can't be read: the file is kept aside, just in case
+                runCatching { file.copyTo(File(file.parentFile, "$FILE_NAME.unreadable"), overwrite = true) }
+                Data()
+            } else {
+                android.util.Log.e("MoodStore", "Stats couldn't be read; not saving over them")
+                return
+            }
             block(data)
             file.parentFile?.mkdirs()
+            // The file as it was goes aside first, if it reads
+            if (file.exists() && read(file) != null) runCatching { file.copyTo(previous, overwrite = true) }
             val tmp = File(file.parentFile, "$FILE_NAME.tmp")
             tmp.writeText(toJson(data).toString(2))
             tmp.renameTo(file)
@@ -369,7 +395,7 @@ class MoodStore(context: Context) {
      */
     fun restoreFrom(json: JSONObject): Int {
         val backup = fromJson(json)
-        update { data ->
+        update(force = true) { data ->
             backup.stats.forEach { stat ->
                 val index = data.stats.indexOfFirst { it.id == stat.id }
                 if (index >= 0) {

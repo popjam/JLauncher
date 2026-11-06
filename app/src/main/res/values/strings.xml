@@ -757,4 +757,12 @@
     <string name="compare_barely">%1$s barely changes with %2$s</string>
     <string name="compare_yes_no">%1$s is %2$s %3$s on %4$s days than %5$s days (%6$d days vs %7$d)</string>
     <string name="compare_range">%1$s is %2$s %3$s with %4$s at %5$s than at %6$s</string>
+    <string name="essential_title">%1$s · %2$s</string>
+    <string name="essential_this">Count this one as essential</string>
+    <string name="essential_not_this">Count this one as not essential</string>
+    <string name="essential_group">Count all %1$s as essential</string>
+    <string name="essential_not_group">Count all %1$s as not essential</string>
+    <string name="essential_reset_this">This one: back to automatic</string>
+    <string name="essential_reset_group">All %1$s: back to automatic</string>
+    <string name="work_days_a_week">days worked each week</string>
 </resources>

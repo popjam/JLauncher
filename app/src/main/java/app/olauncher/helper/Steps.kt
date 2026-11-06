@@ -33,10 +33,13 @@ object Steps {
 
     fun days(context: Context): Map<LocalDate, Int> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyMap()
+        if (json === parsedJson) return parsedDays
         val days = runCatching { JSONObject(json) }.getOrNull() ?: return emptyMap()
-        return days.keys().asSequence().mapNotNull { key ->
+        parsedJson = json
+        parsedDays = days.keys().asSequence().mapNotNull { key ->
             runCatching { LocalDate.parse(key) }.getOrNull()?.let { it to days.getInt(key) }
         }.toMap()
+        return parsedDays
     }
 
     /** A reading of the step counter's running total */
@@ -117,6 +120,8 @@ object Steps {
 
     private val LOCK = Any()
     private const val PREFS = "steps"
+    private var parsedJson: String? = null
+    private var parsedDays: Map<LocalDate, Int> = emptyMap()
     private const val KEY = "days"
     private const val COUNTER_KEY = "counter"
     private const val KEEP_DAYS = 400L
