@@ -255,7 +255,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
         viewModel.screenTimeMillis.observe(viewLifecycleOwner) {
             it ?: return@observe
-            binding.moodAvatar.mood = MoodStore.moodForUsage(it)
+            // Every device's screen time together, so the face goes by Screen time's hours
+            binding.moodAvatar.mood = MoodStore.moodForTotalUsage(it)
             binding.moodAvatar.visibility = View.VISIBLE
         }
         viewModel.weather.observe(viewLifecycleOwner) {

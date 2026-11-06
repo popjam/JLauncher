@@ -542,10 +542,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     eventLogWrapper.getForegroundStatsByTimestamps(startTime, endTime)
                 )
                 val timeSpent = eventLogWrapper.aggregateSimpleUsageStats(appStats)
-                screenTimeValue.postValue(appContext.formattedTimeSpent(timeSpent))
-                screenTimeMillis.postValue(timeSpent)
                 prefs.screenTimeLastUpdated = endTime
                 saveUsage(LocalDate.now(), appStats, timeSpent)
+                // The home screen shows every device's screen time together: the phone's now, the rest as last read
+                postCombinedScreenTime(timeSpent)
                 refreshRecentUsage(eventLogWrapper)
                 // Sleep comes from the same usage access; quiet days for Music are filled in alongside
                 runCatching { Sleep.refresh(appContext) }.onFailure { it.printStackTrace() }
@@ -554,6 +554,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { PhoneHabits.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { DeviceTime.refresh(appContext) }.onFailure { it.printStackTrace() }
+                // Again once the Mac's and TV's are fresh
+                postCombinedScreenTime(timeSpent)
                 runCatching { Vibecoding.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Medicines.ensure(appContext) }.onFailure { it.printStackTrace() }
             } catch (e: Exception) {
@@ -591,6 +593,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Saves a day's screen time with the app used most, by name in case it's uninstalled later. */
+    private fun postCombinedScreenTime(phoneMs: Long) {
+        val total = runCatching { moodStore.load().days[LocalDate.now().toString()]?.totalUsageMs }.getOrNull() ?: phoneMs
+        if (screenTimeMillis.value == total) return
+        screenTimeValue.postValue(appContext.formattedTimeSpent(total))
+        screenTimeMillis.postValue(total)
+    }
+
     private fun saveUsage(day: LocalDate, appStats: List<SimpleUsageStat>, timeSpent: Long) {
         val byApp = appStats.groupBy { it.applicationId }
             .mapValues { (_, stats) -> stats.sumOf { it.timeUsed } }
