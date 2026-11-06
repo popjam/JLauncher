@@ -49,6 +49,8 @@ import app.olauncher.helper.setStatDot
 import app.olauncher.helper.statDot
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.Instant
 import java.time.Month
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -203,7 +205,7 @@ class StatPageFragment : CardPageFragment() {
             }
             StatKind.COFFEE -> cupsCard()
             StatKind.EXERCISE -> {
-                workoutsCard()
+                workoutsCard(R.string.workouts, StatIcons.DUMBBELL)
                 stepsCard()
             }
             StatKind.MEDITATION -> {
@@ -231,6 +233,7 @@ class StatPageFragment : CardPageFragment() {
                 val days = Social.days(context)
                 socialTodayCard(days)
                 socialHomesCard(days)
+                socialPlacesCard(days)
                 socialTimelineCard(days)
                 socialStayInCard(days)
                 socialMoodCard(days)
@@ -241,16 +244,20 @@ class StatPageFragment : CardPageFragment() {
                 dailyCard()
             }
             StatKind.MEDICINE -> takenCard()
+            StatKind.WORK -> {
+                workCard()
+                workoutsCard(R.string.work_days, StatIcons.BRIEFCASE)
+            }
             else -> dailyCard()
         }
         trendCard()
         overTimeCard()
         when {
-            stat.kind == StatKind.MONEY || stat.kind == StatKind.MUSIC || unit != null -> {}
+            stat.kind == StatKind.MONEY || stat.kind == StatKind.MUSIC || stat.kind == StatKind.WORK || unit != null -> {}
             stat.medicine -> doseCard()
             else -> howOftenCard()
         }
-        if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE) weekdayCard()
+        if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE || stat.kind == StatKind.WORK) weekdayCard()
         // Set against the medicines, or on a medicine's page every stat set against it; not for things counted like Coffee
         if (stat.isMedicine || !stat.medicine) takenVsNotCard()
     }
@@ -933,8 +940,8 @@ class StatPageFragment : CardPageFragment() {
     // --- Exercise, Meditation and Music ---
 
     /** Exercise's days as a calendar of dumbbells, deeper the harder the day; a faint outline for a rest day */
-    private fun workoutsCard() {
-        val card = Card(getString(R.string.workouts))
+    private fun workoutsCard(title: Int, iconName: String) {
+        val card = Card(getString(title))
         fun draw() {
             val days = dailyDates(card, redraw = ::draw)
             card.describe = { key -> listOf(dateText(key as LocalDate), dayText(stat, key) ?: "–").joinToString(" · ") }
@@ -958,7 +965,7 @@ class StatPageFragment : CardPageFragment() {
                     val done = face != null && !isRest(face)
                     if (done) {
                         val icon = size * 0.62f
-                        s.icon(StatIcons.DUMBBELL, x + (size - icon) / 2, y + (size - icon) / 2 - s.dp(3f), icon, stat.faceColor(requireContext(), face!!))
+                        s.icon(iconName, x + (size - icon) / 2, y + (size - icon) / 2 - s.dp(3f), icon, stat.faceColor(requireContext(), face!!))
                         s.text(date.dayOfMonth.toString(), x + size / 2, y + size - s.dp(2f), faint(150), s.sp(9.5f))
                     } else {
                         if (face != null) s.outline(x, y, x + size, y + size, faint(60), s.dp(9f), s.dp(1.5f))
@@ -1527,12 +1534,15 @@ class StatPageFragment : CardPageFragment() {
     /** What the Social cards were drawn with, so they're redrawn on coming back from a permission */
     private fun socialState(): String {
         val context = requireContext()
-        return listOf(Social.hasLocation(context), Social.hasBackgroundLocation(context), Social.homes(context).map { it?.ssid }).toString()
+        return listOf(Social.hasLocation(context), Social.hasBackgroundLocation(context), Social.homes(context).map { it?.ssid }, Social.work(context)?.ssid).toString()
     }
 
-    private val homeColors by lazy { listOf(0xFF81C784.toInt(), 0xFFFFB74D.toInt()) }
+    /** The homes' colours, then work's */
+    private val homeColors by lazy { listOf(0xFF81C784.toInt(), 0xFFFFB74D.toInt(), 0xFF7986CB.toInt()) }
 
-    private fun homeName(slot: Int) = Social.homes(requireContext()).getOrNull(slot)?.name ?: getString(R.string.social_home_n, slot + 1)
+    private fun homeName(slot: Int) =
+        if (slot == Social.WORK) Social.work(requireContext())?.name ?: getString(R.string.work)
+        else Social.homes(requireContext()).getOrNull(slot)?.name ?: getString(R.string.social_home_n, slot + 1)
 
     private fun socialDayText(date: LocalDate, day: Social.Day) = listOfNotNull(
         dateText(date),
@@ -1563,6 +1573,7 @@ class StatPageFragment : CardPageFragment() {
         val dates = (SOCIAL_LONG_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
         val stayed = dates.associateWith { days[it]?.mainHome }
         val nights = homes.indices.associateWith { slot -> stayed.values.count { it == slot } }
+        val stayedWork = dates.count { (days[it]?.workMs ?: 0L) >= 60 * 60_000L }
         if (stayed.values.any { it != null }) {
             card.describe = { key ->
                 val date = key as LocalDate
@@ -1631,8 +1642,34 @@ class StatPageFragment : CardPageFragment() {
                 })
             })
         }
+        // Work, set the same way; it fills in the Work stat
+        val work = Social.work(context)
+        list.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(card.textView(15f, 255).apply {
+                    text = work?.name ?: getString(R.string.work)
+                    setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.BRIEFCASE, homeColors[Social.WORK], 13.dpToPx()), null, null, null)
+                    compoundDrawablePadding = 8.dpToPx()
+                })
+                addView(card.textView(12f, 140).apply {
+                    text = if (work == null) getString(R.string.social_work_not_set) else listOf(work.ssid,
+                        resources.getQuantityString(R.plurals.day_count, stayedWork, stayedWork)).joinToString(" · ")
+                    updatePadding(top = 2.dpToPx())
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(card.textView(13f, 255).apply {
+                setText(if (work == null) R.string.social_set else R.string.edit)
+                setBackgroundResource(R.drawable.bg_stat_chip)
+                setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
+                setOnClickListener { editHome(Social.WORK, work) }
+            })
+        })
         card.root.addView(list, card.root.indexOfChild(card.scene) + 1)
-        if (homes.any { it != null }) {
+        if (homes.any { it != null } || work != null) {
             val now = days[today]?.stretches?.lastOrNull()
             card.subtitle(when {
                 now == null || now.place == Social.UNKNOWN -> getString(R.string.social_now_unknown)
@@ -1649,6 +1686,103 @@ class StatPageFragment : CardPageFragment() {
         }
     }
 
+    /** Where the time went, home by home, at work, out and unknown, over the last week, month or year */
+    private fun socialPlacesCard(days: Map<LocalDate, Social.Day>) {
+        val context = requireContext()
+        val first = Social.firstChange(context) ?: return
+        val card = Card(getString(R.string.social_places))
+        val names = listOf(homeName(0), homeName(1), homeName(Social.WORK), getString(R.string.social_out_place), getString(R.string.social_unknown_place))
+        val places = listOf(0, 1, Social.WORK, Social.OUT, Social.UNKNOWN)
+        val colors = listOf(homeColors[0], homeColors[1], homeColors[Social.WORK], stat.color, faint(70))
+        fun draw() {
+            val spanDays = listOf(7L, 30L, 365L)[placesPeriod]
+            val now = System.currentTimeMillis()
+            val wanted = now - spanDays * 24 * 3_600_000L
+            val start = maxOf(wanted, first)
+            val totals = LongArray(places.size)
+            days.values.forEach { day ->
+                day.stretches.forEach { stretch ->
+                    val ms = minOf(stretch.end, now) - maxOf(stretch.start, start)
+                    if (ms > 0) places.indexOf(stretch.place).takeIf { it >= 0 }?.let { totals[it] += ms }
+                }
+            }
+            // Untracked time counts as unknown
+            val known = totals.sum() - totals[4]
+            totals[4] = maxOf(0L, now - start - known)
+            val all = totals.sum().toFloat()
+            card.segment(listOf(R.string.period_week, R.string.period_month, R.string.period_year), placesPeriod) {
+                placesPeriod = it
+                draw()
+            }
+            card.key.removeAllViews()
+            val shown = places.indices.filter { totals[it] > 0 }.sortedByDescending { totals[it] }
+            fun share(i: Int) = (totals[i] * 100 / all).let { if (it < 1f) "<1%" else "${it.roundToInt()}%" }
+            shown.forEach { i -> card.keyItem(colors[i], "${names[i]} · ${share(i)}") }
+            card.describe = { key ->
+                val i = key as Int
+                listOf(names[i], getString(R.string.stat_label, getString(R.string.time), duration(totals[i])),
+                    getString(R.string.stat_label, getString(R.string.share), share(i))).joinToString("\n")
+            }
+            val top = shown.firstOrNull()
+            card.draw { sc ->
+                val size = minOf(sc.width, sc.dp(200f))
+                val cx = sc.width / 2
+                val cy = size / 2
+                val width = sc.dp(26f)
+                val radius = size / 2 - width / 2 - sc.dp(4f)
+                var angle = -90f
+                shown.forEach { i ->
+                    val sweep = totals[i] / all * 360f
+                    sc.arc(cx, cy, radius, angle + 0.8f, maxOf(sweep - 1.6f, 0.5f), colors[i], width)
+                    // A tap target on the middle of the slice
+                    val mid = Math.toRadians((angle + sweep / 2).toDouble())
+                    val tx = cx + Math.cos(mid).toFloat() * radius
+                    val ty = cy + Math.sin(mid).toFloat() * radius
+                    sc.target(i, RectF(tx - width, ty - width, tx + width, ty + width))
+                    angle += sweep
+                }
+                if (top != null) {
+                    sc.text("${(totals[top] * 100 / all).roundToInt()}%", cx, cy + sc.sp(4f), ink, sc.sp(26f), bold = true)
+                    sc.text(names[top], cx, cy + sc.sp(24f), faint(160), sc.sp(12f))
+                }
+                sc.height = size
+            }
+            // After drawing, which hides the note
+            if (start > wanted) card.note.apply {
+                isVisible = true
+                text = getString(R.string.social_tracked_since, dateText(Instant.ofEpochMilli(first).atZone(ZoneId.systemDefault()).toLocalDate()))
+            }
+        }
+        draw()
+    }
+
+    /** Which of week, month and year the places pie shows */
+    private var placesPeriod = 0
+
+    /** This week at work: days, hours, and when you usually get there and leave, from work's Wi-Fi */
+    private fun workCard() {
+        val context = requireContext()
+        val card = Card(getString(R.string.this_week))
+        val days = Social.days(context)
+        val today = LocalDate.now()
+        val monday = today.with(DayOfWeek.MONDAY)
+        val week = days.filterKeys { it >= monday }
+        val worked = week.values.count { it.workMs >= 60 * 60_000L }
+        card.headline(resources.getQuantityString(R.plurals.work_days_count, worked, worked), getString(R.string.work_hours_week, duration(week.values.sumOf { it.workMs })))
+        val recent = days.filterKeys { it > today.minusDays(30) }.values.filter { it.workMs >= 60 * 60_000L }
+        if (recent.isEmpty()) {
+            if (Social.work(context) == null) card.showNote(getString(R.string.work_set_wifi))
+            return
+        }
+        val arrive = recent.mapNotNull { d -> d.stretches.firstOrNull { it.place == Social.WORK }?.startTime?.toLocalTime()?.toSecondOfDay() }.average()
+        val leave = recent.mapNotNull { d -> d.stretches.lastOrNull { it.place == Social.WORK }?.endTime?.toLocalTime()?.toSecondOfDay() }.average()
+        tiles(card, getString(R.string.work_usual), listOf(
+            duration(recent.sumOf { it.workMs } / recent.size) to getString(R.string.work_a_day),
+            clock(java.time.LocalTime.ofSecondOfDay(arrive.toLong())) to getString(R.string.work_arrive),
+            clock(java.time.LocalTime.ofSecondOfDay(leave.toLong())) to getString(R.string.work_leave),
+        ))
+    }
+
     /** Sets a home to the Wi-Fi you're on now, with a name, or takes it away. */
     private fun editHome(slot: Int, home: Social.Home?) {
         val context = requireContext()
@@ -1658,7 +1792,7 @@ class StatPageFragment : CardPageFragment() {
             return
         }
         val name = EditText(context).apply {
-            setText(home?.name ?: ssid)
+            setText(home?.name ?: if (slot == Social.WORK) getString(R.string.work) else ssid)
             setSingleLine()
             setSelection(text.length)
         }
@@ -1667,18 +1801,20 @@ class StatPageFragment : CardPageFragment() {
             addView(name)
         }
         AlertDialog.Builder(context)
-            .setTitle(getString(R.string.social_home_n, slot + 1))
+            .setTitle(if (slot == Social.WORK) getString(R.string.work) else getString(R.string.social_home_n, slot + 1))
             .setMessage(if (ssid != null) getString(R.string.social_uses_wifi, ssid) else getString(R.string.social_keeps_wifi, home!!.ssid))
             .setView(box)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.save) { _, _ ->
                 val wifi = ssid ?: home!!.ssid
-                Social.setHome(context, slot, Social.Home(wifi, name.text.toString().trim().ifEmpty { wifi }))
+                val place = Social.Home(wifi, name.text.toString().trim().ifEmpty { wifi })
+                if (slot == Social.WORK) Social.setWork(context, place) else Social.setHome(context, slot, place)
+                if (slot == Social.WORK) runCatching { Social.refresh(context) }
                 if (_binding != null) render()
             }
             .apply {
                 if (home != null) setNeutralButton(R.string.social_remove) { _, _ ->
-                    Social.setHome(context, slot, null)
+                    if (slot == Social.WORK) Social.setWork(context, null) else Social.setHome(context, slot, null)
                     if (_binding != null) render()
                 }
             }
@@ -1714,6 +1850,7 @@ class StatPageFragment : CardPageFragment() {
         card.subtitle(getString(R.string.last_days, SOCIAL_DAYS))
         card.keyItem(stat.color, getString(R.string.social_key_out))
         Social.homes(requireContext()).forEachIndexed { slot, home -> if (home != null) card.keyItem(homeColors[slot], home.name) }
+        Social.work(requireContext())?.let { card.keyItem(homeColors[Social.WORK], it.name) }
         card.describe = { key -> socialDayText(key as LocalDate, days.getValue(key)) }
         val zone = java.time.ZoneId.systemDefault()
         card.draw { s ->

@@ -65,6 +65,8 @@ class StatsHomeFragment : CardPageFragment() {
     private var monthlyYear = LocalDate.now().year
     private var compareX: String? = null
     private var compareY: String = MoodStore.MOOD
+    /** 0 compares the same day, 1 the second stat the day after */
+    private var compareLag = 0
 
     /** The date the thoughts box holds, so redrawing doesn't overwrite typing */
     private var noteDate: LocalDate? = null
@@ -464,7 +466,7 @@ class StatsHomeFragment : CardPageFragment() {
         fun draw() {
             val today = LocalDate.now()
             val monday = today.with(DayOfWeek.MONDAY)
-            val rows = shown.filter { !it.isMedicine }.mapNotNull { stat ->
+            val rows = shown.filter { !it.isMedicine && it.kind != app.olauncher.helper.StatKind.WORK }.mapNotNull { stat ->
                 val byDate = scores[stat.id].orEmpty()
                 val now = byDate.filterKeys { it >= monday && it <= today }.values.takeIf { it.isNotEmpty() }?.average() ?: return@mapNotNull null
                 val before = byDate.filterKeys { it >= monday.minusDays(7) && it < monday }.values.takeIf { it.isNotEmpty() }?.average()
@@ -566,75 +568,252 @@ class StatsHomeFragment : CardPageFragment() {
         redraws.add { draw() }
     }
 
-    /** Any stat against any other: the second's average on days the first had each of its faces. */
+    /** What a stat's day holds, which decides how it's compared */
+    private enum class ValueKind { SCORE, AMOUNT, YES_NO }
+
+    /**
+     * A stat as something to compare: its value each day ([ValueKind.YES_NO] as 0 or 1), how to write
+     * one, and names for its groups.
+     */
+    private class Measured(
+        val key: String,
+        val name: String,
+        val color: Int,
+        val icon: String,
+        val kind: ValueKind,
+        val values: Map<LocalDate, Float>,
+        val format: (Float) -> String,
+        val yesNo: Pair<String, String> = "no" to "yes",
+        val scoreLabel: (Int) -> String = { it.toString() },
+    )
+
+    private var comparables: List<Measured> = emptyList()
+
+    private fun hoursText(v: Float) = String.format(Locale.getDefault(), "%.1fh", v)
+
+    private fun numberText(v: Float) = if (abs(v - Math.round(v)) < 0.05f) Math.round(v).toString() else String.format(Locale.getDefault(), "%.1f", v)
+
+    /**
+     * Every stat as a [Measured]: faces as scores; Screen time, Sleep, Music, Vibecoding and Social in
+     * hours, Money in dollars; things counted from none by their dose (read from labels like "50mg", else
+     * their place) and, for medicines and two-face stats, taken or not; Work worked or not; and Steps.
+     */
+    private fun buildComparables(): List<Measured> {
+        val context = requireContext()
+        val list = mutableListOf<Measured>()
+        fun parse(key: String) = runCatching { LocalDate.parse(key) }.getOrNull()
+        stats.forEach { stat ->
+            val icon = StatIcons.forStat(stat)
+            val faces = data.days.entries.mapNotNull { (key, day) -> day.face(stat.id)?.let { f -> parse(key)?.let { it to f } } }.toMap()
+            fun amount(values: Map<LocalDate, Float>, format: (Float) -> String) =
+                list.add(Measured(stat.id, stat.name, stat.color, icon, ValueKind.AMOUNT, values, format))
+            when (stat.kind) {
+                app.olauncher.helper.StatKind.SCREEN -> amount(data.days.entries.mapNotNull { (k, d) -> d.totalUsageMs?.let { ms -> parse(k)?.let { it to ms / 3_600_000f } } }.toMap(), ::hoursText)
+                app.olauncher.helper.StatKind.SLEEP -> app.olauncher.helper.Sleep.nights(context).takeIf { it.isNotEmpty() }
+                    ?.let { n -> amount(n.mapValues { it.value.asleepMs / 3_600_000f }, ::hoursText) }
+                    ?: list.add(scoreComparable(stat, icon))
+                app.olauncher.helper.StatKind.MUSIC -> {
+                    val played = app.olauncher.helper.Music.days(context).mapValues { it.value.ms / 3_600_000f }
+                    amount(played + faces.keys.filter { it !in played }.associateWith { 0f }, ::hoursText)
+                }
+                app.olauncher.helper.StatKind.VIBECODING -> amount(app.olauncher.helper.Vibecoding.days(context).mapValues { it.value.minutes / 60f }, ::hoursText)
+                app.olauncher.helper.StatKind.MONEY -> {
+                    val since = app.olauncher.helper.Spending.trackedSince(context)
+                    if (since == null) list.add(scoreComparable(stat, icon)) else {
+                        val spent = app.olauncher.helper.Spending.dailyCents(context)
+                        val today = LocalDate.now()
+                        amount((0..ChronoUnit.DAYS.between(since, today)).associate { since.plusDays(it) to (spent[since.plusDays(it)] ?: 0L) / 100f }) { "$" + Math.round(it) }
+                    }
+                }
+                app.olauncher.helper.StatKind.SOCIAL -> {
+                    val today = LocalDate.now()
+                    amount(app.olauncher.helper.Social.days(context).filter { (d, day) -> d == today || day.trackedMs >= 12 * 3_600_000L }
+                        .mapValues { it.value.outMs / 3_600_000f }, ::hoursText)
+                }
+                app.olauncher.helper.StatKind.WORK -> list.add(Measured(stat.id, stat.name, stat.color, icon, ValueKind.YES_NO,
+                    faces.mapValues { if (stat.isBlank(it.value)) 0f else 1f }, ::percentText, getString(R.string.compare_off) to getString(R.string.compare_worked)))
+                else -> if (stat.medicine) {
+                    // The number in each label ("50mg", "2 Cups"), or each face's place when they haven't all got one
+                    val numbers = stat.faces.indices.map { place -> stat.labels.getOrNull(place)?.let { Regex("""\d+(\.\d+)?""").find(it)?.value?.toFloatOrNull() } }
+                    val numeric = numbers.all { it != null }
+                    val unit = stat.labels.firstOrNull { Regex("""\d""").containsMatchIn(it) }?.replace(Regex("""[\d.\s]+"""), "")?.trim().orEmpty()
+                    val doseText: (Float) -> String = { v ->
+                        if (!numeric) numberText(v) else if (unit.length <= 2) numberText(v) + unit else numberText(v) + " " + unit.lowercase(Locale.getDefault())
+                    }
+                    val many = stat.faces.size > 2
+                    if (many) list.add(Measured("${stat.id}:dose", if (stat.isMedicine) getString(R.string.compare_dose, stat.name) else stat.name, stat.color, icon,
+                        ValueKind.AMOUNT, faces.mapValues { (_, f) -> stat.faces.indexOf(f).let { place -> if (numeric) numbers[place]!! else place.toFloat() } }, doseText))
+                    if (stat.isMedicine || !many) list.add(Measured(stat.id, if (many) getString(R.string.compare_taken, stat.name) else stat.name, stat.color, icon,
+                        ValueKind.YES_NO, faces.mapValues { if (stat.isBlank(it.value)) 0f else 1f }, ::percentText,
+                        if (stat.isMedicine) getString(R.string.compare_not_taken) to getString(R.string.compare_taken_short) else getString(R.string.compare_none) to getString(R.string.compare_some)))
+                } else list.add(scoreComparable(stat, icon))
+            }
+        }
+        val steps = app.olauncher.helper.Steps.days(context)
+        if (steps.isNotEmpty()) list.add(Measured(STEPS_KEY, getString(R.string.steps_title), 0xFF4DB6AC.toInt(), StatIcons.STEPS, ValueKind.AMOUNT,
+            steps.mapValues { it.value.toFloat() }, { v -> if (v >= 1000) String.format(Locale.getDefault(), "%.1fk", v / 1000) else Math.round(v).toString() }))
+        return list
+    }
+
+    private fun percentText(v: Float) = "${Math.round(v * 100)}%"
+
+    private fun scoreComparable(stat: StatInfo, icon: String) = Measured(stat.id, stat.name, stat.color, icon, ValueKind.SCORE,
+        scores[stat.id].orEmpty().mapValues { it.value.toFloat() }, ::decimal, scoreLabel = { score ->
+            stat.faces.firstOrNull { MoodStore.score(it, stat.inverted) == score }?.let { faceName(stat, it) } ?: score.toString()
+        })
+
+    private class Group(val label: String, val values: List<Float>) {
+        val average: Float? get() = values.takeIf { it.size >= MIN_GROUP }?.average()?.toFloat()
+    }
+
+    /**
+     * [y]'s values grouped by [x]'s on the same day (or the day before, [lag] 1): yes and no; each score;
+     * each amount when there are only a few, else its own lowest, middle and highest thirds.
+     */
+    private fun groups(x: Measured, y: Measured, lag: Int): List<Group> {
+        val pairs = x.values.mapNotNull { (date, xv) -> y.values[date.plusDays(lag.toLong())]?.let { xv to it } }
+        return when (x.kind) {
+            ValueKind.YES_NO -> listOf(
+                Group(x.yesNo.first, pairs.filter { it.first < 0.5f }.map { it.second }),
+                Group(x.yesNo.second, pairs.filter { it.first >= 0.5f }.map { it.second }),
+            )
+            ValueKind.SCORE -> x.values.values.map { Math.round(it) }.distinct().sorted().map { score ->
+                Group(x.scoreLabel(score), pairs.filter { Math.round(it.first) == score }.map { it.second })
+            }
+            ValueKind.AMOUNT -> {
+                val distinct = pairs.map { it.first }.distinct().sorted()
+                if (distinct.size <= 5) distinct.map { v -> Group(x.format(v), pairs.filter { it.first == v }.map { it.second }) }
+                else {
+                    val sorted = pairs.map { it.first }.sorted()
+                    val low = sorted[sorted.size / 3]
+                    val high = sorted[sorted.size * 2 / 3]
+                    if (high <= low) listOf(
+                        Group(getString(R.string.compare_up_to, x.format(low)), pairs.filter { it.first <= low }.map { it.second }),
+                        Group(getString(R.string.compare_over, x.format(low)), pairs.filter { it.first > low }.map { it.second }),
+                    ) else listOf(
+                        Group(getString(R.string.compare_up_to, x.format(low)), pairs.filter { it.first <= low }.map { it.second }),
+                        Group(x.format(low) + "–" + x.format(high), pairs.filter { it.first > low && it.first <= high }.map { it.second }),
+                        Group(getString(R.string.compare_over, x.format(high)), pairs.filter { it.first > high }.map { it.second }),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Any stat against any other, whatever each holds: the second's average for each group of the first
+     * (yes or no, each face, or low, middle and high amounts), on the same day or the next, with a line
+     * saying what it comes to.
+     */
     private fun compareCard() {
+        comparables = buildComparables()
+        if (comparables.size < 2) return
         val card = Card(getString(R.string.compare_two))
-        fun pick(current: String?, onPick: (String) -> Unit) {
-            val options = stats
+        fun pick(onPick: (String) -> Unit) {
+            val options = comparables
             AlertDialog.Builder(requireContext())
-                .setItems(options.map { it.name }.toTypedArray()) { _, i -> onPick(options[i].id) }
+                .setItems(options.map { it.name }.toTypedArray()) { _, i -> onPick(options[i].key) }
                 .show()
         }
         val pickers = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        val summary = card.textView(14f, 230).apply { updatePadding(bottom = 12.dpToPx()) }
         card.root.addView(pickers, card.root.indexOfChild(card.scene), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = 14.dpToPx()
         })
+        card.root.addView(summary, card.root.indexOfChild(card.scene))
         fun draw() {
-            val x = stats.firstOrNull { it.id == compareX } ?: stats.firstOrNull { it.id != compareY && it.id != MoodStore.MOOD } ?: return
-            val y = stats.firstOrNull { it.id == compareY } ?: stats.first()
+            val x = comparables.firstOrNull { it.key == compareX }
+                ?: comparables.firstOrNull { it.name == getString(R.string.work) }
+                ?: comparables.firstOrNull { it.key == MoodStore.USAGE } ?: comparables.first { it.key != compareY }
+            val y = comparables.firstOrNull { it.key == compareY } ?: comparables.first { it.key != x.key }
+            card.segment(listOf(R.string.compare_same_day, R.string.compare_next_day), compareLag) {
+                compareLag = it
+                draw()
+            }
             pickers.removeAllViews()
-            fun chip(stat: StatInfo, onTap: () -> Unit) = card.textView(14f, 255).apply {
-                text = stat.name
+            fun chip(c: Measured, onTap: () -> Unit) = card.textView(14f, 255).apply {
+                text = c.name
+                isSingleLine = true
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 setBackgroundResource(R.drawable.bg_stat_chip)
                 setPadding(12.dpToPx(), 7.dpToPx(), 14.dpToPx(), 7.dpToPx())
-                setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.forStat(stat), stat.color, 14.dpToPx()), null, null, null)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(c.icon, c.color, 14.dpToPx()), null, null, null)
                 compoundDrawablePadding = 8.dpToPx()
                 setOnClickListener { onTap() }
             }
-            pickers.addView(chip(x) { pick(x.id) { compareX = it; draw() } })
+            pickers.addView(chip(x) { pick { compareX = it; draw() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             pickers.addView(card.textView(13f, 150).apply {
                 text = getString(R.string.compare_against)
-                setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+                setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
             })
-            pickers.addView(chip(y) { pick(y.id) { compareY = it; draw() } })
-            val xs = scores[x.id].orEmpty()
-            val ys = scores[y.id].orEmpty()
-            // By the first stat's faces, left to right as on its page
-            val buckets = x.faces.map { face ->
-                val score = MoodStore.score(face, x.inverted)
-                val values = xs.filterValues { it == score }.keys.mapNotNull { ys[it] }
-                Triple(face, values.takeIf { it.isNotEmpty() }?.average()?.toFloat(), values.size)
+            pickers.addView(chip(y) { pick { compareY = it; draw() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+            val groups = groups(x, y, compareLag)
+            val valid = groups.filter { it.average != null }
+            if (valid.size < 2) {
+                summary.isVisible = false
+                return card.showNote(getString(R.string.needs_more_days))
             }
-            if (buckets.count { it.second != null } < 2) return card.showNote(getString(R.string.needs_more_days))
+            summary.isVisible = true
+            val yName = if (compareLag == 1) getString(R.string.compare_next_day_of, y.name) else y.name
+            val first = valid.first()
+            val last = valid.last()
+            val diff = last.average!! - first.average!!
+            val small = when (y.kind) {
+                ValueKind.SCORE -> abs(diff) < 0.15f
+                ValueKind.YES_NO -> abs(diff) < 0.05f
+                ValueKind.AMOUNT -> abs(diff) < 0.05f * maxOf(abs(first.average!!), abs(last.average!!), 0.01f)
+            }
+            val amount = when (y.kind) {
+                ValueKind.SCORE -> decimal(abs(diff))
+                ValueKind.YES_NO -> getString(R.string.compare_points, Math.round(abs(diff) * 100))
+                ValueKind.AMOUNT -> y.format(abs(diff))
+            }
+            val way = getString(if (diff > 0) R.string.compare_higher else R.string.compare_lower)
+            summary.text = when {
+                small -> getString(R.string.compare_barely, yName, x.name)
+                x.kind == ValueKind.YES_NO -> getString(R.string.compare_yes_no, yName, amount, way, last.label, first.label, last.values.size, first.values.size)
+                else -> getString(R.string.compare_range, yName, amount, way, x.name, last.label, first.label)
+            }
             card.describe = { key ->
-                val (face, average, count) = buckets[key as Int]
-                listOf(getString(R.string.stat_label, x.name, faceName(x, face)),
-                    getString(R.string.stat_label, y.name, average?.let(::decimal) ?: "–"),
-                    resources.getQuantityString(R.plurals.day_count, count, count)).joinToString("\n")
+                val group = groups[key as Int]
+                listOf(getString(R.string.stat_label, x.name, group.label),
+                    getString(R.string.stat_label, yName, group.average?.let(y.format) ?: "–"),
+                    resources.getQuantityString(R.plurals.day_count, group.values.size, group.values.size)).joinToString("\n")
+            }
+            val (floor, ceiling) = when (y.kind) {
+                ValueKind.SCORE -> 1f to 5f
+                ValueKind.YES_NO -> 0f to 1f
+                ValueKind.AMOUNT -> 0f to (groups.mapNotNull { it.average }.maxOrNull() ?: 1f).let { if (it <= 0f) 1f else it * 1.15f }
             }
             card.draw { s ->
                 val top = s.dp(6f)
                 val bottom = top + s.dp(120f)
-                val column = s.width / buckets.size
-                fun yOf(v: Float) = bottom - (v - 1f) / 4f * (bottom - top) - s.dp(2f)
-                listOf(1, 3, 5).forEach { g ->
-                    s.line(s.dp(16f), yOf(g.toFloat()), s.width, yOf(g.toFloat()), faint(28), s.dp(1f))
-                    s.text(g.toString(), 0f, yOf(g.toFloat()) + s.sp(4f), faint(130), s.sp(11f), Paint.Align.LEFT)
+                val axis = s.dp(30f)
+                fun yOf(v: Float) = bottom - (v - floor) / (ceiling - floor) * (bottom - top)
+                listOf(floor, (floor + ceiling) / 2, ceiling).forEach { g ->
+                    s.line(axis, yOf(g), s.width, yOf(g), faint(28), s.dp(1f))
+                    val label = if (y.kind == ValueKind.SCORE) numberText(g) else y.format(g)
+                    s.text(label, 0f, yOf(g) + s.sp(4f), faint(130), s.sp(11f), Paint.Align.LEFT)
                 }
-                val bar = minOf(column * 0.5f, s.dp(30f))
-                buckets.forEachIndexed { i, (face, average, _) ->
-                    val center = s.dp(16f) + i * (s.width - s.dp(16f)) / buckets.size + (s.width - s.dp(16f)) / buckets.size / 2
+                val column = (s.width - axis) / groups.size
+                val bar = minOf(column * 0.5f, s.dp(34f))
+                groups.forEachIndexed { i, group ->
+                    val center = axis + i * column + column / 2
+                    val average = group.average
                     if (average == null) s.rect(center - bar / 2, bottom - s.dp(2f), center + bar / 2, bottom, faint(45), s.dp(1f))
                     else {
-                        val color = y.faces.minByOrNull { abs(MoodStore.score(it, y.inverted) - average) }?.let { y.faceColor(requireContext(), it) } ?: y.color
-                        s.rect(center - bar / 2, yOf(average), center + bar / 2, bottom, color, s.dp(6f))
+                        val color = if (y.kind == ValueKind.SCORE) stats.firstOrNull { it.id == y.key }?.let { st ->
+                            st.faces.minByOrNull { abs(MoodStore.score(it, st.inverted) - average) }?.let { st.faceColor(requireContext(), it) }
+                        } ?: y.color else y.color
+                        s.rect(center - bar / 2, minOf(yOf(average), bottom - s.dp(3f)), center + bar / 2, bottom, color, s.dp(6f))
                     }
-                    val label = faceName(x, face)
-                    s.text(if (label.length > 8) label.take(7) + "…" else label, center, bottom + s.dp(18f), faint(160), s.sp(11.5f))
-                    s.target(i, RectF(i * column, 0f, (i + 1) * column, bottom + s.dp(26f)))
+                    val label = group.label
+                    s.text(if (label.length > 9) label.take(8) + "…" else label, center, bottom + s.dp(18f), faint(160), s.sp(11.5f))
+                    s.target(i, RectF(axis + i * column, 0f, axis + (i + 1) * column, bottom + s.dp(26f)))
                 }
                 s.height = bottom + s.dp(26f)
             }
@@ -799,6 +978,8 @@ class StatsHomeFragment : CardPageFragment() {
         private val WEEKS = WeekFields.ISO
         private const val GRID_DAYS = 18
         private val DEFAULT_NAMES = setOf("energy", "libido", "anxiety")
+        private const val MIN_GROUP = 3
+        private const val STEPS_KEY = "steps"
         private const val REMEMBER_AFTER_DAYS = 7L
         private const val MIN_LINK_DAYS = 4
         private const val LINKS_SHOWN = 6

@@ -30,6 +30,9 @@ object Social {
     const val OUT = -1
     const val UNKNOWN = -2
 
+    /** Work's place, after the homes' slots */
+    const val WORK = 2
+
     class Home(val ssid: String, val name: String)
 
     /** A stretch of a day in one place: [OUT], [UNKNOWN] or a home's slot */
@@ -40,7 +43,9 @@ object Social {
     }
 
     class Day(val stretches: List<Stretch>) {
-        val outMs = stretches.filter { it.place == OUT }.sumOf { it.ms }
+        /** Out of the house: anywhere but a home, work included */
+        val outMs = stretches.filter { it.place == OUT || it.place == WORK }.sumOf { it.ms }
+        val workMs get() = homeMs(WORK)
         val trackedMs = stretches.filter { it.place != UNKNOWN }.sumOf { it.ms }
         fun homeMs(slot: Int) = stretches.filter { it.place == slot }.sumOf { it.ms }
 
@@ -74,6 +79,30 @@ object Social {
         check(context)
     }
 
+    /** Work's Wi-Fi, set like a home's */
+    fun work(context: Context): Home? = prefs(context).getString("workSsid", null)?.let { Home(it, prefs(context).getString("workName", null) ?: it) }
+
+    fun setWork(context: Context, home: Home?) {
+        prefs(context).edit().apply {
+            if (home == null) {
+                remove("workSsid")
+                remove("workName")
+            } else {
+                putString("workSsid", home.ssid)
+                putString("workName", home.name)
+                // Days before it was set aren't counted as off
+                if (!prefs(context).contains(WORK_SINCE)) putString(WORK_SINCE, LocalDate.now().toString())
+            }
+        }.apply()
+        check(context)
+    }
+
+    /** Whether anywhere is set, so there's something to track */
+    private fun anyPlace(context: Context) = homes(context).any { it != null } || work(context) != null
+
+    /** When tracking began: the first change kept */
+    fun firstChange(context: Context): Long? = changes(context).firstOrNull()?.first
+
     fun hasLocation(context: Context) = granted(context, Manifest.permission.ACCESS_FINE_LOCATION)
 
     fun hasBackgroundLocation(context: Context) =
@@ -96,10 +125,11 @@ object Social {
     /** Where the phone is now, from its Wi-Fi: [ssid] if known, or whether it's on Wi-Fi at all. */
     fun record(context: Context, onWifi: Boolean, ssid: String?) {
         val homes = homes(context)
-        if (homes.all { it == null } || !hasLocation(context)) return
+        if (!anyPlace(context) || !hasLocation(context)) return
         val place = when {
             !onWifi -> OUT
             ssid == null -> lastPlace(context).takeIf { it >= 0 } ?: UNKNOWN
+            ssid == work(context)?.ssid -> WORK
             else -> homes.indexOfFirst { it?.ssid == ssid }.takeIf { it >= 0 } ?: OUT
         }
         add(context, place)
@@ -115,7 +145,7 @@ object Social {
 
     /** Tracking stopped (the watcher let go), so the time after isn't counted as anywhere. */
     fun stopped(context: Context) {
-        if (homes(context).any { it != null }) add(context, UNKNOWN)
+        if (anyPlace(context)) add(context, UNKNOWN)
     }
 
     private fun add(context: Context, place: Int) = synchronized(LOCK) {
@@ -202,6 +232,29 @@ object Social {
         days(context).filterKeys { it > today.minusDays(DAYS_BACK) }.forEach { (date, day) ->
             if (date == today || day.trackedMs >= MIN_TRACKED_MS) store.setFace(date, id, faceFor(day.outMs))
         }
+        runCatching { refreshWork(context) }.onFailure { it.printStackTrace() }
+    }
+
+    /**
+     * Once work's Wi-Fi is set: adds the Work stat, and marks the last [WORK_DAYS_BACK] days worked (an hour
+     * or more there) or off (a day gone by, mostly tracked, without). Days before work was set are left.
+     */
+    private fun refreshWork(context: Context) {
+        work(context) ?: return
+        val id = AutoStats.ensure(context, AutoStats.WORK, WORK_NAME) { store ->
+            store.addStat(WORK_NAME, WORK_COLOR, daily = false, scale = 2, question = "", labels = WORK_LABELS, inverted = false,
+                phrases = emptyList(), medicine = true, nextDay = false)
+        } ?: return
+        val since = prefs(context).getString(WORK_SINCE, null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+        val store = MoodStore(context)
+        val stat = store.load().stat(id) ?: return
+        val faces = MoodStore.facesFor(stat.scale).let { if (stat.inverted) it.reversed() else it }
+        val today = LocalDate.now()
+        days(context).filterKeys { it > today.minusDays(WORK_DAYS_BACK) && it >= since }.forEach { (date, day) ->
+            val worked = day.workMs >= MIN_WORK_MS
+            if (worked) store.setFace(date, id, faces.last())
+            else if (date < today && day.trackedMs >= MIN_TRACKED_MS) store.setFace(date, id, faces.first())
+        }
     }
 
     /** Under an hour out is the saddest face, then 1–2, 2–4, 4–6 and 6 hours or more. */
@@ -219,6 +272,12 @@ object Social {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     const val NAME = "Social"
+    const val WORK_NAME = "Work"
+    private val WORK_COLOR = 0xFF7986CB.toInt()
+    private val WORK_LABELS = listOf("Off", "Worked")
+    private const val WORK_SINCE = "workSince"
+    private const val MIN_WORK_MS = 60 * 60 * 1000L
+    private const val WORK_DAYS_BACK = 60L
     const val HOMES = 2
     private val COLOR = 0xFF4FC3F7.toInt()
     private val LABELS = listOf("Under 1h", "1–2h", "2–4h", "4–6h", "6h+")

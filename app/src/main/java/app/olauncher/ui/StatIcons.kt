@@ -31,6 +31,7 @@ object StatIcons {
             stat.kind == StatKind.EXERCISE -> DUMBBELL
             stat.kind == StatKind.MEDITATION -> LOTUS
             stat.kind == StatKind.LIBIDO -> HEART
+            stat.kind == StatKind.WORK -> BRIEFCASE
             "energy" in name -> BOLT
             "anxi" in name || "stress" in name -> ANXIETY
             "ocd" in name || "compuls" in name -> LOOP
@@ -89,6 +90,19 @@ object StatIcons {
 
     private fun icon(vararg rows: String) = rows.joinToString("\n")
 
+    val BRIEFCASE = icon(
+        "...........",
+        "....XXX....",
+        "...X...X...",
+        "XXXXXXXXXXX",
+        "XXXXXXXXXXX",
+        "XXXXXXXXXXX",
+        "XXXX...XXXX",
+        "XXXXXXXXXXX",
+        "XXXXXXXXXXX",
+        "XXXXXXXXXXX",
+        "...........",
+    )
     val HOME = icon(
         ".....X.....",
         "....XXX....",

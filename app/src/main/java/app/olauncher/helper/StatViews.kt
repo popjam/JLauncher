@@ -69,6 +69,7 @@ enum class StatKind(val shades: Pair<Int, Int>? = null) {
     MONEY(0xFFFFE08A.toInt() to 0xFFB8860B.toInt()),
     EXERCISE(0xFFA7F3EB.toInt() to 0xFF00897B.toInt()),
     MUSIC(0xFFA5ECF5.toInt() to 0xFF00838F.toInt()),
+    WORK(0xFFC5CAE9.toInt() to 0xFF3949AB.toInt()),
     MEDITATION, SLEEP, VIBECODING, SOCIAL, LIBIDO, PLAIN;
 }
 
@@ -84,6 +85,7 @@ fun Context.statKind(id: String, name: String, medicine: Boolean, data: MoodStor
         AutoStats.MUSIC -> return StatKind.MUSIC
         AutoStats.SOCIAL -> return StatKind.SOCIAL
         AutoStats.VIBECODING -> return StatKind.VIBECODING
+        AutoStats.WORK -> return StatKind.WORK
     }
     val lower = name.lowercase()
     return when {
@@ -97,6 +99,7 @@ fun Context.statKind(id: String, name: String, medicine: Boolean, data: MoodStor
         lower == "music" -> StatKind.MUSIC
         lower == "social" -> StatKind.SOCIAL
         "vibecod" in lower -> StatKind.VIBECODING
+        lower == "work" && medicine -> StatKind.WORK
         medicine -> StatKind.MEDICINE
         else -> StatKind.PLAIN
     }
