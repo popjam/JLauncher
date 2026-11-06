@@ -51,6 +51,11 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         rows = view.findViewById(R.id.statRows)
         scroll = view.findViewById(R.id.statScroll)
         scroll.setOnDragListener { _, event -> onDrag(event) }
+        (view as? PullDismissLayout)?.apply {
+            pullDown = false
+            sideDismiss = arguments?.getInt(app.olauncher.helper.SwipeTargets.SWIPE_BACK) ?: 0
+            onDismiss = { if (isAdded) findNavController().popBackStack() }
+        }
     }
 
     override fun onResume() {

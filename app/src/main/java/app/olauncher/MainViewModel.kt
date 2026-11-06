@@ -323,6 +323,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun saveSwipeApp(appModel: AppModel, isLeft: Boolean) {
+        app.olauncher.helper.SwipeTargets.set(appContext, isLeft, app.olauncher.helper.SwipeTargets.Target.APP)
         when (appModel) {
             is AppModel.PrivateSpaceHeader -> return
             is AppModel.App -> {

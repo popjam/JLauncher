@@ -37,6 +37,7 @@ import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
 import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.Spending
+import app.olauncher.helper.SwipeTargets
 import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
@@ -708,8 +709,33 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         )
     }
 
+    /**
+     * Opens Stats or the stats' Home for a swipe set to it, sliding in from the side swiped from; dragging
+     * it back the other way returns here. False for a swipe that opens an app.
+     */
+    private fun openSwipeStats(left: Boolean): Boolean {
+        val destination = when (SwipeTargets.get(requireContext(), left)) {
+            SwipeTargets.Target.APP -> return false
+            SwipeTargets.Target.STATS -> R.id.statListFragment
+            SwipeTargets.Target.STATS_HOME -> R.id.statsHomeFragment
+        }
+        val options = androidx.navigation.NavOptions.Builder()
+            .setEnterAnim(if (left) R.anim.slide_in_right else R.anim.slide_in_left)
+            .setExitAnim(R.anim.fade_exit)
+            .setPopEnterAnim(R.anim.fade_enter)
+            .setPopExitAnim(0)
+            .build()
+        try {
+            findNavController().navigate(destination, bundleOf(SwipeTargets.SWIPE_BACK to if (left) 1 else -1), options)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return true
+    }
+
     private fun openSwipeRightApp() {
         if (!prefs.swipeRightEnabled) return
+        if (openSwipeStats(left = false)) return
         launchAppOrShortcut(
             appName = prefs.appNameSwipeRight,
             packageName = prefs.appPackageSwipeRight,
@@ -723,6 +749,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     private fun openSwipeLeftApp() {
         if (!prefs.swipeLeftEnabled) return
+        if (openSwipeStats(left = true)) return
         launchAppOrShortcut(
             appName = prefs.appNameSwipeLeft,
             packageName = prefs.appPackageSwipeLeft,

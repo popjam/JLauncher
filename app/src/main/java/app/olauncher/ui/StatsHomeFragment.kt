@@ -116,6 +116,7 @@ class StatsHomeFragment : CardPageFragment() {
         return PullDismissLayout(context).apply {
             addView(page)
             onDismiss = { if (isAdded) findNavController().popBackStack() }
+            sideDismiss = arguments?.getInt(app.olauncher.helper.SwipeTargets.SWIPE_BACK) ?: 0
         }
     }
 

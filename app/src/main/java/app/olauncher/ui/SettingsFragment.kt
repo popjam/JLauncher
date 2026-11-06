@@ -292,8 +292,8 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             R.id.textSizeMinus -> adjustTextSizePreview(-0.1f)
             R.id.textSizePlus -> adjustTextSizePreview(0.1f)
 
-            R.id.swipeLeftApp -> showAppListIfEnabled(Constants.FLAG_SET_SWIPE_LEFT_APP)
-            R.id.swipeRightApp -> showAppListIfEnabled(Constants.FLAG_SET_SWIPE_RIGHT_APP)
+            R.id.swipeLeftApp -> pickSwipeTarget(left = true)
+            R.id.swipeRightApp -> pickSwipeTarget(left = false)
             R.id.swipeDownAction -> binding.swipeDownSelectLayout.visibility = View.VISIBLE
             R.id.notifications -> updateSwipeDownAction(Constants.SwipeDownAction.NOTIFICATIONS)
             R.id.search -> updateSwipeDownAction(Constants.SwipeDownAction.SEARCH)
@@ -827,9 +827,41 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         populateSwipeDownAction()
     }
 
+    /** A swipe opens an app (picked from the list) or one of the stats pages */
+    private fun pickSwipeTarget(left: Boolean) {
+        if (!(if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled)) {
+            requireContext().showToast(getString(R.string.long_press_to_enable))
+            return
+        }
+        val context = requireContext()
+        val targets = app.olauncher.helper.SwipeTargets.Target.values()
+        val current = app.olauncher.helper.SwipeTargets.get(context, left)
+        AlertDialog.Builder(context)
+            .setTitle(if (left) R.string.swipe_left_opens else R.string.swipe_right_opens)
+            .setSingleChoiceItems(targets.map { swipeTargetName(it, null) }.toTypedArray(), targets.indexOf(current)) { dialog, which ->
+                dialog.dismiss()
+                val target = targets[which]
+                if (target == app.olauncher.helper.SwipeTargets.Target.APP)
+                    showAppListIfEnabled(if (left) Constants.FLAG_SET_SWIPE_LEFT_APP else Constants.FLAG_SET_SWIPE_RIGHT_APP)
+                else {
+                    app.olauncher.helper.SwipeTargets.set(context, left, target)
+                    populateSwipeApps()
+                }
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun swipeTargetName(target: app.olauncher.helper.SwipeTargets.Target, appName: String?) = when (target) {
+        app.olauncher.helper.SwipeTargets.Target.APP -> appName ?: getString(R.string.swipe_an_app)
+        app.olauncher.helper.SwipeTargets.Target.STATS -> getString(R.string.stats_title)
+        app.olauncher.helper.SwipeTargets.Target.STATS_HOME -> getString(R.string.swipe_stats_home)
+    }
+
     private fun populateSwipeApps() {
-        binding.swipeLeftApp.text = prefs.appNameSwipeLeft
-        binding.swipeRightApp.text = prefs.appNameSwipeRight
+        val context = requireContext()
+        binding.swipeLeftApp.text = swipeTargetName(app.olauncher.helper.SwipeTargets.get(context, true), prefs.appNameSwipeLeft)
+        binding.swipeRightApp.text = swipeTargetName(app.olauncher.helper.SwipeTargets.get(context, false), prefs.appNameSwipeRight)
         if (!prefs.swipeLeftEnabled)
             binding.swipeLeftApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
         if (!prefs.swipeRightEnabled)
