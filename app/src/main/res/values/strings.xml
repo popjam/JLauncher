@@ -779,4 +779,23 @@
         <item quantity="one">%d note found</item>
         <item quantity="other">%d notes found</item>
     </plurals>
+    <string name="day_open">Whole day ›</string>
+    <string name="day_note_hint">Anything about the day…</string>
+    <string name="day_stats">Stats</string>
+    <string name="day_tap_to_change">tap one to change it</string>
+    <string name="day_clear">Clear</string>
+    <string name="day_top_app">mostly %1$s, %2$s</string>
+    <string name="day_sleep">Sleep the night before</string>
+    <string name="day_places">Where the day went</string>
+    <string name="day_money">Money</string>
+    <string name="day_music">Music</string>
+    <string name="day_mostly">mostly %1$s</string>
+    <string name="day_vibecoding">Vibecoding</string>
+    <string name="day_mac_from">On the MacBook</string>
+    <string name="day_more">And</string>
+    <string name="yesterday">Yesterday</string>
+    <plurals name="day_prompts">
+        <item quantity="one">%d prompt</item>
+        <item quantity="other">%d prompts</item>
+    </plurals>
 </resources>

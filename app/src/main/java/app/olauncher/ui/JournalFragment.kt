@@ -37,7 +37,7 @@ import java.util.Locale
 
 /**
  * Every note written, newest first, each with that day's mood face, and a search across them. Tapping
- * a note edits it. Pulled down or swiped back like the other stats pages.
+ * a note opens its day. Pulled down or swiped back like the other stats pages.
  */
 class JournalFragment : Fragment() {
 
@@ -201,7 +201,8 @@ class JournalFragment : Fragment() {
                         setLineSpacing(0f, 1.15f)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                setOnClickListener { edit(date, day.note.orEmpty()) }
+                // The whole day, where the note can be changed too
+                setOnClickListener { findNavController().navigate(R.id.action_journalFragment_to_dayFragment, DayFragment.args(date)) }
             })
         }
     }
@@ -225,32 +226,5 @@ class JournalFragment : Fragment() {
     private fun dateText(date: LocalDate): String {
         val pattern = if (date.year == LocalDate.now().year) "EEE d MMM" else "EEE d MMM yyyy"
         return date.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-    }
-
-    /** Edits a note in place; emptied, it's removed */
-    private fun edit(date: LocalDate, note: String) {
-        val context = requireContext()
-        val input = EditText(context).apply {
-            setText(note)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            minLines = 3
-            gravity = Gravity.TOP
-        }
-        val box = FrameLayout(context).apply {
-            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
-            addView(input)
-        }
-        AlertDialog.Builder(context)
-            .setTitle(dateText(date))
-            .setView(box)
-            .setPositiveButton(R.string.save) { _, _ ->
-                store.setNote(date, input.text.toString())
-                if (view != null) {
-                    load()
-                    show()
-                }
-            }
-            .setNegativeButton(R.string.close, null)
-            .show()
     }
 }

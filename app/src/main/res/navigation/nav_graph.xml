@@ -92,13 +92,34 @@
     <fragment
         android:id="@+id/journalFragment"
         android:name="app.olauncher.ui.JournalFragment"
-        android:label="JournalFragment" />
+        android:label="JournalFragment">
+        <action
+            android:id="@+id/action_journalFragment_to_dayFragment"
+            app:destination="@id/dayFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+    </fragment>
+
+    <!-- Everything about one day, and changing it -->
+    <fragment
+        android:id="@+id/dayFragment"
+        android:name="app.olauncher.ui.DayFragment"
+        android:label="DayFragment" />
 
     <!-- Every stat together, at the top of the stat list -->
     <fragment
         android:id="@+id/statsHomeFragment"
         android:name="app.olauncher.ui.StatsHomeFragment"
         android:label="StatsHomeFragment">
+        <action
+            android:id="@+id/action_statsHomeFragment_to_dayFragment"
+            app:destination="@id/dayFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
         <action
             android:id="@+id/action_statsHomeFragment_to_statFragment"
             app:destination="@id/statFragment"

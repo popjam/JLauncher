@@ -176,7 +176,6 @@ class StatsHomeFragment : CardPageFragment() {
         comparables = buildComparables()
         insightsCard()
         thisWeekCard()
-        moodLinksCard()
         compareCard()
         streaksCard()
         renderBubble()
@@ -283,6 +282,18 @@ class StatsHomeFragment : CardPageFragment() {
                 setTextColor(ink)
                 setTypeface(null, Typeface.BOLD)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            // Everything about the day, on its own page
+            addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                text = getString(R.string.day_open)
+                textSize = 13f
+                setTextColor(ink)
+                setBackgroundResource(R.drawable.bg_stat_chip)
+                setPadding(12.dpToPx(), 5.dpToPx(), 12.dpToPx(), 5.dpToPx())
+                setOnClickListener {
+                    saveNote()
+                    findNavController().navigate(R.id.action_statsHomeFragment_to_dayFragment, DayFragment.args(selectedDate))
+                }
+            })
             if (selectedDate != today) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = getString(R.string.today)
                 textSize = 13f
@@ -294,7 +305,7 @@ class StatsHomeFragment : CardPageFragment() {
                     selectedDate = today
                     renderDay(container)
                 }
-            })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 8.dpToPx() })
         })
         val chosen = day?.face(MoodStore.MOOD)
         container.addView(LinearLayout(context).apply {
@@ -517,57 +528,6 @@ class StatsHomeFragment : CardPageFragment() {
                     s.text(text, s.width, mid + s.sp(4f), color, s.sp(12f), Paint.Align.RIGHT, bold = true)
                     s.target(i, RectF(0f, y, s.width, y + rowHeight))
                 }
-                s.height = rows.size * rowHeight
-            }
-        }
-        draw()
-        redraws.add { draw() }
-    }
-
-    /**
-     * Mood on days a stat was high against days it was low: the stats it moves with most, a bar either
-     * side of the middle (better on the right).
-     */
-    private fun moodLinksCard() {
-        val mood = scores[MoodStore.MOOD].orEmpty()
-        val card = Card(getString(R.string.mood_links))
-        card.subtitle(getString(R.string.mood_links_note))
-        val good = requireContext().getColor(R.color.moodHappy)
-        val bad = requireContext().getColor(R.color.moodSad)
-        fun draw() {
-            // Every stat, whatever's picked to show: the point is finding the ones that matter
-            val rows = stats.filter { it.id != MoodStore.MOOD && !it.isMedicine }.mapNotNull { stat ->
-                val byDate = scores[stat.id].orEmpty()
-                val high = byDate.filterValues { it >= 4 }.keys.mapNotNull { mood[it] }
-                val low = byDate.filterValues { it <= 2 }.keys.mapNotNull { mood[it] }
-                if (high.size < MIN_LINK_DAYS || low.size < MIN_LINK_DAYS) return@mapNotNull null
-                Triple(stat, (high.average() - low.average()).toFloat(), high.size to low.size)
-            }.sortedByDescending { abs(it.second) }.take(LINKS_SHOWN)
-            if (rows.isEmpty()) return card.showNote(getString(R.string.needs_more_days))
-            card.describe = { key ->
-                val (stat, diff, counts) = rows[key as Int]
-                listOf(stat.name, getString(R.string.links_detail_high, decimal(mood.filterKeys { scores[stat.id].orEmpty()[it]?.let { s -> s >= 4 } == true }.values.average().toFloat()), counts.first),
-                    getString(R.string.links_detail_low, decimal(mood.filterKeys { scores[stat.id].orEmpty()[it]?.let { s -> s <= 2 } == true }.values.average().toFloat()), counts.second),
-                    getString(R.string.stat_label, getString(R.string.difference), String.format(Locale.getDefault(), "%+.1f", diff))).joinToString("\n")
-            }
-            val most = rows.maxOf { abs(it.second) }.coerceAtLeast(0.5f)
-            card.draw { s ->
-                val rowHeight = s.dp(30f)
-                val nameSize = s.sp(13.5f)
-                val mid = s.width * 0.62f
-                val half = minOf(s.width - mid - s.dp(40f), mid - s.width * 0.42f)
-                rows.forEachIndexed { i, (stat, diff, _) ->
-                    val y = i * rowHeight
-                    val cy = y + rowHeight / 2
-                    s.icon(StatIcons.forStat(stat), 0f, cy - s.dp(7f), s.dp(14f), stat.color)
-                    s.text(stat.name, s.dp(24f), cy + nameSize * 0.35f, faint(220), nameSize, Paint.Align.LEFT)
-                    val length = abs(diff) / most * half
-                    if (diff >= 0) s.rect(mid, cy - s.dp(6f), mid + length, cy + s.dp(6f), good, s.dp(4f))
-                    else s.rect(mid - length, cy - s.dp(6f), mid, cy + s.dp(6f), bad, s.dp(4f))
-                    s.text(String.format(Locale.getDefault(), "%+.1f", diff), s.width, cy + s.sp(4f), faint(200), s.sp(12f), Paint.Align.RIGHT)
-                    s.target(i, RectF(0f, y, s.width, y + rowHeight))
-                }
-                s.line(mid, 0f, mid, rows.size * rowHeight, faint(60), s.dp(1.5f))
                 s.height = rows.size * rowHeight
             }
         }
