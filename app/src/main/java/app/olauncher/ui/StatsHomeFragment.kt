@@ -561,7 +561,7 @@ class StatsHomeFragment : CardPageFragment() {
         val bad = requireContext().getColor(R.color.moodSad)
         fun draw() {
             val today = LocalDate.now()
-            val monday = today.with(DayOfWeek.MONDAY)
+            val monday = app.olauncher.helper.Week.start(today)
             val rows = shown.filter { !it.isMedicine && it.kind != app.olauncher.helper.StatKind.WORK }.mapNotNull { stat ->
                 val byDate = scores[stat.id].orEmpty()
                 val now = byDate.filterKeys { it >= monday && it <= today }.values.takeIf { it.isNotEmpty() }?.average() ?: return@mapNotNull null
@@ -1279,9 +1279,9 @@ class StatsHomeFragment : CardPageFragment() {
     /** Last week, when it was your best for something in a good while */
     private fun recordInsights(outcomes: List<Measured>): List<Insight> {
         val today = LocalDate.now()
-        val lastWeek = today.with(DayOfWeek.MONDAY).minusWeeks(1)
+        val lastWeek = app.olauncher.helper.Week.start(today).minusWeeks(1)
         return outcomes.mapNotNull { y ->
-            val weeks = y.values.entries.groupBy({ it.key.with(DayOfWeek.MONDAY) }, { it.value })
+            val weeks = y.values.entries.groupBy({ app.olauncher.helper.Week.start(it.key) }, { it.value })
                 .filterValues { it.size >= RECORD_WEEK_DAYS }.mapValues { average(it.value) }
             val last = weeks[lastWeek] ?: return@mapNotNull null
             val earlier = weeks.filterKeys { it < lastWeek }

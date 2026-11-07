@@ -73,6 +73,11 @@ import java.util.Locale
  */
 class SettingsFragment : CardPageFragment() {
 
+    companion object {
+        /** Argument: open at the Tracking section */
+        const val TO_TRACKING = "toTracking"
+    }
+
     private lateinit var prefs: Prefs
     private lateinit var viewModel: MainViewModel
     private lateinit var cardList: LinearLayout
@@ -189,6 +194,13 @@ class SettingsFragment : CardPageFragment() {
             orientation = LinearLayout.VERTICAL
             updatePadding(top = 48.dpToPx())
             addView(pageHeader(context, StatIcons.GEAR, getString(R.string.settings)) { findNavController().popBackStack() })
+            addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                setText(R.string.settings_hold_hint)
+                textSize = 13f
+                setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+                alpha = 0.45f
+                setPadding(28.dpToPx(), 0, 28.dpToPx(), 12.dpToPx())
+            })
             addView(cardList)
         }
         val page = FrameLayout(context).apply {
@@ -222,8 +234,13 @@ class SettingsFragment : CardPageFragment() {
         super.onPause()
     }
 
+    /** Scrolls to the Tracking section once, when opened from a problem on the stat list */
+    private var toTracking = false
+
     private fun render() {
         if (!isAdded) return
+        toTracking = toTracking || arguments?.getBoolean(TO_TRACKING) == true
+        arguments?.remove(TO_TRACKING)
         cardList.removeAllViews()
         homeSection()
         gesturesSection()
@@ -336,6 +353,7 @@ class SettingsFragment : CardPageFragment() {
         val themes = listOf(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.MODE_NIGHT_NO, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         val themeNames = listOf(R.string.dark, R.string.light, R.string.system_default).map { getString(it) }
         val screenTime = context.appUsagePermissionGranted()
+        val units = listOf(getString(R.string.units_auto), "°C", "°F")
         val screenTimeShown = screenTime && Arrangement.SCREEN_TIME !in Arrangement.hidden(context, Arrangement.HOME)
         card.body(
             row(card, getString(R.string.apps_on_home_screen), prefs.homeAppsNum.toString(), R.string.info_home_apps) {
@@ -367,10 +385,9 @@ class SettingsFragment : CardPageFragment() {
                 viewModel.updateHomeAlignment(prefs.homeAlignment)
                 render()
             },
-            row(card, getString(R.string.text_size), String.format(Locale.getDefault(), "%.1f", prefs.textSizeScale), R.string.info_text_size) {
-                val max = if (isTablet(context)) 2.0f else 1.5f
-                val sizes = generateSequence(0.5f) { Math.round((it + 0.1f) * 10) / 10f }.takeWhile { it <= max + 0.01f }.toList()
-                choose(R.string.text_size, sizes.map { String.format(Locale.getDefault(), "%.1f", it) }, sizes.indexOfFirst { Math.abs(it - prefs.textSizeScale) < 0.05f }) {
+            row(card, getString(R.string.text_size), sizeName(prefs.textSizeScale), R.string.info_text_size) {
+                val sizes = TEXT_SIZES.map { it.first } + if (isTablet(context)) listOf(1.6f, 2.0f) else emptyList()
+                choose(R.string.text_size, sizes.map { sizeName(it) }, sizes.indexOfFirst { Math.abs(it - prefs.textSizeScale) < 0.05f }) {
                     if (Math.abs(sizes[it] - prefs.textSizeScale) < 0.05f) return@choose
                     prefs.textSizeScale = sizes[it]
                     requireActivity().recreate()
@@ -396,6 +413,12 @@ class SettingsFragment : CardPageFragment() {
                 render()
             },
             row(card, getString(R.string.weather), onOff(Weather.isEnabled(context)), R.string.info_weather) { toggleWeather() },
+            if (Weather.isEnabled(context)) row(card, getString(R.string.temperature), units[Weather.unit(context)], R.string.info_temperature, level = 1) {
+                choose(R.string.temperature, units, Weather.unit(context)) {
+                    Weather.setUnit(context, it)
+                    viewModel.getWeather(force = true)
+                }
+            } else null,
             if (screenTimeShown && Weather.isEnabled(context)) row(card, getString(R.string.first_beside_clock), getString(
                 if (Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS).first() == Arrangement.WEATHER) R.string.weather else R.string.screen_time),
                 R.string.info_beside_clock, level = 1) {
@@ -412,6 +435,13 @@ class SettingsFragment : CardPageFragment() {
             },
         )
     }
+
+    /** A text size by name, or its number when it's one of its own */
+    private fun sizeName(scale: Float) = TEXT_SIZES.firstOrNull { Math.abs(it.first - scale) < 0.05f }?.let { getString(it.second) }
+        ?: String.format(Locale.getDefault(), "%.1f", scale)
+
+    private val TEXT_SIZES = listOf(0.8f to R.string.size_smallest, 0.9f to R.string.size_small, 1.0f to R.string.size_normal,
+        1.15f to R.string.size_large, 1.3f to R.string.size_larger)
 
     private fun showStatusBar(show: Boolean) {
         val window = requireActivity().window
@@ -692,6 +722,10 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext()
         val items = Tracking.items(context)
         val card = Card(getString(R.string.tracking))
+        if (toTracking) {
+            toTracking = false
+            card.root.post { (cardList.parent?.parent as? ScrollView)?.smoothScrollTo(0, card.root.top) }
+        }
         val problems = items.count { !it.ok }
         card.subtitle(if (problems == 0) getString(R.string.tracking_all_ok) else resources.getQuantityString(R.plurals.tracking_problems, problems, problems))
         val status = items.map { item ->
@@ -805,6 +839,12 @@ class SettingsFragment : CardPageFragment() {
         val card = Card(getString(R.string.stats_title))
         val newOnHome = StatsHomeFragment.showsNewStats(context)
         card.body(
+            row(card, getString(R.string.week_starts), app.olauncher.helper.Week.first.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()),
+                R.string.info_week_starts) {
+                val days = listOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.SUNDAY, java.time.DayOfWeek.SATURDAY)
+                choose(R.string.week_starts, days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) },
+                    days.indexOf(app.olauncher.helper.Week.first)) { app.olauncher.helper.Week.set(context, days[it]) }
+            },
             row(card, getString(R.string.settings_new_on_home), onOff(newOnHome), R.string.info_new_on_home) {
                 StatsHomeFragment.setShowsNewStats(context, !newOnHome)
                 render()

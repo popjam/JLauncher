@@ -278,7 +278,19 @@ object Weather {
      * the country of the SIM or mobile network. The phone's language is no guide: plenty of phones
      * outside the US are set to English (United States).
      */
+    /** 0 follows the phone's region, 1 is °C, 2 is °F */
+    fun unit(context: Context) = context.getSharedPreferences(UNITS, Context.MODE_PRIVATE).getInt(UNIT, 0)
+
+    fun setUnit(context: Context, unit: Int) = context.getSharedPreferences(UNITS, Context.MODE_PRIVATE).edit().putInt(UNIT, unit).apply()
+
+    private const val UNITS = "units"
+    private const val UNIT = "temperature"
+
     private fun useFahrenheit(context: Context): Boolean {
+        when (unit(context)) {
+            1 -> return false
+            2 -> return true
+        }
         when (LocalePreferences.getTemperatureUnit(false)) {
             LocalePreferences.TemperatureUnit.FAHRENHEIT -> return true
             LocalePreferences.TemperatureUnit.CELSIUS, LocalePreferences.TemperatureUnit.KELVIN -> return false

@@ -554,13 +554,13 @@ class StatPageFragment : CardPageFragment() {
                 val cell = minOf(s.width / 7.4f, s.dp(48f))
                 val left = (s.width - cell * 7) / 2
                 val gap = s.dp(3f)
-                var day = DayOfWeek.MONDAY
+                var day = app.olauncher.helper.Week.first
                 repeat(7) { i ->
                     s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, s.sp(12f), faint(140), s.sp(12f))
                     day = day.plus(1)
                 }
                 val gridTop = s.dp(24f)
-                val lead = days.first().dayOfWeek.value - 1
+                val lead = app.olauncher.helper.Week.column(days.first())
                 val corner = s.dp(9f)
                 days.forEachIndexed { i, date ->
                     val place = i + lead
@@ -803,7 +803,7 @@ class StatPageFragment : CardPageFragment() {
                             val ym = YearMonth.from(today).minusMonths(back.toLong())
                             val left = i * (width + gap)
                             s.text(ym.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), left + s.dp(1f), s.sp(12f), faint(170), s.sp(12f), Paint.Align.LEFT)
-                            val lead = ym.atDay(1).dayOfWeek.value - 1
+                            val lead = app.olauncher.helper.Week.column(ym.atDay(1))
                             for (d in 1..ym.lengthOfMonth()) {
                                 val date = ym.atDay(d)
                                 val place = lead + d - 1
@@ -916,7 +916,9 @@ class StatPageFragment : CardPageFragment() {
         val byDay = DayOfWeek.values().associateWith { mutableListOf<Float>() }
         dates.forEach { date -> valueOf(stat, date)?.let { byDay.getValue(date.dayOfWeek).add(it) } }
         if (byDay.values.sumOf { it.size } < MIN_WEEKDAY_DAYS) return card.showNote(getString(R.string.needs_more_days))
-        val averages = DayOfWeek.values().map { day -> byDay.getValue(day).takeIf { it.isNotEmpty() }?.average()?.toFloat() }
+        // From the day weeks start on
+        val order = (0 until 7).map { app.olauncher.helper.Week.first.plus(it.toLong()) }
+        val averages = order.map { day -> byDay.getValue(day).takeIf { it.isNotEmpty() }?.average()?.toFloat() }
         val max = axisMax(averages.filterNotNull().maxOrNull())
         card.draw { s ->
             val column = s.width / 7
@@ -936,7 +938,7 @@ class StatPageFragment : CardPageFragment() {
                     }
                     s.text(label, x + barWidth / 2, barTop - s.dp(6f), faint(220), s.sp(11.5f))
                 }
-                s.text(DayOfWeek.of(i + 1).getDisplayName(TextStyle.NARROW, Locale.getDefault()), x + barWidth / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
+                s.text(order[i].getDisplayName(TextStyle.NARROW, Locale.getDefault()), x + barWidth / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
             }
             s.height = bottom + s.dp(24f)
         }
@@ -1015,7 +1017,7 @@ class StatPageFragment : CardPageFragment() {
 
     /** Weeks count from 1970's first Monday-starting week, months from year 0, and years are years. */
     internal fun periodOf(period: Period, date: LocalDate): Int = when (period) {
-        Period.WEEKS -> (date.with(DayOfWeek.MONDAY).toEpochDay() / 7).toInt()
+        Period.WEEKS -> (app.olauncher.helper.Week.start(date).toEpochDay() / 7).toInt()
         Period.MONTHS -> date.year * 12 + date.monthValue - 1
         Period.YEARS -> date.year
     }

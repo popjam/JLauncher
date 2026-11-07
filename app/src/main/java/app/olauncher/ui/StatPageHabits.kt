@@ -25,13 +25,13 @@ internal fun StatPageFragment.workoutsCard(title: Int, iconName: String) {
             val cell = minOf(s.width / 7.4f, s.dp(48f))
             val left = (s.width - cell * 7) / 2
             val gap = s.dp(3f)
-            var day = DayOfWeek.MONDAY
+            var day = app.olauncher.helper.Week.first
             repeat(7) { i ->
                 s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, s.sp(12f), faint(140), s.sp(12f))
                 day = day.plus(1)
             }
             val gridTop = s.dp(24f)
-            val lead = days.first().dayOfWeek.value - 1
+            val lead = app.olauncher.helper.Week.column(days.first())
             days.forEachIndexed { i, date ->
                 val place = i + lead
                 val x = left + place % 7 * cell + gap

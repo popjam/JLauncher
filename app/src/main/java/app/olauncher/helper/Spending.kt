@@ -267,7 +267,7 @@ object Spending {
     fun setCarryOver(context: Context, on: Boolean) {
         if (on == carryOver(context)) return
         prefs(context).edit().putBoolean(CARRY, on)
-            .putString(CARRY_SINCE, LocalDate.now().with(DayOfWeek.MONDAY).toString()).apply()
+            .putString(CARRY_SINCE, app.olauncher.helper.Week.start(LocalDate.now()).toString()).apply()
     }
 
     /** Whether what's left this week shows on the home screen, under the mood */
@@ -306,7 +306,7 @@ object Spending {
     fun thisWeek(context: Context): Pair<Long, Long>? {
         if (weekLimitCents(context) <= 0) return null
         val daily = dailyCents(context)
-        val monday = LocalDate.now().with(DayOfWeek.MONDAY)
+        val monday = app.olauncher.helper.Week.start(LocalDate.now())
         val allowance = allowanceCents(context, monday, daily)
         return allowance to allowance - weekSpentCents(daily, monday)
     }
@@ -376,6 +376,7 @@ class SpendingListener : NotificationListenerService() {
 
     // Catches purchases notified while it wasn't connected, if they're still showing
     override fun onListenerConnected() {
+        Week.load(applicationContext)
         Tracking.listenerConnected(applicationContext)
         runCatching { activeNotifications?.forEach { Spending.record(applicationContext, it) } }
         music?.stop()

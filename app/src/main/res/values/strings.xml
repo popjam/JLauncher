@@ -1023,4 +1023,33 @@
     <string name="tutorial_stats">A quick check-in each evening, and stats that fill themselves in: screen time, sleep, places and more.\n\nHold any day to see all of it.</string>
     <string name="tutorial_settings_title">Hold home for settings</string>
     <string name="tutorial_settings">Everything can be changed there. Hold any setting to see what it does.</string>
+    <string name="new_kind_stat">Something to rate</string>
+    <string name="new_kind_medicine">A medicine</string>
+    <string name="medicine_name_hint">Name</string>
+    <string name="medicine_doses_hint">Doses, like 10mg, 20mg</string>
+    <string name="medicine_doses_note">Leave doses empty to just mark it taken or skipped. Up to four.</string>
+    <string name="medicine_added">%1$s added to the check-in</string>
+    <string name="medicine_skipped">Skipped</string>
+    <string name="medicine_taken">Taken</string>
+    <string name="medicine_more">More</string>
+    <string name="medicine_question">Did you take %1$s?</string>
+    <string name="medicine_phrase">You took %1$s of %2$s.</string>
+    <string name="medicine_phrase_taken">You took %1$s.</string>
+    <string name="medicine_phrase_skipped">You skipped %1$s.</string>
+    <string name="settings_hold_hint">Hold any setting to see what it does</string>
+    <plurals name="tracking_need_look">
+        <item quantity="one">%1$s needs a look</item>
+        <item quantity="other">%1$s need a look</item>
+    </plurals>
+    <string name="temperature">Temperature</string>
+    <string name="info_temperature">Degrees in °C or °F, or whatever your region uses.</string>
+    <string name="units_auto">Automatic</string>
+    <string name="week_starts">Week starts on</string>
+    <string name="info_week_starts">For the weekly spending limit, weekly stats and calendars.</string>
+    <string name="size_smallest">Smallest</string>
+    <string name="size_small">Small</string>
+    <string name="size_normal">Normal</string>
+    <string name="size_large">Large</string>
+    <string name="size_larger">Larger</string>
+    <string name="list_and">%1$s and %2$s</string>
 </resources>

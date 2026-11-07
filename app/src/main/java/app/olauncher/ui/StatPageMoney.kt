@@ -176,8 +176,8 @@ internal fun StatPageFragment.weekLimitCard() {
         return
     }
     val today = LocalDate.now()
-    val monday = today.with(DayOfWeek.MONDAY)
-    val first = maxOf(spent.keys.minOrNull()?.with(DayOfWeek.MONDAY) ?: monday, monday.minusWeeks(LIMIT_WEEKS - 1L))
+    val monday = app.olauncher.helper.Week.start(today)
+    val first = maxOf(spent.keys.minOrNull()?.let { app.olauncher.helper.Week.start(it) } ?: monday, monday.minusWeeks(LIMIT_WEEKS - 1L))
     val weeks = generateSequence(first) { it.plusWeeks(1) }.takeWhile { it <= monday }.toList()
     val daily = Spending.dailyCents(context)
     val weekCents = weeks.map { Spending.weekSpentCents(daily, it) }
@@ -338,13 +338,13 @@ internal fun StatPageFragment.moneyCalendarCard() {
             val cell = minOf(s.width / 7.4f, s.dp(48f))
             val left = (s.width - cell * 7) / 2
             val gap = s.dp(3f)
-            var day = DayOfWeek.MONDAY
+            var day = app.olauncher.helper.Week.first
             repeat(7) { i ->
                 s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, s.sp(12f), faint(140), s.sp(12f))
                 day = day.plus(1)
             }
             val gridTop = s.dp(24f)
-            val lead = days.first().dayOfWeek.value - 1
+            val lead = app.olauncher.helper.Week.column(days.first())
             val corner = s.dp(9f)
             days.forEachIndexed { i, date ->
                 val place = i + lead

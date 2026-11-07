@@ -277,9 +277,9 @@ internal fun StatPageFragment.pornCard() {
     val today = LocalDate.now()
     val watched = { date: LocalDate -> (minutes[date] ?: 0) >= PORN_MIN_MINUTES }
     val tracked = { date: LocalDate -> date >= (days.keys.minOrNull() ?: today) }
-    val week = (0..6).map { today.with(DayOfWeek.MONDAY).plusDays(it.toLong()) }.filter { it <= today }
+    val week = (0..6).map { app.olauncher.helper.Week.start(today).plusDays(it.toLong()) }.filter { it <= today }
     val color = stat.themeColor
-    val monday = today.with(DayOfWeek.MONDAY)
+    val monday = app.olauncher.helper.Week.start(today)
     val weeks = (PORN_WEEKS - 1 downTo 0).map { monday.minusWeeks(it.toLong()) }
     val weekMinutes = weeks.map { start -> (0..6).sumOf { minutes[start.plusDays(it.toLong())] ?: 0 } }
     card.headline(duration(week.sumOf { minutes[it] ?: 0 } * 60_000L), getString(R.string.porn_time_this_week))
@@ -320,7 +320,7 @@ internal fun StatPageFragment.pornCard() {
         val cell = minOf(s.width / 7, s.dp(30f))
         val left = (s.width - cell * 7) / 2
         val radius = cell * 0.28f
-        var day = DayOfWeek.MONDAY
+        var day = app.olauncher.helper.Week.first
         repeat(7) { i ->
             s.text(day.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, gridTop, faint(140), s.sp(11f))
             day = day.plus(1)

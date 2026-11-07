@@ -96,13 +96,13 @@ internal fun StatPageFragment.socialHomesCard(days: Map<LocalDate, Social.Day>) 
             val cell = minOf(sc.width / 7.4f, sc.dp(48f))
             val left = (sc.width - cell * 7) / 2
             val gap = sc.dp(3f)
-            var weekday = DayOfWeek.MONDAY
+            var weekday = app.olauncher.helper.Week.first
             repeat(7) { i ->
                 sc.text(weekday.getDisplayName(TextStyle.NARROW, Locale.getDefault()), left + i * cell + cell / 2, sc.sp(12f), faint(140), sc.sp(12f))
                 weekday = weekday.plus(1)
             }
             val gridTop = sc.dp(24f)
-            val lead = dates.first().dayOfWeek.value - 1
+            val lead = app.olauncher.helper.Week.column(dates.first())
             dates.forEachIndexed { i, date ->
                 val place = i + lead
                 val x = left + place % 7 * cell + gap
@@ -419,7 +419,7 @@ internal fun StatPageFragment.workCard() {
     val card = Card(getString(R.string.this_week))
     val days = Social.days(context)
     val today = LocalDate.now()
-    val monday = today.with(DayOfWeek.MONDAY)
+    val monday = app.olauncher.helper.Week.start(today)
     val week = days.filterKeys { it >= monday }
     val worked = week.values.count { it.workMs >= 60 * 60_000L }
     card.headline(resources.getQuantityString(R.plurals.work_days_count, worked, worked), getString(R.string.work_hours_week, duration(week.values.sumOf { it.workMs })))
@@ -649,9 +649,9 @@ internal fun StatPageFragment.socialMoodCard(days: Map<LocalDate, Social.Day>) {
 internal fun StatPageFragment.workTrendCard() {
     val card = Card(getString(R.string.stat_trend))
     val today = LocalDate.now()
-    val monday = today.with(DayOfWeek.MONDAY)
+    val monday = app.olauncher.helper.Week.start(today)
     val first = firstDate ?: return card.showNote(getString(R.string.no_data))
-    val count = minOf(WORK_TREND_WEEKS.toLong(), ChronoUnit.WEEKS.between(first.with(DayOfWeek.MONDAY), monday) + 1).toInt()
+    val count = minOf(WORK_TREND_WEEKS.toLong(), ChronoUnit.WEEKS.between(app.olauncher.helper.Week.start(first), monday) + 1).toInt()
     val weeks = (count - 1 downTo 0).map { monday.minusWeeks(it.toLong()) }
     val social = Social.days(requireContext())
     fun daysIn(start: LocalDate) = (0..6L).map { start.plusDays(it) }.filter { it <= today }

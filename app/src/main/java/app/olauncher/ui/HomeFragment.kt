@@ -93,8 +93,19 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         initClickListeners()
     }
 
+    /** Keeps the battery in the date line current while home shows */
+    private val batteryChanged = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: android.content.Intent) {
+            if (_binding != null) populateDateTime()
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        runCatching {
+            androidx.core.content.ContextCompat.registerReceiver(requireContext(), batteryChanged,
+                android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
         populateHomeScreen(false)
         viewModel.isOlauncherDefault()
         if (prefs.showStatusBar) showStatusBar()
@@ -104,6 +115,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     }
 
     override fun onPause() {
+        runCatching { requireContext().unregisterReceiver(batteryChanged) }
         handler.removeCallbacks(midnightRefresh)
         handler.removeCallbacks(moodPromptCheck)
         super.onPause()
@@ -193,25 +205,13 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             R.id.homeApp6 -> showAppList(Constants.FLAG_SET_HOME_APP_6, prefs.appName6.isNotEmpty(), true)
             R.id.homeApp7 -> showAppList(Constants.FLAG_SET_HOME_APP_7, prefs.appName7.isNotEmpty(), true)
             R.id.homeApp8 -> showAppList(Constants.FLAG_SET_HOME_APP_8, prefs.appName8.isNotEmpty(), true)
-            R.id.clock -> {
-                showAppList(Constants.FLAG_SET_CLOCK_APP)
-                prefs.clockAppPackage = ""
-                prefs.clockAppClassName = ""
-                prefs.clockAppUser = ""
-            }
+            // Picking one replaces the old; backing out keeps it
+            R.id.clock -> showAppList(Constants.FLAG_SET_CLOCK_APP)
 
-            R.id.date -> {
-                showAppList(Constants.FLAG_SET_CALENDAR_APP)
-                prefs.calendarAppPackage = ""
-                prefs.calendarAppClassName = ""
-                prefs.calendarAppUser = ""
-            }
+            R.id.date -> showAppList(Constants.FLAG_SET_CALENDAR_APP)
 
             R.id.tvScreenTime -> {
                 showAppList(Constants.FLAG_SET_SCREEN_TIME_APP)
-                prefs.screenTimeAppPackage = ""
-                prefs.screenTimeAppClassName = ""
-                prefs.screenTimeAppUser = ""
             }
 
             R.id.setDefaultLauncher -> {
@@ -399,7 +399,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.moneyLeft.text = PixelMoneyView.figure(left)
         binding.moneyLeft.color = PixelMoneyView.colorFor(context, left, allowance)
         val today = LocalDate.now()
-        val days = java.time.temporal.ChronoUnit.DAYS.between(today, today.with(java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.MONDAY))).toInt()
+        val days = java.time.temporal.ChronoUnit.DAYS.between(today, today.with(java.time.temporal.TemporalAdjusters.next(app.olauncher.helper.Week.first))).toInt()
         binding.tvMoneyDays.text = resources.getQuantityString(R.plurals.days_left, days, days)
         binding.tvMoneyDays.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size) * 0.88f)
         binding.moneyWidget.contentDescription = getString(R.string.money_left_description, PixelMoneyView.figure(left), binding.tvMoneyDays.text)

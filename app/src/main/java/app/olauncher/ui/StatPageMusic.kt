@@ -109,7 +109,7 @@ internal fun StatPageFragment.musicCard(): Boolean {
         return false
     }
     val first = days.keys.min()
-    val monday = today.with(DayOfWeek.MONDAY)
+    val monday = app.olauncher.helper.Week.start(today)
     val week = days.filterKeys { it >= monday }.values.sumOf { it.ms }
     val span = minOf(MUSIC_DAYS.toLong(), ChronoUnit.DAYS.between(first, today) + 1)
     val usual = (0 until span).sumOf { days[today.minusDays(it)]?.ms ?: 0L } / span

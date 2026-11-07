@@ -75,7 +75,13 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         // What's stopped filling stats in, if anything
         val problems = Tracking.problems(context)
         if (problems.isNotEmpty()) rows.addView(TextView(context, null, 0, R.style.TextSmall).apply {
-            text = problems.joinToString("\n") { "⚠  " + it.title + " · " + it.detail }
+            // One short line; Settings says what's wrong with each
+            text = resources.getQuantityString(R.plurals.tracking_need_look, problems.size, problems.map { it.title }.let { names ->
+                if (names.size < 2) names.joinToString() else getString(R.string.list_and, names.dropLast(1).joinToString(", "), names.last())
+            })
+            setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.WARNING, 0xFFFFB300.toInt(), 16.dpToPx()), null, null, null)
+            compoundDrawablePadding = 10.dpToPx()
+            gravity = Gravity.CENTER_VERTICAL
             textSize = 13f
             setTextColor(context.getColorFromAttr(R.attr.primaryColor))
             setLineSpacing(0f, 1.2f)
@@ -84,7 +90,7 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
                 setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(0xFFFFB300.toInt(), 48))
             }
             setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 12.dpToPx())
-            setOnClickListener { findNavController().navigate(R.id.action_global_statsSettingsFragment) }
+            setOnClickListener { findNavController().navigate(R.id.action_global_statsSettingsFragment, bundleOf(SettingsFragment.TO_TRACKING to true)) }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(20.dpToPx(), 0, 20.dpToPx(), 12.dpToPx())
         })
@@ -109,7 +115,7 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
             findNavController().navigate(R.id.action_global_statsSettingsFragment)
         })
         rows.addView(row(getString(R.string.new_stat), ADD, context.getColorFromAttr(R.attr.primaryColor), null, faded = true) {
-            StatEditor.show(context, store, null) { if (view != null) build() }
+            NewMedicine.pick(context, store) { if (view != null) build() }
         })
     }
 
