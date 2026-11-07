@@ -1,78 +1,86 @@
 package app.olauncher.ui
 
+import android.app.TimePickerDialog
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
-import android.provider.Settings
-import android.app.TimePickerDialog
-import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.Settings
 import android.text.InputType
 import android.text.format.DateFormat
-import androidx.activity.result.contract.ActivityResultContracts
-import app.olauncher.data.BackupManager
-import app.olauncher.data.MoodStore
-import org.json.JSONObject
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
-import androidx.core.view.isVisible
-import androidx.fragment.app.Fragment
+import androidx.core.view.updatePadding
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import app.olauncher.BuildConfig
 import app.olauncher.MainViewModel
 import app.olauncher.R
+import app.olauncher.data.BackupManager
 import app.olauncher.data.Constants
+import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
-import app.olauncher.databinding.FragmentSettingsBinding
 import app.olauncher.helper.AppPause
-import app.olauncher.helper.animateAlpha
+import app.olauncher.helper.AutoStats
+import app.olauncher.helper.PasswordHelper
+import app.olauncher.helper.People
+import app.olauncher.helper.Places
+import app.olauncher.helper.Social
+import app.olauncher.helper.Spending
+import app.olauncher.helper.SwipeTargets
+import app.olauncher.helper.Tracking
+import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
+import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.isAccessServiceEnabled
-import app.olauncher.helper.isDarkThemeOn
-import app.olauncher.helper.isEinkDisplay
-import app.olauncher.helper.PasswordHelper
 import app.olauncher.helper.isOlauncherDefault
 import app.olauncher.helper.isPackageInstalled
 import app.olauncher.helper.isTablet
 import app.olauncher.helper.openAppInfo
-import app.olauncher.helper.openUrl
-import app.olauncher.helper.rateApp
-import app.olauncher.helper.setPlainWallpaper
-import app.olauncher.helper.shareApp
 import app.olauncher.helper.showToast
-import app.olauncher.helper.Weather
 import app.olauncher.listener.DeviceAdmin
+import org.json.JSONObject
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListener {
+/**
+ * Every setting on one page, in sections: the home screen, gestures, apps, the daily check-in, what's
+ * tracked, the stats, lockdown, backup and about. A setting's own options only show (indented) while
+ * it's on, and holding any setting explains it in a line or two.
+ */
+class SettingsFragment : CardPageFragment() {
 
     private lateinit var prefs: Prefs
     private lateinit var viewModel: MainViewModel
-    private lateinit var deviceManager: DevicePolicyManager
-    private lateinit var componentName: ComponentName
-
-    private var _binding: FragmentSettingsBinding? = null
-    private val binding get() = _binding!!
-    private val showPentastic = System.currentTimeMillis() % 2 == 0L
-    private var recoveryTapCount = 0
+    private lateinit var cardList: LinearLayout
+    override val cards: LinearLayout get() = cardList
     private val moodStore by lazy { MoodStore(requireContext()) }
+    private var recoveryTaps = 0
+    private var info: PopupWindow? = null
+
+    // --- Things picked or allowed elsewhere ---
 
     private val requestLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -80,11 +88,16 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
             viewModel.getWeather(force = true)
         } else {
             requireContext().showToast(getString(R.string.weather_location_denied))
-            // Android won't ask again, so the permission has to be granted from app info
             if (!shouldShowRequestPermissionRationale(android.Manifest.permission.ACCESS_COARSE_LOCATION))
                 openAppInfo(requireContext(), Process.myUserHandle(), BuildConfig.APPLICATION_ID)
         }
-        populateWeatherOnOff()
+        render()
+    }
+
+    private val askCallLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        val context = requireContext().applicationContext
+        Thread { runCatching { People.refresh(context) } }.start()
+        render()
     }
 
     private val exportBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -96,930 +109,903 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     private val importBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         val backup = BackupManager.read(requireContext(), uri)
-        if (backup == null) requireContext().showToast(getString(R.string.import_failed))
-        else restoreBackup(backup)
+        if (backup == null) requireContext().showToast(getString(R.string.import_failed)) else restoreBackup(backup)
     }
 
     private val pickBackupFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri ?: return@registerForActivityResult
-        try {
-            requireContext().contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
+        runCatching {
+            requireContext().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
-        val linkFolder = {
+        val link = {
             BackupManager.setBackupFolder(requireContext(), uri)
-            populateBackupSettings()
-        showRestoreSummary()
+            render()
+            showRestoreSummary()
         }
-        val existing = BackupManager.findBackupInFolder(requireContext(), uri)
-            ?.let { BackupManager.read(requireContext(), it) }
+        val existing = BackupManager.findBackupInFolder(requireContext(), uri)?.let { BackupManager.read(requireContext(), it) }
         if (existing == null) {
-            linkFolder()
+            link()
             requireContext().showToast(getString(R.string.backup_folder_set))
             return@registerForActivityResult
         }
-        // Don't silently overwrite either side: ask which one to keep
+        // Don't silently overwrite either side: ask which to keep
         val savedAt = BackupManager.savedAt(existing)?.let {
-            "\n\n" + getString(
-                R.string.backup_saved_on,
-                java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(it)
-            )
+            "\n\n" + getString(R.string.backup_saved_on, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(it))
         }.orEmpty()
         AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.backup_folder))
+            .setTitle(R.string.backup_folder)
             .setMessage(getString(R.string.backup_found_message) + savedAt)
             .setCancelable(false)
-            .setPositiveButton(getString(R.string.restore)) { _, _ -> restoreBackup(existing, linkFolder) }
-            .setNegativeButton(getString(R.string.keep_current)) { _, _ ->
-                linkFolder()
+            .setPositiveButton(R.string.restore) { _, _ -> restoreBackup(existing, link) }
+            .setNegativeButton(R.string.keep_current) { _, _ ->
+                link()
                 requireContext().showToast(getString(R.string.backup_folder_set))
             }
             .show()
     }
 
+    private val createReport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        uri ?: return@registerForActivityResult
+        val context = requireContext().applicationContext
+        val days = reportDays
+        Thread {
+            val ok = runCatching { Report.write(context, uri, days) }.isSuccess
+            view?.post { if (isAdded) context.showToast(getString(if (ok) R.string.report_done else R.string.report_failed)) }
+        }.start()
+    }
+    private var reportDays = 30
+
+    // --- The page ---
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        _binding = FragmentSettingsBinding.inflate(inflater, container, false)
-        return binding.root
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        prefs = Prefs(requireContext())
-        viewModel = activity?.run {
-            ViewModelProvider(this)[MainViewModel::class.java]
-        } ?: throw Exception("Invalid Activity")
-        viewModel.isOlauncherDefault()
-
-        deviceManager = requireContext().getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        componentName = ComponentName(requireContext(), DeviceAdmin::class.java)
-        checkAdminPermission()
-
-        binding.homeAppsNum.text = prefs.homeAppsNum.toString()
-        binding.homePages.text = prefs.homePages.toString()
-        populateProMessage()
-        populateKeyboardText()
-        populateScreenTimeOnOff()
-        populateWeatherOnOff()
-        populateLockSettings()
-        populateHomeButtonRecents()
-        populateWallpaperText()
-        populateAppThemeText()
-        populateTextSize()
-        populateAlignment()
-        populateStatusBar()
-        populateDateTime()
-        populateSwipeApps()
-        populateSwipeDownAction()
-        populateLockdownSettings()
-        populateWellnessSettings()
-        populateMoodSettings()
-        populateBackupSettings()
-        populateActionHints()
-        initClickListeners()
-        initObservers()
-
-        if (showPentastic)
-            binding.footer.text = getText(R.string.new_app_minimal_todo_lists)
-    }
-
-    override fun onClick(view: View) {
-        binding.appsNumSelectLayout.visibility = View.GONE
-        binding.pagesSelectLayout.visibility = View.GONE
-        binding.dateTimeSelectLayout.visibility = View.GONE
-        binding.appThemeSelectLayout.visibility = View.GONE
-        binding.swipeDownSelectLayout.visibility = View.GONE
-        if (view.id != R.id.textSizeMinus && view.id != R.id.textSizePlus) {
-            if (binding.textSizesLayout.isVisible) {
-                binding.textSizesLayout.visibility = View.GONE
-                applyTextSizeScale()
-            }
-        }
-        if (view.id != R.id.alignmentBottom)
-            binding.alignmentSelectLayout.visibility = View.GONE
-
-        when (view.id) {
-            R.id.olauncherHiddenApps -> {
-                if (prefs.lockdownModeOn && prefs.lockdownHiddenApps) return
-                showHiddenApps()
-            }
-            R.id.moreFeatures -> viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
-            R.id.screenTimeOnOff -> viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
-            R.id.weatherOnOff -> toggleWeather()
-            R.id.appInfo -> openAppInfo(requireContext(), Process.myUserHandle(), BuildConfig.APPLICATION_ID)
-            R.id.setLauncher -> {
-                if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
-                viewModel.resetLauncherLiveData.call()
-            }
-            R.id.pauseAppsStatus -> togglePauseApps()
-            R.id.useForStatus -> toggleUseFor()
-            R.id.wellnessAnywhere -> openWellnessAccessibility()
-            R.id.pauseSeconds -> pickPauseSeconds()
-            R.id.pausedAppsCount -> loosenLockdown { findNavController().navigate(R.id.action_settingsFragment_to_pausedAppsFragment) }
-            R.id.moodPromptStatus -> toggleMoodPrompt()
-            R.id.moodPromptTime -> pickMoodPromptTime()
-            R.id.moodCatchUpStatus -> toggleMoodCatchUp()
-            R.id.moodCatchUpTime -> pickMoodCatchUpTime()
-            R.id.backupFolder -> onBackupFolderClicked()
-            R.id.backupExport -> {
-                viewModel.isPickingFile = true
-                exportBackup.launch(BackupManager.BACKUP_FILE_NAME)
-            }
-            R.id.backupImport -> {
-                viewModel.isPickingFile = true
-                importBackup.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
-            }
-            R.id.lockdownModeStatus -> toggleLockdownMode()
-            R.id.lockdownPasswordStatus -> handleLockdownPasswordClick()
-            R.id.lockdownAppDrawerStatus -> toggleLockdownSetting({ prefs.lockdownAppDrawer }, { prefs.lockdownAppDrawer = it })
-            R.id.lockdownHoldAppStatus -> toggleLockdownSetting({ prefs.lockdownHoldApp }, { prefs.lockdownHoldApp = it })
-            R.id.lockdownHiddenAppsStatus -> toggleLockdownSetting({ prefs.lockdownHiddenApps }, { prefs.lockdownHiddenApps = it })
-            R.id.lockdownChangeLauncherStatus -> toggleLockdownSetting({ prefs.lockdownChangeLauncher }, { prefs.lockdownChangeLauncher = it })
-            R.id.lockdownPasswordRecoveryStatus -> toggleRecoverySetting()
-            R.id.passwordRecoveryTitle -> onRecoveryTitleTapped()
-            R.id.recoveryTap500Info -> showInfoDialog(getString(R.string.recovery_tap_500), getString(R.string.recovery_tap_500_info))
-            R.id.recoveryTap500Status -> toggleRecoveryMethod({ prefs.recoveryTap500 }, { prefs.recoveryTap500 = it })
-            R.id.recoveryClueInfo -> showInfoDialog(getString(R.string.recovery_clue), getString(R.string.recovery_clue_info))
-            R.id.recoveryClueStatus -> onRecoveryClueToggle()
-            R.id.recoveryEssayInfo -> showInfoDialog(getString(R.string.recovery_essay), getString(R.string.recovery_essay_info))
-            R.id.recoveryEssayStatus -> toggleRecoveryMethod({ prefs.recoveryEssay }, { prefs.recoveryEssay = it })
-            R.id.recoveryPayInfo -> showInfoDialog(getString(R.string.recovery_pay), getString(R.string.recovery_pay_info))
-            R.id.recoveryPayStatus -> onRecoveryPayToggle()
-            R.id.toggleLock -> toggleLockMode()
-            R.id.homeButtonRecents -> toggleHomeButtonRecents()
-            R.id.autoShowKeyboard -> toggleKeyboardText()
-            R.id.homeAppsNum -> binding.appsNumSelectLayout.visibility = View.VISIBLE
-            R.id.homePages -> binding.pagesSelectLayout.visibility = View.VISIBLE
-            R.id.dailyWallpaperUrl -> requireContext().openUrl(prefs.dailyWallpaperUrl)
-            R.id.dailyWallpaper -> toggleDailyWallpaperUpdate()
-            R.id.alignment -> binding.alignmentSelectLayout.visibility = View.VISIBLE
-            R.id.alignmentLeft -> viewModel.updateHomeAlignment(Gravity.START)
-            R.id.alignmentCenter -> viewModel.updateHomeAlignment(Gravity.CENTER)
-            R.id.alignmentRight -> viewModel.updateHomeAlignment(Gravity.END)
-            R.id.alignmentBottom -> updateHomeBottomAlignment()
-            R.id.statusBar -> toggleStatusBar()
-            R.id.dateTime -> binding.dateTimeSelectLayout.visibility = View.VISIBLE
-            R.id.dateTimeOn -> toggleDateTime(Constants.DateTime.ON)
-            R.id.dateTimeOff -> toggleDateTime(Constants.DateTime.OFF)
-            R.id.dateOnly -> toggleDateTime(Constants.DateTime.DATE_ONLY)
-            R.id.appThemeText -> binding.appThemeSelectLayout.visibility = View.VISIBLE
-            R.id.themeLight -> updateTheme(AppCompatDelegate.MODE_NIGHT_NO)
-            R.id.themeDark -> updateTheme(AppCompatDelegate.MODE_NIGHT_YES)
-            R.id.themeSystem -> updateTheme(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-            R.id.textSizeValue -> binding.textSizesLayout.visibility = View.VISIBLE
-            R.id.actionAccessibility -> openAccessibilityService()
-            R.id.closeAccessibility -> toggleAccessibilityVisibility(false)
-            R.id.notWorking -> requireContext().openUrl(Constants.URL_DOUBLE_TAP)
-
-            R.id.tvGestures -> binding.flSwipeDown.visibility = View.VISIBLE
-
-            R.id.maxApps0 -> updateHomeAppsNum(0)
-            R.id.maxApps1 -> updateHomeAppsNum(1)
-            R.id.maxApps2 -> updateHomeAppsNum(2)
-            R.id.maxApps3 -> updateHomeAppsNum(3)
-            R.id.maxApps4 -> updateHomeAppsNum(4)
-            R.id.maxApps5 -> updateHomeAppsNum(5)
-            R.id.maxApps6 -> updateHomeAppsNum(6)
-            R.id.maxApps7 -> updateHomeAppsNum(7)
-            R.id.maxApps8 -> updateHomeAppsNum(8)
-            R.id.pages1 -> updateHomePages(1)
-            R.id.pages2 -> updateHomePages(2)
-            R.id.pages3 -> updateHomePages(3)
-            R.id.pages4 -> updateHomePages(4)
-            R.id.pages5 -> updateHomePages(5)
-
-            R.id.textSizeMinus -> adjustTextSizePreview(-0.1f)
-            R.id.textSizePlus -> adjustTextSizePreview(0.1f)
-
-            R.id.swipeLeftApp -> pickSwipeTarget(left = true)
-            R.id.swipeRightApp -> pickSwipeTarget(left = false)
-            R.id.swipeDownAction -> binding.swipeDownSelectLayout.visibility = View.VISIBLE
-            R.id.notifications -> updateSwipeDownAction(Constants.SwipeDownAction.NOTIFICATIONS)
-            R.id.search -> updateSwipeDownAction(Constants.SwipeDownAction.SEARCH)
-
-            R.id.aboutOlauncher -> {
-                prefs.aboutClicked = true
-                requireContext().openUrl(Constants.URL_ABOUT_OLAUNCHER)
-            }
-
-            R.id.share -> requireActivity().shareApp()
-            R.id.rate -> {
-                prefs.rateClicked = true
-                requireActivity().rateApp()
-            }
-
-            R.id.twitter -> requireContext().openUrl(Constants.URL_TWITTER_TANUJ)
-            R.id.github -> requireContext().openUrl(Constants.URL_OLAUNCHER_GITHUB)
-            R.id.privacy -> requireContext().openUrl(Constants.URL_OLAUNCHER_PRIVACY)
-            R.id.footer -> {
-                requireContext().openUrl(
-                    if (showPentastic) Constants.URL_PENTASTIC else Constants.URL_NTS
-                )
-            }
-        }
-    }
-
-    override fun onLongClick(view: View): Boolean {
-        when (view.id) {
-            R.id.alignment -> {
-                prefs.appLabelAlignment = prefs.homeAlignment
-                findNavController().navigate(R.id.action_settingsFragment_to_appListFragment)
-                requireContext().showToast(getString(R.string.alignment_changed))
-            }
-
-            R.id.dailyWallpaper -> removeWallpaper()
-            R.id.appThemeText -> {
-                binding.appThemeSelectLayout.visibility = View.VISIBLE
-                binding.themeSystem.visibility = View.VISIBLE
-            }
-
-            R.id.swipeLeftApp -> toggleSwipeLeft()
-            R.id.swipeRightApp -> toggleSwipeRight()
-            R.id.toggleLock -> startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-        return true
-    }
-
-    private fun initClickListeners() {
-        binding.olauncherHiddenApps.setOnClickListener(this)
-        binding.pauseAppsStatus.setOnClickListener(this)
-        binding.useForStatus.setOnClickListener(this)
-        binding.wellnessAnywhere.setOnClickListener(this)
-        binding.pauseSeconds.setOnClickListener(this)
-        binding.pausedAppsCount.setOnClickListener(this)
-        binding.moodPromptStatus.setOnClickListener(this)
-        binding.moodPromptTime.setOnClickListener(this)
-        binding.moodCatchUpStatus.setOnClickListener(this)
-        binding.moodCatchUpTime.setOnClickListener(this)
-        binding.backupFolder.setOnClickListener(this)
-        binding.backupExport.setOnClickListener(this)
-        binding.backupImport.setOnClickListener(this)
-        binding.lockdownModeStatus.setOnClickListener(this)
-        binding.lockdownPasswordStatus.setOnClickListener(this)
-        binding.lockdownAppDrawerStatus.setOnClickListener(this)
-        binding.lockdownHoldAppStatus.setOnClickListener(this)
-        binding.lockdownHiddenAppsStatus.setOnClickListener(this)
-        binding.lockdownChangeLauncherStatus.setOnClickListener(this)
-        binding.lockdownPasswordRecoveryStatus.setOnClickListener(this)
-        binding.passwordRecoveryTitle.setOnClickListener(this)
-        binding.recoveryTap500Info.setOnClickListener(this)
-        binding.recoveryTap500Status.setOnClickListener(this)
-        binding.recoveryClueInfo.setOnClickListener(this)
-        binding.recoveryClueStatus.setOnClickListener(this)
-        binding.recoveryEssayInfo.setOnClickListener(this)
-        binding.recoveryEssayStatus.setOnClickListener(this)
-        binding.recoveryPayInfo.setOnClickListener(this)
-        binding.recoveryPayStatus.setOnClickListener(this)
-        binding.scrollLayout.setOnClickListener(this)
-        binding.appInfo.setOnClickListener(this)
-        binding.setLauncher.setOnClickListener(this)
-        binding.aboutOlauncher.setOnClickListener(this)
-        binding.moreFeatures.setOnClickListener(this)
-        binding.autoShowKeyboard.setOnClickListener(this)
-        binding.toggleLock.setOnClickListener(this)
-        binding.homeButtonRecents.setOnClickListener(this)
-        binding.homeAppsNum.setOnClickListener(this)
-        binding.screenTimeOnOff.setOnClickListener(this)
-        binding.weatherOnOff.setOnClickListener(this)
-        binding.dailyWallpaperUrl.setOnClickListener(this)
-        binding.dailyWallpaper.setOnClickListener(this)
-        binding.alignment.setOnClickListener(this)
-        binding.alignmentLeft.setOnClickListener(this)
-        binding.alignmentCenter.setOnClickListener(this)
-        binding.alignmentRight.setOnClickListener(this)
-        binding.alignmentBottom.setOnClickListener(this)
-        binding.statusBar.setOnClickListener(this)
-        binding.dateTime.setOnClickListener(this)
-        binding.dateTimeOn.setOnClickListener(this)
-        binding.dateTimeOff.setOnClickListener(this)
-        binding.dateOnly.setOnClickListener(this)
-        binding.swipeLeftApp.setOnClickListener(this)
-        binding.swipeRightApp.setOnClickListener(this)
-        binding.swipeDownAction.setOnClickListener(this)
-        binding.search.setOnClickListener(this)
-        binding.notifications.setOnClickListener(this)
-        binding.appThemeText.setOnClickListener(this)
-        binding.themeLight.setOnClickListener(this)
-        binding.themeDark.setOnClickListener(this)
-        binding.themeSystem.setOnClickListener(this)
-        binding.textSizeValue.setOnClickListener(this)
-        binding.actionAccessibility.setOnClickListener(this)
-        binding.closeAccessibility.setOnClickListener(this)
-        binding.notWorking.setOnClickListener(this)
-
-        binding.share.setOnClickListener(this)
-        binding.rate.setOnClickListener(this)
-        binding.twitter.setOnClickListener(this)
-        binding.github.setOnClickListener(this)
-        binding.privacy.setOnClickListener(this)
-        binding.footer.setOnClickListener(this)
-
-        binding.maxApps0.setOnClickListener(this)
-        binding.maxApps1.setOnClickListener(this)
-        binding.maxApps2.setOnClickListener(this)
-        binding.maxApps3.setOnClickListener(this)
-        binding.maxApps4.setOnClickListener(this)
-        binding.maxApps5.setOnClickListener(this)
-        binding.maxApps6.setOnClickListener(this)
-        binding.maxApps7.setOnClickListener(this)
-        binding.maxApps8.setOnClickListener(this)
-        binding.homePages.setOnClickListener(this)
-        binding.pages1.setOnClickListener(this)
-        binding.pages2.setOnClickListener(this)
-        binding.pages3.setOnClickListener(this)
-        binding.pages4.setOnClickListener(this)
-        binding.pages5.setOnClickListener(this)
-
-        binding.textSizeMinus.setOnClickListener(this)
-        binding.textSizePlus.setOnClickListener(this)
-
-        binding.dailyWallpaper.setOnLongClickListener(this)
-        binding.alignment.setOnLongClickListener(this)
-        binding.appThemeText.setOnLongClickListener(this)
-        binding.swipeLeftApp.setOnLongClickListener(this)
-        binding.swipeRightApp.setOnLongClickListener(this)
-        binding.toggleLock.setOnLongClickListener(this)
-    }
-
-    private fun initObservers() {
-        if (prefs.firstSettingsOpen) {
-            viewModel.showDialog.postValue(Constants.Dialog.ABOUT)
-            prefs.firstSettingsOpen = false
-        }
-        viewModel.isOlauncherDefault.observe(viewLifecycleOwner) {
-            if (it) {
-                binding.setLauncher.text = getString(R.string.change_default_launcher)
-                prefs.toShowHintCounter += 1
-            }
-        }
-        viewModel.homeAppAlignment.observe(viewLifecycleOwner) {
-            populateAlignment()
-        }
-        viewModel.updateSwipeApps.observe(viewLifecycleOwner) {
-            populateSwipeApps()
-        }
-    }
-
-    private fun toggleSwipeLeft() {
-        prefs.swipeLeftEnabled = !prefs.swipeLeftEnabled
-        if (prefs.swipeLeftEnabled) {
-            binding.swipeLeftApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColor))
-            requireContext().showToast(getString(R.string.swipe_left_app_enabled))
-        } else {
-            binding.swipeLeftApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
-            requireContext().showToast(getString(R.string.swipe_left_app_disabled))
-        }
-    }
-
-    private fun toggleSwipeRight() {
-        prefs.swipeRightEnabled = !prefs.swipeRightEnabled
-        if (prefs.swipeRightEnabled) {
-            binding.swipeRightApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColor))
-            requireContext().showToast(getString(R.string.swipe_right_app_enabled))
-        } else {
-            binding.swipeRightApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
-            requireContext().showToast(getString(R.string.swipe_right_app_disabled))
-        }
-    }
-
-    private fun toggleStatusBar() {
-        prefs.showStatusBar = !prefs.showStatusBar
-        populateStatusBar()
-    }
-
-    private fun populateStatusBar() {
-        if (prefs.showStatusBar) {
-            showStatusBar()
-            binding.statusBar.text = getString(R.string.on)
-        } else {
-            hideStatusBar()
-            binding.statusBar.text = getString(R.string.off)
-        }
-    }
-
-    private fun toggleDateTime(selected: Int) {
-        prefs.dateTimeVisibility = selected
-        populateDateTime()
-        viewModel.toggleDateTime()
-    }
-
-    private fun populateDateTime() {
-        binding.dateTime.text = getString(
-            when (prefs.dateTimeVisibility) {
-                Constants.DateTime.DATE_ONLY -> R.string.date
-                Constants.DateTime.ON -> R.string.on
-                else -> R.string.off
-            }
-        )
-    }
-
-    private fun showStatusBar() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-            requireActivity().window.insetsController?.show(WindowInsets.Type.statusBars())
-        else
-            @Suppress("DEPRECATION", "InlinedApi")
-            requireActivity().window.decorView.apply {
-                systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            }
-    }
-
-    private fun hideStatusBar() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-            requireActivity().window.insetsController?.hide(WindowInsets.Type.statusBars())
-        else {
-            @Suppress("DEPRECATION")
-            requireActivity().window.decorView.apply {
-                systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE or View.SYSTEM_UI_FLAG_FULLSCREEN
-            }
-        }
-    }
-
-    private fun showHiddenApps() {
-        if (prefs.hiddenApps.isEmpty()) {
-            requireContext().showToast(getString(R.string.no_hidden_apps))
-            return
-        }
-        viewModel.getHiddenApps()
-        findNavController().navigate(
-            R.id.action_settingsFragment_to_appListFragment,
-            bundleOf(Constants.Key.FLAG to Constants.FLAG_HIDDEN_APPS)
-        )
-    }
-
-    private fun checkAdminPermission() {
-        val isAdmin: Boolean = deviceManager.isAdminActive(componentName)
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P)
-            prefs.lockModeOn = isAdmin
-    }
-
-    private fun toggleAccessibilityVisibility(show: Boolean) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-            binding.notWorking.visibility = View.VISIBLE
-        if (isAccessServiceEnabled(requireContext()))
-            binding.actionAccessibility.text = getString(R.string.disable)
-        binding.accessibilityLayout.isVisible = show
-        binding.scrollView.animateAlpha(if (show) 0.5f else 1f)
-    }
-
-    private fun openAccessibilityService() {
-        toggleAccessibilityVisibility(false)
-        // Turned on in MainActivity.onResume once the service is enabled
-        if (!isAccessServiceEnabled(requireContext())) prefs.lockModePending = true
-        populateLockSettings()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-    }
-
-    private fun toggleLockMode() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (!prefs.lockModeOn && !isAccessServiceEnabled(requireContext())) {
-                toggleAccessibilityVisibility(true)
-                return
-            }
-            prefs.lockModeOn = !prefs.lockModeOn
-        } else {
-            val isAdmin: Boolean = deviceManager.isAdminActive(componentName)
-            if (isAdmin) {
-                removeActiveAdmin("Admin permission removed.")
-                prefs.lockModeOn = false
-            } else {
-                val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
-                intent.putExtra(
-                    DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                    getString(R.string.admin_permission_message)
-                )
-                requireActivity().startActivityForResult(intent, Constants.REQUEST_CODE_ENABLE_ADMIN)
-            }
-        }
-        populateLockSettings()
-    }
-
-    private fun removeActiveAdmin(toastMessage: String? = null) {
-        try {
-            deviceManager.removeActiveAdmin(componentName) // for backward compatibility
-            requireContext().showToast(toastMessage)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun removeWallpaper() {
-        if (requireContext().isEinkDisplay()) {
-            prefs.appTheme = AppCompatDelegate.MODE_NIGHT_NO
-            setPlainWallpaper(requireContext(), android.R.color.white)
-        } else {
-            prefs.appTheme = AppCompatDelegate.MODE_NIGHT_YES
-            setPlainWallpaper(requireContext(), android.R.color.black)
-        }
-        if (!prefs.dailyWallpaper) return
-        prefs.dailyWallpaper = false
-        populateWallpaperText()
-        viewModel.cancelWallpaperWorker()
-    }
-
-    private fun toggleDailyWallpaperUpdate() {
-        if (prefs.dailyWallpaper.not() && prefs.appTheme == AppCompatDelegate.MODE_NIGHT_YES && viewModel.isOlauncherDefault.value == false) {
-            requireContext().showToast(R.string.set_as_default_launcher_first)
-            return
-        }
-        prefs.dailyWallpaper = !prefs.dailyWallpaper
-        populateWallpaperText()
-        if (prefs.dailyWallpaper) {
-            viewModel.setWallpaperWorker()
-            showWallpaperToasts()
-        } else viewModel.cancelWallpaperWorker()
-    }
-
-    private fun showWallpaperToasts() {
-        if (isOlauncherDefault(requireContext()))
-            requireContext().showToast(getString(R.string.your_wallpaper_will_update_shortly))
-        else
-            requireContext().showToast(getString(R.string.olauncher_is_not_default_launcher), Toast.LENGTH_LONG)
-    }
-
-    private fun updateHomeAppsNum(num: Int) {
-        binding.homeAppsNum.text = num.toString()
-        binding.appsNumSelectLayout.visibility = View.GONE
-        prefs.homeAppsNum = num
-        viewModel.refreshHome(true)
-    }
-
-    private fun updateHomePages(num: Int) {
-        binding.homePages.text = num.toString()
-        binding.pagesSelectLayout.visibility = View.GONE
-        prefs.homePages = num
-        if (prefs.homePage >= num) prefs.homePage = num - 1
-        viewModel.refreshHome(true)
-    }
-
-    private var pendingTextSizeScale: Float = -1f
-
-    private fun adjustTextSizePreview(delta: Float) {
-        val maxScale = if (isTablet(requireContext())) 2.0f else 1.5f
-        val current = if (pendingTextSizeScale > 0) pendingTextSizeScale else prefs.textSizeScale
-        val newScale = Math.round((current + delta) * 10f) / 10f
-        val clamped = newScale.coerceIn(0.5f, maxScale)
-        if (clamped == current) return
-        pendingTextSizeScale = clamped
-        val formatted = String.format("%.1f", clamped)
-        binding.textSizeValue.text = formatted
-        binding.textSizeCurrent.text = formatted
-    }
-
-    private fun applyTextSizeScale() {
-        if (pendingTextSizeScale < 0 || prefs.textSizeScale == pendingTextSizeScale) {
-            pendingTextSizeScale = -1f
-            return
-        }
-        prefs.textSizeScale = pendingTextSizeScale
-        pendingTextSizeScale = -1f
-        requireActivity().recreate()
-    }
-
-    private fun toggleKeyboardText() {
-        if (prefs.autoShowKeyboard && prefs.keyboardMessageShown.not()) {
-            viewModel.showDialog.postValue(Constants.Dialog.KEYBOARD)
-            prefs.keyboardMessageShown = true
-        } else {
-            prefs.autoShowKeyboard = !prefs.autoShowKeyboard
-            populateKeyboardText()
-        }
-    }
-
-    private fun updateTheme(appTheme: Int) {
-        if (AppCompatDelegate.getDefaultNightMode() == appTheme) return
-        prefs.appTheme = appTheme
-        populateAppThemeText(appTheme)
-        setAppTheme(appTheme)
-    }
-
-    private fun setAppTheme(theme: Int) {
-        if (AppCompatDelegate.getDefaultNightMode() == theme) return
-        if (prefs.dailyWallpaper) {
-            setPlainWallpaper(theme)
-            viewModel.setWallpaperWorker()
-        }
-        requireActivity().recreate()
-    }
-
-    private fun setPlainWallpaper(appTheme: Int) {
-        when (appTheme) {
-            AppCompatDelegate.MODE_NIGHT_YES -> setPlainWallpaper(requireContext(), android.R.color.black)
-            AppCompatDelegate.MODE_NIGHT_NO -> setPlainWallpaper(requireContext(), android.R.color.white)
-            else -> {
-                if (requireContext().isDarkThemeOn())
-                    setPlainWallpaper(requireContext(), android.R.color.black)
-                else setPlainWallpaper(requireContext(), android.R.color.white)
-            }
-        }
-    }
-
-    private fun populateAppThemeText(appTheme: Int = prefs.appTheme) {
-        when (appTheme) {
-            AppCompatDelegate.MODE_NIGHT_YES -> binding.appThemeText.text = getString(R.string.dark)
-            AppCompatDelegate.MODE_NIGHT_NO -> binding.appThemeText.text = getString(R.string.light)
-            else -> binding.appThemeText.text = getString(R.string.system_default)
-        }
-    }
-
-    private fun populateTextSize() {
-        val formatted = String.format("%.1f", prefs.textSizeScale)
-        binding.textSizeValue.text = formatted
-        binding.textSizeCurrent.text = formatted
-    }
-
-    private fun populateScreenTimeOnOff() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (requireContext().appUsagePermissionGranted()) binding.screenTimeOnOff.text = getString(R.string.on)
-            else binding.screenTimeOnOff.text = getString(R.string.off)
-        } else binding.screenTimeLayout.visibility = View.GONE
-    }
-
-    private fun toggleWeather() {
-        if (Weather.isEnabled(requireContext())) {
-            prefs.weatherOn = false
-            viewModel.getWeather()
-            populateWeatherOnOff()
-        } else if (Weather.hasLocationPermission(requireContext())) {
-            prefs.weatherOn = true
-            viewModel.getWeather(force = true)
-            populateWeatherOnOff()
-        } else requestLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-    }
-
-    private fun populateWeatherOnOff() {
-        binding.weatherOnOff.text = getString(if (Weather.isEnabled(requireContext())) R.string.on else R.string.off)
-    }
-
-    private fun populateKeyboardText() {
-        if (prefs.autoShowKeyboard) binding.autoShowKeyboard.text = getString(R.string.on)
-        else binding.autoShowKeyboard.text = getString(R.string.off)
-    }
-
-    private fun populateWallpaperText() {
-        if (prefs.dailyWallpaper) binding.dailyWallpaper.text = getString(R.string.on)
-        else binding.dailyWallpaper.text = getString(R.string.off)
-    }
-
-    private fun updateHomeBottomAlignment() {
-        if (viewModel.isOlauncherDefault.value != true) {
-            requireContext().showToast(getString(R.string.please_set_olauncher_as_default_first), Toast.LENGTH_LONG)
-            return
-        }
-        prefs.homeBottomAlignment = !prefs.homeBottomAlignment
-        populateAlignment()
-        viewModel.updateHomeAlignment(prefs.homeAlignment)
-    }
-
-    private fun populateAlignment() {
-        when (prefs.homeAlignment) {
-            Gravity.START -> binding.alignment.text = getString(R.string.left)
-            Gravity.CENTER -> binding.alignment.text = getString(R.string.center)
-            Gravity.END -> binding.alignment.text = getString(R.string.right)
-        }
-        binding.alignmentBottom.text = if (prefs.homeBottomAlignment)
-            getString(R.string.bottom_on)
-        else getString(R.string.bottom_off)
-    }
-
-    private fun toggleHomeButtonRecents() {
-        if (!prefs.homeButtonShowRecents && !isAccessServiceEnabled(requireContext())) {
-            toggleAccessibilityVisibility(true)
-            return
-        }
-        prefs.homeButtonShowRecents = !prefs.homeButtonShowRecents
-        populateHomeButtonRecents()
-    }
-
-    private fun populateHomeButtonRecents() {
-        binding.homeButtonRecents.text = getString(
-            if (prefs.homeButtonShowRecents && isAccessServiceEnabled(requireContext())) R.string.on
-            else R.string.off
-        )
-    }
-
-    private fun populateLockSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            binding.toggleLock.text = getString(
-                if (prefs.lockModeOn && isAccessServiceEnabled(requireContext())) R.string.on
-                else R.string.off
-            )
-        } else {
-            binding.toggleLock.text = getString(
-                if (prefs.lockModeOn) R.string.on
-                else R.string.off
-            )
-        }
-    }
-
-    private fun populateSwipeDownAction() {
-        binding.swipeDownAction.text = when (prefs.swipeDownAction) {
-            Constants.SwipeDownAction.NOTIFICATIONS -> getString(R.string.notifications)
-            else -> getString(R.string.search)
-        }
-    }
-
-    private fun updateSwipeDownAction(swipeDownFor: Int) {
-        if (prefs.swipeDownAction == swipeDownFor) return
-        prefs.swipeDownAction = swipeDownFor
-        populateSwipeDownAction()
-    }
-
-    /** A swipe opens an app (picked from the list) or one of the stats pages */
-    private fun pickSwipeTarget(left: Boolean) {
-        if (!(if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled)) {
-            requireContext().showToast(getString(R.string.long_press_to_enable))
-            return
-        }
         val context = requireContext()
-        val targets = app.olauncher.helper.SwipeTargets.Target.values()
-        val current = app.olauncher.helper.SwipeTargets.get(context, left)
-        AlertDialog.Builder(context)
-            .setTitle(if (left) R.string.swipe_left_opens else R.string.swipe_right_opens)
-            .setSingleChoiceItems(targets.map { swipeTargetName(it, null) }.toTypedArray(), targets.indexOf(current)) { dialog, which ->
-                dialog.dismiss()
-                val target = targets[which]
-                if (target == app.olauncher.helper.SwipeTargets.Target.APP)
-                    showAppListIfEnabled(if (left) Constants.FLAG_SET_SWIPE_LEFT_APP else Constants.FLAG_SET_SWIPE_RIGHT_APP)
-                else {
-                    app.olauncher.helper.SwipeTargets.set(context, left, target)
-                    populateSwipeApps()
-                }
-            }
-            .setNegativeButton(R.string.close, null)
-            .show()
-    }
-
-    private fun swipeTargetName(target: app.olauncher.helper.SwipeTargets.Target, appName: String?) = when (target) {
-        app.olauncher.helper.SwipeTargets.Target.APP -> appName ?: getString(R.string.swipe_an_app)
-        app.olauncher.helper.SwipeTargets.Target.STATS -> getString(R.string.stats_title)
-        app.olauncher.helper.SwipeTargets.Target.STATS_HOME -> getString(R.string.swipe_stats_home)
-    }
-
-    private fun populateSwipeApps() {
-        val context = requireContext()
-        binding.swipeLeftApp.text = swipeTargetName(app.olauncher.helper.SwipeTargets.get(context, true), prefs.appNameSwipeLeft)
-        binding.swipeRightApp.text = swipeTargetName(app.olauncher.helper.SwipeTargets.get(context, false), prefs.appNameSwipeRight)
-        if (!prefs.swipeLeftEnabled)
-            binding.swipeLeftApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
-        if (!prefs.swipeRightEnabled)
-            binding.swipeRightApp.setTextColor(requireContext().getColorFromAttr(R.attr.primaryColorTrans50))
-    }
-
-//    private fun populateDigitalWellbeing() {
-//        binding.digitalWellbeing.isVisible = requireContext().isPackageInstalled(Constants.DIGITAL_WELLBEING_PACKAGE_NAME).not()
-//                && requireContext().isPackageInstalled(Constants.DIGITAL_WELLBEING_SAMSUNG_PACKAGE_NAME).not()
-//                && prefs.hideDigitalWellbeing.not()
-//    }
-
-    private fun showAppListIfEnabled(flag: Int) {
-        if ((flag == Constants.FLAG_SET_SWIPE_LEFT_APP) and !prefs.swipeLeftEnabled) {
-            requireContext().showToast(getString(R.string.long_press_to_enable))
-            return
+        prefs = Prefs(context)
+        viewModel = ViewModelProvider(requireActivity())[MainViewModel::class.java]
+        cardList = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            updatePadding(bottom = 64.dpToPx())
         }
-        if ((flag == Constants.FLAG_SET_SWIPE_RIGHT_APP) and !prefs.swipeRightEnabled) {
-            requireContext().showToast(getString(R.string.long_press_to_enable))
-            return
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            updatePadding(top = 48.dpToPx())
+            addView(pageHeader(context, StatIcons.GEAR, getString(R.string.settings)) { findNavController().popBackStack() })
+            addView(cardList)
         }
-        viewModel.getAppList(true)
-        findNavController().navigate(
-            R.id.action_settingsFragment_to_appListFragment,
-            bundleOf(Constants.Key.FLAG to flag)
-        )
-    }
-
-    private fun populateActionHints() {
-        if (prefs.aboutClicked.not())
-            binding.aboutOlauncher.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_info, 0)
-        if (viewModel.isOlauncherDefault.value != true) return
-        if (prefs.rateClicked.not() && prefs.toShowHintCounter > Constants.HINT_RATE_US && prefs.toShowHintCounter < Constants.HINT_RATE_US + 100)
-            binding.rate.setCompoundDrawablesWithIntrinsicBounds(0, android.R.drawable.arrow_down_float, 0, 0)
-    }
-
-    private fun populateProMessage() {
-        if (prefs.proMessageShown.not() && prefs.userState == Constants.UserState.SHARE) {
-            prefs.proMessageShown = true
-            viewModel.showDialog.postValue(Constants.Dialog.PRO_MESSAGE)
+        val page = FrameLayout(context).apply {
+            setBackgroundColor(context.getColorFromAttr(R.attr.primaryShadeDarkColor))
+            isClickable = true
+            addView(ScrollView(context).apply {
+                overScrollMode = View.OVER_SCROLL_NEVER
+                isVerticalScrollBarEnabled = false
+                addView(content)
+            })
         }
-    }
-
-    // --- Wellness ---
-
-    private fun populateWellnessSettings() {
-        val serviceOn = isAccessServiceEnabled(requireContext())
-        binding.pauseAppsStatus.text = getString(if (prefs.pauseAppsOn) R.string.on else R.string.off)
-        binding.useForStatus.text = getString(
-            when {
-                !prefs.useForOn -> R.string.off
-                serviceOn -> R.string.on
-                else -> R.string.needs_accessibility
-            }
-        )
-        binding.pauseSettingsContainer.isVisible = prefs.pauseAppsOn || prefs.useForOn
-        binding.pauseSecondsRow.isVisible = prefs.pauseAppsOn
-        binding.pauseSeconds.text = getString(R.string.seconds_value, prefs.pauseSeconds)
-        binding.pausedAppsCount.text = prefs.pausedApps.count { requireContext().isPackageInstalled(it) }.toString()
-        binding.wellnessAnywhere.text = getString(if (serviceOn) R.string.on else R.string.off)
+        return PullDismissLayout(context).apply {
+            addView(page)
+            onDismiss = { if (isAdded) findNavController().popBackStack() }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // The accessibility service may have been turned on or off in system settings
-        populateWellnessSettings()
+        // Permissions and services may have changed in the system's settings
+        viewModel.isOlauncherDefault()
+        if (prefs.lockModePending && isAccessServiceEnabled(requireContext())) {
+            prefs.lockModePending = false
+            prefs.lockModeOn = true
+        }
+        render()
     }
 
-    /** Both features share JLauncher's accessibility service, also used for double tap to lock. */
-    private fun openWellnessAccessibility() {
-        requireContext().showToast(getString(R.string.wellness_needs_accessibility), Toast.LENGTH_LONG)
-        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    override fun onPause() {
+        info?.dismiss()
+        super.onPause()
     }
 
-    private fun toggleUseFor() {
-        if (prefs.useForOn) {
-            loosenLockdown {
-                prefs.useForOn = false
-                populateWellnessSettings()
+    private fun render() {
+        if (!isAdded) return
+        cardList.removeAllViews()
+        homeSection()
+        gesturesSection()
+        appsSection()
+        checkInSection()
+        trackingSection()
+        statsSection()
+        lockdownSection()
+        backupSection()
+        aboutSection()
+    }
+
+    private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
+
+    /**
+     * A setting: its name, its value on the right, indented by [level] under the one it belongs to;
+     * tapping does [onTap], holding explains it with [about].
+     */
+    private fun row(card: Card, title: String, value: String?, about: Int, level: Int = 0, onTap: (() -> Unit)?): View {
+        val context = requireContext()
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((4 + level * 20).dpToPx(), 11.dpToPx(), 4.dpToPx(), 11.dpToPx())
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            if (onTap != null) setOnClickListener { onTap() }
+            setOnLongClickListener {
+                explain(this, title, getString(about))
+                true
             }
-        } else {
-            prefs.useForOn = true
-            AppPause.addAddictiveApps(requireContext(), prefs)
-            populateWellnessSettings()
-            if (!isAccessServiceEnabled(requireContext())) openWellnessAccessibility()
+            addView(card.textView(if (level == 0) 15.5f else 14.5f, if (level == 0) 245 else 215).apply {
+                text = title
+                if (level > 0) setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (value != null) addView(card.textView(14f, 150).apply {
+                text = value
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                gravity = Gravity.END
+                updatePadding(left = 12.dpToPx())
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                width = ViewGroup.LayoutParams.WRAP_CONTENT
+            })
         }
     }
 
-    /** Like other lockdown settings, anything that weakens the pause needs the password while lockdown is on. */
-    private fun loosenLockdown(action: () -> Unit) {
-        if (prefs.lockdownModeOn) requirePasswordThen(action) else action()
-    }
-
-    private fun togglePauseApps() {
-        if (prefs.pauseAppsOn) {
-            loosenLockdown {
-                prefs.pauseAppsOn = false
-                populateWellnessSettings()
+    /** What a setting does, in a small card under it */
+    private fun explain(anchor: View, title: String, text: String) {
+        info?.dismiss()
+        val context = requireContext()
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadius = 18.dpToPx().toFloat()
+                // Solid, so the rows under it don't show through
+                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryShadeDarkColor), 255))
+                setStroke(1.dpToPx(), faint(60))
             }
-        } else {
-            prefs.pauseAppsOn = true
-            AppPause.addAddictiveApps(requireContext(), prefs)
-            populateWellnessSettings()
+            setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 14.dpToPx())
+            addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                this.text = title
+                textSize = 14f
+                setTextColor(ink)
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            })
+            addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                this.text = text
+                textSize = 14f
+                setTextColor(ink)
+                alpha = 0.8f
+                setLineSpacing(0f, 1.15f)
+                updatePadding(top = 4.dpToPx())
+            })
+        }
+        val width = anchor.width.coerceAtLeast(200.dpToPx())
+        info = PopupWindow(box, width, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+            isOutsideTouchable = true
+            elevation = 8.dpToPx().toFloat()
+            showAsDropDown(anchor, 0, 4.dpToPx())
         }
     }
 
-    private fun pickPauseSeconds() {
-        val options = intArrayOf(5, 10, 15, 20, 30, 45, 60)
+    private fun Card.body(vararg rows: View?) {
+        scene.visibility = View.GONE
+        val list = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL }
+        rows.filterNotNull().forEach { list.addView(it) }
+        root.addView(list, root.indexOfChild(scene))
+    }
+
+    private fun choose(title: Int, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
         AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.pause_length))
-            .setItems(options.map { getString(R.string.seconds_value, it) }.toTypedArray()) { _, which ->
-                val seconds = options[which]
-                val apply = {
-                    prefs.pauseSeconds = seconds
-                    populateWellnessSettings()
-                }
-                if (seconds < prefs.pauseSeconds) loosenLockdown(apply) else apply()
+            .setTitle(title)
+            .setSingleChoiceItems(options.toTypedArray(), selected) { dialog, which ->
+                dialog.dismiss()
+                onPick(which)
+                render()
             }
             .show()
     }
 
-    // --- Mood tracker ---
+    // --- Home screen ---
 
-    private fun populateMoodSettings() {
-        val data = moodStore.load()
-        binding.moodPromptStatus.text = getString(if (data.promptEnabled) R.string.on else R.string.off)
-        val time = LocalTime.of(data.promptMinutes / 60, data.promptMinutes % 60)
-        val pattern = if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a"
-        binding.moodPromptTime.text = time.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-        binding.moodCatchUpStatus.text = getString(if (data.catchUpEnabled) R.string.on else R.string.off)
-        binding.moodCatchUpTime.text = LocalTime.of(data.catchUpMinutes / 60, data.catchUpMinutes % 60)
-            .format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-        binding.moodCatchUpTimeRow.alpha = if (data.catchUpEnabled) 1f else 0.4f
+    private fun homeSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.home_screen))
+        val alignments = listOf(Gravity.START, Gravity.CENTER, Gravity.END)
+        val alignNames = listOf(R.string.left, R.string.center, R.string.right).map { getString(it) }
+        val clock = listOf(Constants.DateTime.ON, Constants.DateTime.DATE_ONLY, Constants.DateTime.OFF)
+        val clockNames = listOf(R.string.on, R.string.date_only, R.string.off).map { getString(it) }
+        val themes = listOf(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.MODE_NIGHT_NO, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        val themeNames = listOf(R.string.dark, R.string.light, R.string.system_default).map { getString(it) }
+        val screenTime = context.appUsagePermissionGranted()
+        card.body(
+            row(card, getString(R.string.apps_on_home_screen), prefs.homeAppsNum.toString(), R.string.info_home_apps) {
+                choose(R.string.apps_on_home_screen, (0..8).map { it.toString() }, prefs.homeAppsNum) {
+                    prefs.homeAppsNum = it
+                    viewModel.refreshHome(true)
+                }
+            },
+            row(card, getString(R.string.home_pages), prefs.homePages.toString(), R.string.info_home_pages) {
+                choose(R.string.home_pages, (1..5).map { it.toString() }, prefs.homePages - 1) {
+                    prefs.homePages = it + 1
+                    if (prefs.homePage >= prefs.homePages) prefs.homePage = prefs.homePages - 1
+                    viewModel.refreshHome(true)
+                }
+            },
+            row(card, getString(R.string.clock), clockNames[clock.indexOf(prefs.dateTimeVisibility).coerceAtLeast(0)], R.string.info_clock) {
+                choose(R.string.clock, clockNames, clock.indexOf(prefs.dateTimeVisibility)) {
+                    prefs.dateTimeVisibility = clock[it]
+                    viewModel.toggleDateTime()
+                }
+            },
+            row(card, getString(R.string.home_layout_alignment), alignNames[alignments.indexOf(prefs.homeAlignment).coerceAtLeast(0)], R.string.info_alignment) {
+                choose(R.string.home_layout_alignment, alignNames, alignments.indexOf(prefs.homeAlignment)) {
+                    viewModel.updateHomeAlignment(alignments[it])
+                }
+            },
+            row(card, getString(R.string.apps_at_bottom), onOff(prefs.homeBottomAlignment), R.string.info_bottom, level = 1) {
+                prefs.homeBottomAlignment = !prefs.homeBottomAlignment
+                viewModel.updateHomeAlignment(prefs.homeAlignment)
+                render()
+            },
+            row(card, getString(R.string.text_size), String.format(Locale.getDefault(), "%.1f", prefs.textSizeScale), R.string.info_text_size) {
+                val max = if (isTablet(context)) 2.0f else 1.5f
+                val sizes = generateSequence(0.5f) { Math.round((it + 0.1f) * 10) / 10f }.takeWhile { it <= max + 0.01f }.toList()
+                choose(R.string.text_size, sizes.map { String.format(Locale.getDefault(), "%.1f", it) }, sizes.indexOfFirst { Math.abs(it - prefs.textSizeScale) < 0.05f }) {
+                    if (Math.abs(sizes[it] - prefs.textSizeScale) < 0.05f) return@choose
+                    prefs.textSizeScale = sizes[it]
+                    requireActivity().recreate()
+                }
+            },
+            row(card, getString(R.string.theme_mode), themeNames[themes.indexOf(prefs.appTheme).coerceAtLeast(0)], R.string.info_theme) {
+                choose(R.string.theme_mode, themeNames, themes.indexOf(prefs.appTheme)) {
+                    if (prefs.appTheme == themes[it]) return@choose
+                    prefs.appTheme = themes[it]
+                    requireActivity().recreate()
+                }
+            },
+            row(card, getString(R.string.notification_bar), onOff(prefs.showStatusBar), R.string.info_status_bar) {
+                prefs.showStatusBar = !prefs.showStatusBar
+                showStatusBar(prefs.showStatusBar)
+                render()
+            },
+            row(card, getString(R.string.screen_time), onOff(screenTime), R.string.info_screen_time) {
+                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            },
+            row(card, getString(R.string.weather), onOff(Weather.isEnabled(context)), R.string.info_weather) { toggleWeather() },
+            row(card, getString(R.string.money_left), onOff(Spending.showOnHome(context)), R.string.info_money_left) {
+                if (Spending.weekLimitCents(context) <= 0) askWeekLimit { if (isAdded) render() }
+                else {
+                    Spending.setShowOnHome(context, !Spending.showOnHome(context))
+                    render()
+                }
+            },
+        )
     }
 
-    // --- Backup ---
+    private fun showStatusBar(show: Boolean) {
+        val window = requireActivity().window
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (show) window.insetsController?.show(WindowInsets.Type.statusBars()) else window.insetsController?.hide(WindowInsets.Type.statusBars())
+        } else @Suppress("DEPRECATION") {
+            window.decorView.systemUiVisibility = if (show) View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            else View.SYSTEM_UI_FLAG_IMMERSIVE or View.SYSTEM_UI_FLAG_FULLSCREEN
+        }
+    }
 
-    /** After a restore (and the restart it needs): what came back, and that nothing newer was replaced */
-    private fun showRestoreSummary() {
-        val summary = BackupManager.takeRestoreSummary(requireContext()) ?: return
+    private fun toggleWeather() {
+        val context = requireContext()
+        when {
+            Weather.isEnabled(context) -> {
+                prefs.weatherOn = false
+                viewModel.getWeather()
+            }
+            Weather.hasLocationPermission(context) -> {
+                prefs.weatherOn = true
+                viewModel.getWeather(force = true)
+            }
+            else -> return requestLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        render()
+    }
+
+    // --- Gestures ---
+
+    private fun gesturesSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.gestures))
+        fun swipeName(left: Boolean): String {
+            if (!(if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled)) return getString(R.string.nothing)
+            return when (SwipeTargets.get(context, left)) {
+                SwipeTargets.Target.APP -> (if (left) prefs.appNameSwipeLeft else prefs.appNameSwipeRight).ifEmpty { getString(R.string.swipe_an_app) }
+                SwipeTargets.Target.STATS -> getString(R.string.stats_title)
+                SwipeTargets.Target.STATS_HOME -> getString(R.string.swipe_stats_home)
+            }
+        }
+        fun pickSwipe(left: Boolean) {
+            val options = listOf(getString(R.string.stats_title), getString(R.string.swipe_stats_home), getString(R.string.swipe_an_app), getString(R.string.nothing))
+            val enabled = if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled
+            val current = if (!enabled) 3 else when (SwipeTargets.get(context, left)) {
+                SwipeTargets.Target.STATS -> 0
+                SwipeTargets.Target.STATS_HOME -> 1
+                SwipeTargets.Target.APP -> 2
+            }
+            choose(if (left) R.string.swipe_left_opens else R.string.swipe_right_opens, options, current) { which ->
+                if (left) prefs.swipeLeftEnabled = which != 3 else prefs.swipeRightEnabled = which != 3
+                when (which) {
+                    0 -> SwipeTargets.set(context, left, SwipeTargets.Target.STATS)
+                    1 -> SwipeTargets.set(context, left, SwipeTargets.Target.STATS_HOME)
+                    2 -> {
+                        SwipeTargets.set(context, left, SwipeTargets.Target.APP)
+                        viewModel.getAppList(true)
+                        findNavController().navigate(R.id.appListFragment,
+                            bundleOf(Constants.Key.FLAG to if (left) Constants.FLAG_SET_SWIPE_LEFT_APP else Constants.FLAG_SET_SWIPE_RIGHT_APP))
+                    }
+                }
+            }
+        }
+        val downNames = listOf(getString(R.string.notifications), getString(R.string.search))
+        val downs = listOf(Constants.SwipeDownAction.NOTIFICATIONS, Constants.SwipeDownAction.SEARCH)
+        val lockOn = prefs.lockModeOn && (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || isAccessServiceEnabled(context))
+        card.body(
+            row(card, getString(R.string.swipe_left), swipeName(true), R.string.info_swipe_left) { pickSwipe(true) },
+            row(card, getString(R.string.swipe_right), swipeName(false), R.string.info_swipe_right) { pickSwipe(false) },
+            row(card, getString(R.string.swipe_down), downNames[downs.indexOf(prefs.swipeDownAction).coerceAtLeast(0)], R.string.info_swipe_down) {
+                choose(R.string.swipe_down, downNames, downs.indexOf(prefs.swipeDownAction)) { prefs.swipeDownAction = downs[it] }
+            },
+            row(card, getString(R.string.double_tap_to_lock_screen), onOff(lockOn), R.string.info_double_tap) { toggleLock() },
+            row(card, getString(R.string.home_button_show_recents), onOff(prefs.homeButtonShowRecents && isAccessServiceEnabled(context)), R.string.info_home_recents) {
+                if (!prefs.homeButtonShowRecents && !isAccessServiceEnabled(context)) return@row askAccessibility()
+                prefs.homeButtonShowRecents = !prefs.homeButtonShowRecents
+                render()
+            },
+        )
+    }
+
+    private fun toggleLock() {
+        val context = requireContext()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (!prefs.lockModeOn && !isAccessServiceEnabled(context)) return askAccessibility()
+            prefs.lockModeOn = !prefs.lockModeOn
+        } else {
+            val manager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val admin = ComponentName(context, DeviceAdmin::class.java)
+            if (manager.isAdminActive(admin)) {
+                runCatching { manager.removeActiveAdmin(admin) }
+                prefs.lockModeOn = false
+            } else {
+                @Suppress("DEPRECATION")
+                requireActivity().startActivityForResult(Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                    .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
+                    .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.admin_permission_message)), Constants.REQUEST_CODE_ENABLE_ADMIN)
+            }
+        }
+        render()
+    }
+
+    /** Double tap, home for recents and pausing apps opened elsewhere all need the accessibility service */
+    private fun askAccessibility() {
         AlertDialog.Builder(requireContext())
-            .setTitle(R.string.backup_restored)
-            .setMessage(summary + "\n\n" + getString(R.string.restored_note))
+            .setTitle(R.string.accessibility)
+            .setMessage(R.string.accessibility_disclosure)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.enable) { _, _ ->
+                prefs.lockModePending = true
+                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            }
+            .show()
+    }
+
+    // --- Apps ---
+
+    private fun appsSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.apps))
+        val serviceOn = isAccessServiceEnabled(context)
+        val slowing = prefs.pauseAppsOn || prefs.useForOn
+        val hidden = prefs.hiddenApps.size
+        card.body(
+            row(card, getString(R.string.hidden_apps), hidden.toString(), R.string.info_hidden_apps) {
+                if (prefs.lockdownModeOn && prefs.lockdownHiddenApps) return@row
+                if (prefs.hiddenApps.isEmpty()) return@row context.showToast(getString(R.string.no_hidden_apps))
+                viewModel.getHiddenApps()
+                findNavController().navigate(R.id.appListFragment, bundleOf(Constants.Key.FLAG to Constants.FLAG_HIDDEN_APPS))
+            },
+            row(card, getString(R.string.auto_show_keyboard), onOff(prefs.autoShowKeyboard), R.string.info_keyboard) {
+                prefs.autoShowKeyboard = !prefs.autoShowKeyboard
+                render()
+            },
+            row(card, getString(R.string.pause_before_opening), onOff(prefs.pauseAppsOn), R.string.info_pause) {
+                if (prefs.pauseAppsOn) loosen { prefs.pauseAppsOn = false; render() }
+                else {
+                    prefs.pauseAppsOn = true
+                    AppPause.addAddictiveApps(context, prefs)
+                    render()
+                }
+            },
+            if (prefs.pauseAppsOn) row(card, getString(R.string.pause_length), getString(R.string.seconds_value, prefs.pauseSeconds), R.string.info_pause_length, level = 1) {
+                val options = listOf(5, 10, 15, 20, 30, 45, 60)
+                choose(R.string.pause_length, options.map { getString(R.string.seconds_value, it) }, options.indexOf(prefs.pauseSeconds)) {
+                    val seconds = options[it]
+                    if (seconds < prefs.pauseSeconds) loosen { prefs.pauseSeconds = seconds; render() } else prefs.pauseSeconds = seconds
+                }
+            } else null,
+            row(card, getString(R.string.use_for_a_set_time), onOff(prefs.useForOn), R.string.info_use_for) {
+                if (prefs.useForOn) loosen { prefs.useForOn = false; render() }
+                else {
+                    prefs.useForOn = true
+                    AppPause.addAddictiveApps(context, prefs)
+                    render()
+                    if (!serviceOn) askAccessibility()
+                }
+            },
+            if (slowing) row(card, getString(R.string.paused_apps), prefs.pausedApps.count { context.isPackageInstalled(it) }.toString(), R.string.info_paused_apps, level = 1) {
+                loosen { findNavController().navigate(R.id.pausedAppsFragment) }
+            } else null,
+            if (slowing) row(card, getString(R.string.apps_opened_elsewhere), onOff(serviceOn), R.string.info_elsewhere, level = 1) {
+                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            } else null,
+        )
+    }
+
+    /** Anything that weakens a limit needs the lockdown password while lockdown is on */
+    private fun loosen(action: () -> Unit) {
+        if (prefs.lockdownModeOn) requirePasswordThen(action) else action()
+    }
+
+    // --- Check-in ---
+
+    private fun checkInSection() {
+        val data = moodStore.load()
+        val card = Card(getString(R.string.check_in))
+        val pattern = if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a"
+        fun time(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        card.body(
+            row(card, getString(R.string.daily_mood_prompt), onOff(data.promptEnabled), R.string.info_check_in) {
+                val enable = !data.promptEnabled
+                moodStore.update {
+                    it.promptEnabled = enable
+                    it.promptSnoozedUntil = ""
+                }
+                render()
+            },
+            if (data.promptEnabled) row(card, getString(R.string.prompt_time), time(data.promptMinutes), R.string.info_check_in_time, level = 1) {
+                pickTime(data.promptMinutes) { moodStore.setPromptTimes(promptMinutes = it) }
+            } else null,
+            if (data.promptEnabled) row(card, getString(R.string.ask_missed_day), onOff(data.catchUpEnabled), R.string.info_missed_day, level = 1) {
+                moodStore.setPromptTimes(catchUpEnabled = !data.catchUpEnabled)
+                render()
+            } else null,
+            if (data.promptEnabled && data.catchUpEnabled) row(card, getString(R.string.ask_missed_day_until), time(data.catchUpMinutes), R.string.info_missed_until, level = 2) {
+                pickTime(data.catchUpMinutes) { moodStore.setPromptTimes(catchUpMinutes = it) }
+            } else null,
+        )
+    }
+
+    private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
+        TimePickerDialog(requireContext(), { _, hour, minute ->
+            onPicked(hour * 60 + minute)
+            render()
+        }, minutes / 60, minutes % 60, DateFormat.is24HourFormat(requireContext())).show()
+    }
+
+    // --- Tracking ---
+
+    private fun trackingSection() {
+        val context = requireContext()
+        val items = Tracking.items(context)
+        val card = Card(getString(R.string.tracking))
+        val problems = items.count { !it.ok }
+        card.subtitle(if (problems == 0) getString(R.string.tracking_all_ok) else resources.getQuantityString(R.plurals.tracking_problems, problems, problems))
+        val status = items.map { item ->
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(4.dpToPx(), 9.dpToPx(), 4.dpToPx(), 9.dpToPx())
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                item.fix?.let { fix -> setOnClickListener { fix(context) } }
+                setOnLongClickListener {
+                    explain(this, item.title, item.detail)
+                    true
+                }
+                addView(View(context).apply {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(if (item.ok) 0xFF66BB6A.toInt() else 0xFFFFB300.toInt())
+                    }
+                }, LinearLayout.LayoutParams(8.dpToPx(), 8.dpToPx()).apply { marginEnd = 12.dpToPx() })
+                addView(card.textView(15f, 240).apply { text = item.title }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                if (!item.ok) addView(card.textView(14f, 150).apply {
+                    text = getString(if (item.fix != null) R.string.tracking_fix else R.string.tracking_check)
+                })
+            }
+        }
+        card.body(
+            *status.toTypedArray(),
+            row(card, getString(R.string.people_count_calls), onOff(People.hasCallLog(context)), R.string.info_calls) {
+                if (People.hasCallLog(context)) openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
+                else askCallLog.launch(android.Manifest.permission.READ_CALL_LOG)
+            },
+        )
+        placesSection()
+        spendingSection()
+    }
+
+    private fun placesSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.places_title_short))
+        val social = AutoStats.id(context, AutoStats.SOCIAL)
+        val homes = Social.homes(context)
+        val work = Social.work(context)
+        val (checks, scans) = Places.todayCounts(context)
+        val placesOn = Places.enabled(context)
+        card.body(
+            row(card, getString(R.string.homes_and_work), listOfNotNull(homes.firstOrNull()?.name, homes.getOrNull(1)?.name, work?.name)
+                .joinToString(", ").ifEmpty { getString(R.string.social_not_set) }, R.string.info_homes) {
+                social?.let { id -> runCatching { findNavController().navigate(R.id.statFragment, bundleOf(StatFragment.STAT_ID to id)) } }
+            },
+            row(card, getString(R.string.places_find), onOff(placesOn), R.string.info_places) {
+                Places.setEnabled(context, !placesOn)
+                render()
+            },
+            if (placesOn) row(card, getString(R.string.places_today), resources.getQuantityString(R.plurals.places_checks, checks, checks) + " · " +
+                resources.getQuantityString(R.plurals.places_scans, scans, scans), R.string.info_places_today, level = 1, onTap = null) else null,
+            if (placesOn) row(card, getString(R.string.places_delete), null, R.string.info_places_delete, level = 1) {
+                AlertDialog.Builder(context)
+                    .setMessage(R.string.places_delete_ask)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.places_delete) { _, _ -> Places.deleteHistory(context); render() }
+                    .show()
+            } else null,
+        )
+    }
+
+    private fun spendingSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.settings_spending))
+        val limit = Spending.weekLimitCents(context)
+        card.body(
+            row(card, getString(R.string.week_limit), if (limit <= 0) getString(R.string.off) else moneyShort(limit), R.string.info_week_limit) {
+                askWeekLimit { if (isAdded) render() }
+            },
+            if (limit > 0) row(card, getString(R.string.settings_carry_over), onOff(Spending.carryOver(context)), R.string.info_carry_over, level = 1) {
+                Spending.setCarryOver(context, !Spending.carryOver(context))
+                render()
+            } else null,
+            row(card, getString(R.string.settings_essentials), Spending.groupRules(context).size.takeIf { it > 0 }?.toString() ?: getString(R.string.settings_automatic),
+                R.string.info_essentials) { askRules() },
+        )
+    }
+
+    /** Each category set by hand: change it or put it back to automatic */
+    private fun askRules() {
+        val context = requireContext()
+        val rules = Spending.groupRules(context).entries.toList()
+        if (rules.isEmpty()) {
+            AlertDialog.Builder(context).setMessage(R.string.settings_essentials_how).setPositiveButton(R.string.okay, null).show()
+            return
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.settings_essentials)
+            .setItems(rules.map { (group, essential) -> group + " · " + getString(if (essential) R.string.essential else R.string.settings_not_essential) }.toTypedArray()) { _, i ->
+                val (group, essential) = rules[i]
+                AlertDialog.Builder(context)
+                    .setTitle(group)
+                    .setItems(arrayOf(getString(if (essential) R.string.essential_not_group else R.string.essential_group, group),
+                        getString(R.string.essential_reset_group, group))) { _, which ->
+                        Spending.setGroupEssential(context, group, if (which == 0) !essential else null)
+                        render()
+                    }
+                    .show()
+            }
+            .show()
+    }
+
+    // --- Stats ---
+
+    private fun statsSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.stats_title))
+        val newOnHome = StatsHomeFragment.showsNewStats(context)
+        card.body(
+            row(card, getString(R.string.settings_new_on_home), onOff(newOnHome), R.string.info_new_on_home) {
+                StatsHomeFragment.setShowsNewStats(context, !newOnHome)
+                render()
+            },
+            row(card, getString(R.string.report_make), null, R.string.info_report) { askReport() },
+        )
+    }
+
+    private fun askReport() {
+        val spans = listOf(30, 90, 180)
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.report_make)
+            .setItems(spans.map { getString(R.string.last_days, it) }.toTypedArray()) { _, i ->
+                reportDays = spans[i]
+                // So the launcher stays here while the file is picked, instead of going home
+                viewModel.isPickingFile = true
+                createReport.launch(getString(R.string.report_file, LocalDate.now().toString()))
+            }
+            .show()
+    }
+
+    // --- Lockdown ---
+
+    private fun lockdownSection() {
+        val card = Card(getString(R.string.lockdown))
+        // Tapping the title 500 times shows the password, when that way of recovering it is on
+        card.titleView.setOnClickListener {
+            if (!prefs.lockdownModeOn || !prefs.passwordRecoveryEnabled || !prefs.recoveryTap500 || !prefs.isLockdownPasswordSet) return@setOnClickListener
+            recoveryTaps++
+            if (recoveryTaps >= 500) {
+                recoveryTaps = 0
+                showPassword()
+            } else if (recoveryTaps % 50 == 0) requireContext().showToast(getString(R.string.recovery_tap_progress, recoveryTaps))
+        }
+        val on = prefs.lockdownModeOn
+        val recovery = on && prefs.passwordRecoveryEnabled
+        fun strict(title: Int, about: Int, get: () -> Boolean, set: (Boolean) -> Unit) = if (on) row(card, getString(title), onOff(get()), about, level = 1) {
+            if (get()) loosen { set(false); render() } else { set(true); render() }
+        } else null
+        fun method(title: Int, about: Int, get: () -> Boolean, toggle: () -> Unit) = if (recovery) row(card, getString(title), onOff(get()), about, level = 2) {
+            loosen(toggle)
+        } else null
+        card.body(
+            row(card, getString(R.string.lockdown), onOff(on), R.string.info_lockdown) {
+                if (on) loosen { prefs.resetLockdownSettings(); render() }
+                else {
+                    prefs.lockdownModeOn = true
+                    render()
+                }
+            },
+            if (on) row(card, getString(R.string.lockdown_password), onOff(prefs.isLockdownPasswordSet), R.string.info_lockdown_password, level = 1) {
+                if (prefs.isLockdownPasswordSet) requirePasswordThen { passwordOptions() } else passwordWarningThenSet()
+            } else null,
+            strict(R.string.lockdown_app_drawer, R.string.info_lockdown_drawer, { prefs.lockdownAppDrawer }) { prefs.lockdownAppDrawer = it },
+            strict(R.string.lockdown_hold_app, R.string.info_lockdown_hold, { prefs.lockdownHoldApp }) { prefs.lockdownHoldApp = it },
+            strict(R.string.lockdown_hidden_apps, R.string.info_lockdown_hidden, { prefs.lockdownHiddenApps }) { prefs.lockdownHiddenApps = it },
+            strict(R.string.lockdown_change_launcher, R.string.info_lockdown_launcher, { prefs.lockdownChangeLauncher }) { prefs.lockdownChangeLauncher = it },
+            if (on) row(card, getString(R.string.lockdown_password_recovery), onOff(prefs.passwordRecoveryEnabled), R.string.info_recovery, level = 1) {
+                loosen { prefs.passwordRecoveryEnabled = !prefs.passwordRecoveryEnabled; render() }
+            } else null,
+            method(R.string.recovery_tap_500, R.string.recovery_tap_500_info, { prefs.recoveryTap500 }) { prefs.recoveryTap500 = !prefs.recoveryTap500; render() },
+            method(R.string.recovery_clue, R.string.recovery_clue_info, { prefs.recoveryClue }) { toggleClue() },
+            method(R.string.recovery_essay, R.string.recovery_essay_info, { prefs.recoveryEssay }) { prefs.recoveryEssay = !prefs.recoveryEssay; render() },
+            method(R.string.recovery_pay, R.string.recovery_pay_info, { prefs.recoveryPay }) { togglePay() },
+        )
+    }
+
+    private fun toggleClue() {
+        if (prefs.recoveryClue) {
+            prefs.recoveryClue = false
+            prefs.recoveryClueText = ""
+            return render()
+        }
+        val input = EditText(requireContext()).apply { hint = getString(R.string.enter_clue) }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.enter_clue)
+            .setView(padded(input))
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val clue = input.text.toString().trim()
+                if (clue.isNotEmpty()) {
+                    prefs.recoveryClue = true
+                    prefs.recoveryClueText = clue
+                    render()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private val payAmounts = arrayOf("$3", "$9", "$20", "$50", "$99", "$299")
+
+    private fun togglePay() {
+        if (prefs.recoveryPay) {
+            prefs.recoveryPay = false
+            prefs.recoveryPayAmount = 0
+            return render()
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.select_amount)
+            .setItems(payAmounts) { _, which ->
+                prefs.recoveryPay = true
+                prefs.recoveryPayAmount = which
+                render()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun padded(view: View) = FrameLayout(requireContext()).apply {
+        setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+        addView(view)
+    }
+
+    private fun passwordWarningThenSet() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.catastrophic_warning)
+            .setMessage(R.string.lockdown_password_warning)
+            .setPositiveButton(R.string.proceed) { _, _ -> setNewPassword() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun passwordOptions() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.lockdown_password)
+            .setItems(arrayOf(getString(R.string.change_lockdown_password), getString(R.string.remove_lockdown_password))) { _, which ->
+                if (which == 0) setNewPassword()
+                else {
+                    prefs.lockdownPasswordHash = ""
+                    render()
+                    requireContext().showToast(getString(R.string.password_removed))
+                }
+            }
+            .show()
+    }
+
+    private fun setNewPassword() {
+        askPassword(getString(R.string.set_lockdown_password), generate = true) { first ->
+            if (first.length < 4) return@askPassword requireContext().showToast(getString(R.string.password_too_short))
+            askPassword(getString(R.string.confirm_password)) { second ->
+                if (first != second) return@askPassword requireContext().showToast(getString(R.string.passwords_do_not_match))
+                savePassword(first)
+            }
+        }
+    }
+
+    private fun savePassword(password: String) {
+        prefs.lockdownPasswordHash = PasswordHelper.hashPassword(password)
+        prefs.lockdownPasswordPlaintext = password
+        render()
+        requireContext().showToast(getString(R.string.password_set_success))
+    }
+
+    private fun requirePasswordThen(action: () -> Unit) {
+        if (!prefs.isLockdownPasswordSet) return action()
+        askPassword(getString(R.string.enter_password)) { password ->
+            if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) action()
+            else requireContext().showToast(getString(R.string.password_incorrect))
+        }
+    }
+
+    private fun askPassword(title: String, generate: Boolean = false, onEntered: (String) -> Unit) {
+        val context = requireContext()
+        val input = EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = getString(R.string.enter_password)
+        }
+        val show = android.widget.CheckBox(context).apply {
+            text = getString(R.string.show)
+            setOnCheckedChangeListener { _, checked ->
+                input.inputType = InputType.TYPE_CLASS_TEXT or if (checked) InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD else InputType.TYPE_TEXT_VARIATION_PASSWORD
+                input.setSelection(input.text.length)
+            }
+        }
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+            addView(input)
+            addView(show)
+        }
+        val builder = AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton(R.string.okay) { _, _ -> onEntered(input.text.toString()) }
+            .setNegativeButton(R.string.close, null)
+        if (generate) builder.setNeutralButton(R.string.generate_password) { _, _ -> generatePassword() }
+        else if (prefs.passwordRecoveryEnabled) builder.setNeutralButton(R.string.recover_password) { _, _ -> recoveryOptions() }
+        builder.show()
+    }
+
+    private fun generatePassword() {
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*"
+        val password = (1..32).map { chars.random() }.joinToString("")
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.catastrophic_warning)
+            .setMessage(getString(R.string.generated_password_warning, password))
+            .setPositiveButton(R.string.proceed) { _, _ -> savePassword(password) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun recoveryOptions() {
+        val context = requireContext()
+        val ways = mutableListOf<Pair<String, () -> Unit>>()
+        if (prefs.recoveryTap500) ways += getString(R.string.recovery_tap_500) to { context.showToast(getString(R.string.recovery_tap_500_info)) }
+        if (prefs.recoveryClue) ways += getString(R.string.recovery_clue) to {
+            AlertDialog.Builder(context).setTitle(R.string.your_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
+        }
+        if (prefs.recoveryEssay) ways += getString(R.string.recovery_essay) to { essay() }
+        if (prefs.recoveryPay) ways += (getString(R.string.recovery_pay) + " (" + payAmounts[prefs.recoveryPayAmount] + ")") to {
+            context.showToast(getString(R.string.recovery_pay_not_available))
+        }
+        if (ways.isEmpty()) return context.showToast(getString(R.string.no_recovery_methods))
+        AlertDialog.Builder(context)
+            .setTitle(R.string.recover_password)
+            .setItems(ways.map { it.first }.toTypedArray()) { _, which -> ways[which].second() }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun essay() {
+        val input = EditText(requireContext()).apply {
+            hint = getString(R.string.essay_prompt)
+            maxLines = 10
+            // No pasting it in
+            customSelectionActionModeCallback = object : android.view.ActionMode.Callback {
+                override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = true.also { menu?.removeItem(android.R.id.paste) }
+                override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = true.also { menu?.removeItem(android.R.id.paste) }
+                override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?) = false
+                override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
+            }
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.recovery_essay)
+            .setView(padded(input))
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val text = input.text.toString()
+                if (text.length >= 500) showPassword() else requireContext().showToast(getString(R.string.essay_too_short, text.length))
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showPassword() {
+        val password = prefs.lockdownPasswordPlaintext.ifEmpty { return }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.your_password_is)
+            .setView(padded(TextView(requireContext()).apply {
+                text = password
+                textSize = 20f
+                setTextIsSelectable(true)
+            }))
             .setPositiveButton(R.string.okay, null)
             .show()
     }
 
-    private fun populateBackupSettings() {
-        val folder = BackupManager.backupFolder(requireContext())
-        binding.backupFolder.text = when {
-            folder.isEmpty() -> getString(R.string.off)
-            BackupManager.isFolderFailing(requireContext()) -> getString(R.string.backup_not_saving)
-            else -> backupFolderName(folder)
-        }
+    // --- Backup ---
+
+    private fun backupSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.backup))
+        val folder = BackupManager.backupFolder(context)
+        card.body(
+            row(card, getString(R.string.backup_folder), when {
+                folder.isEmpty() -> getString(R.string.off)
+                BackupManager.isFolderFailing(context) -> getString(R.string.backup_not_saving)
+                else -> folderName(folder)
+            }, R.string.info_backup_folder) {
+                if (folder.isEmpty()) return@row pickFolder()
+                AlertDialog.Builder(context)
+                    .setTitle(R.string.backup_folder)
+                    .setItems(arrayOf(getString(R.string.change_folder), getString(R.string.turn_off))) { _, which ->
+                        if (which == 0) pickFolder() else {
+                            BackupManager.setBackupFolder(context, null)
+                            render()
+                        }
+                    }
+                    .show()
+            },
+            row(card, getString(R.string.export_backup), null, R.string.info_export) {
+                viewModel.isPickingFile = true
+                exportBackup.launch(BackupManager.BACKUP_FILE_NAME)
+            },
+            row(card, getString(R.string.import_backup), null, R.string.info_import) {
+                viewModel.isPickingFile = true
+                importBackup.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+            },
+        )
     }
 
-    /** Replaces settings with a backup. Needs the lockdown password, since it could loosen lockdown. */
+    private fun pickFolder() {
+        viewModel.isPickingFile = true
+        pickBackupFolder.launch(null)
+    }
+
+    private fun folderName(treeUri: String): String = runCatching {
+        DocumentsContract.getTreeDocumentId(Uri.parse(treeUri)).substringAfter(':').substringAfterLast('/')
+    }.getOrNull()?.ifEmpty { null } ?: getString(R.string.on)
+
+    /** Replaces everything with a backup. Needs the lockdown password, since it could loosen lockdown. */
     private fun restoreBackup(backup: JSONObject, afterRestore: () -> Unit = {}) {
         requirePasswordThen {
             BackupManager.restore(requireContext(), backup)
@@ -1029,523 +1015,64 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         }
     }
 
-    private fun backupFolderName(treeUri: String): String = try {
-        // Tree document ids look like "primary:Documents/JLauncher"
-        DocumentsContract.getTreeDocumentId(Uri.parse(treeUri)).substringAfter(':').substringAfterLast('/')
-            .ifEmpty { getString(R.string.on) }
-    } catch (e: Exception) {
-        getString(R.string.on)
+    private fun showRestoreSummary() {
+        val summary = BackupManager.takeRestoreSummary(requireContext()) ?: return
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.backup_restored)
+            .setMessage(summary + "\n\n" + getString(R.string.restored_note))
+            .setPositiveButton(R.string.okay, null)
+            .show()
     }
 
-    private fun toggleMoodPrompt() {
-        val enable = !moodStore.load().promptEnabled
-        moodStore.update {
-            it.promptEnabled = enable
-            it.promptSnoozedUntil = ""
-        }
-        populateMoodSettings()
-        if (!enable) return
+    // --- About ---
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !requireContext().appUsagePermissionGranted())
-            viewModel.showDialog.postValue(Constants.Dialog.DIGITAL_WELLBEING)
-    }
-
-    private fun pickMoodPromptTime() = pickTime(moodStore.load().promptMinutes) { moodStore.setPromptTimes(promptMinutes = it) }
-
-    private fun toggleMoodCatchUp() {
-        moodStore.setPromptTimes(catchUpEnabled = !moodStore.load().catchUpEnabled)
-        populateMoodSettings()
-    }
-
-    private fun pickMoodCatchUpTime() = pickTime(moodStore.load().catchUpMinutes) { moodStore.setPromptTimes(catchUpMinutes = it) }
-
-    /** [onPicked] gets minutes past midnight. */
-    private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
-        TimePickerDialog(
-            requireContext(),
-            { _, hour, minute ->
-                onPicked(hour * 60 + minute)
-                populateMoodSettings()
+    private fun aboutSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.about))
+        val isDefault = isOlauncherDefault(context)
+        card.body(
+            if (!(prefs.lockdownModeOn && prefs.lockdownChangeLauncher)) row(card, getString(if (isDefault) R.string.change_default_launcher else R.string.set_as_default_launcher),
+                null, R.string.info_default) { viewModel.resetLauncherLiveData.call() } else null,
+            row(card, getString(R.string.app_info), null, R.string.info_app_info) {
+                openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
             },
-            minutes / 60,
-            minutes % 60,
-            DateFormat.is24HourFormat(requireContext())
-        ).show()
-    }
-
-    private fun launchBackupFolderPicker() {
-        viewModel.isPickingFile = true
-        pickBackupFolder.launch(null)
-    }
-
-    private fun onBackupFolderClicked() {
-        if (BackupManager.backupFolder(requireContext()).isEmpty()) {
-            launchBackupFolderPicker()
-            return
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.backup_folder))
-            .setItems(arrayOf(getString(R.string.change_folder), getString(R.string.turn_off))) { _, which ->
-                when (which) {
-                    0 -> launchBackupFolderPicker()
-                    1 -> {
-                        BackupManager.setBackupFolder(requireContext(), null)
-                        populateBackupSettings()
-                    }
-                }
-            }
-            .show()
-    }
-
-    private fun populateLockdownSettings() {
-        binding.lockdownModeStatus.text = getString(
-            if (prefs.lockdownModeOn) R.string.on else R.string.off
+            row(card, getString(R.string.version), BuildConfig.VERSION_NAME, R.string.info_version, onTap = null),
         )
-        binding.lockdownSettingsContainer.visibility =
-            if (prefs.lockdownModeOn) View.VISIBLE else View.GONE
-        if (prefs.lockdownModeOn) {
-            binding.lockdownPasswordStatus.text = getString(
-                if (prefs.isLockdownPasswordSet) R.string.on else R.string.off
-            )
-            binding.lockdownAppDrawerStatus.text = getString(
-                if (prefs.lockdownAppDrawer) R.string.on else R.string.off
-            )
-            binding.lockdownHoldAppStatus.text = getString(
-                if (prefs.lockdownHoldApp) R.string.on else R.string.off
-            )
-            binding.lockdownHiddenAppsStatus.text = getString(
-                if (prefs.lockdownHiddenApps) R.string.on else R.string.off
-            )
-            binding.lockdownChangeLauncherStatus.text = getString(
-                if (prefs.lockdownChangeLauncher) R.string.on else R.string.off
-            )
-            binding.lockdownPasswordRecoveryStatus.text = getString(
-                if (prefs.passwordRecoveryEnabled) R.string.on else R.string.off
-            )
-        }
-        // Hide set launcher button when restricted
-        if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher)
-            binding.setLauncher.visibility = View.GONE
-        else
-            binding.setLauncher.visibility = View.VISIBLE
-        // Show/hide recovery card
-        binding.passwordRecoveryCard.visibility =
-            if (prefs.lockdownModeOn && prefs.passwordRecoveryEnabled) View.VISIBLE else View.GONE
-        if (prefs.passwordRecoveryEnabled) populateRecoveryStatuses()
-    }
-
-    private fun populateRecoveryStatuses() {
-        binding.recoveryTap500Status.text = getString(if (prefs.recoveryTap500) R.string.on else R.string.off)
-        binding.recoveryClueStatus.text = getString(if (prefs.recoveryClue) R.string.on else R.string.off)
-        binding.recoveryEssayStatus.text = getString(if (prefs.recoveryEssay) R.string.on else R.string.off)
-        binding.recoveryPayStatus.text = getString(if (prefs.recoveryPay) R.string.on else R.string.off)
-    }
-
-    private fun toggleLockdownMode() {
-        if (prefs.lockdownModeOn) {
-            // Turning OFF lockdown
-            if (prefs.isLockdownPasswordSet) {
-                requirePasswordThen {
-                    prefs.resetLockdownSettings()
-                    populateLockdownSettings()
-                }
-            } else {
-                prefs.resetLockdownSettings()
-                populateLockdownSettings()
-            }
-        } else {
-            // Turning ON lockdown — free
-            prefs.lockdownModeOn = true
-            populateLockdownSettings()
-        }
-    }
-
-    private fun toggleLockdownSetting(getter: () -> Boolean, setter: (Boolean) -> Unit) {
-        val currentlyOn = getter()
-        if (currentlyOn) {
-            // Loosening restriction — requires password if set
-            if (prefs.isLockdownPasswordSet) {
-                requirePasswordThen {
-                    setter(false)
-                    populateLockdownSettings()
-                }
-            } else {
-                setter(false)
-                populateLockdownSettings()
-            }
-        } else {
-            // Tightening restriction — free
-            setter(true)
-            populateLockdownSettings()
-        }
-    }
-
-    private fun handleLockdownPasswordClick() {
-        if (prefs.isLockdownPasswordSet) {
-            requirePasswordThen { showPasswordSetOrRemoveDialog() }
-        } else {
-            showPasswordWarningThenSet()
-        }
-    }
-
-    private fun showPasswordWarningThenSet() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.catastrophic_warning))
-            .setMessage(getString(R.string.lockdown_password_warning))
-            .setPositiveButton(getString(R.string.proceed)) { _, _ ->
-                showSetNewPasswordDialog()
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    private fun showPasswordSetOrRemoveDialog() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.lockdown_mode))
-            .setItems(arrayOf(
-                getString(R.string.change_lockdown_password),
-                getString(R.string.remove_lockdown_password)
-            )) { _, which ->
-                when (which) {
-                    0 -> showSetNewPasswordDialog()
-                    1 -> {
-                        prefs.lockdownPasswordHash = ""
-                        populateLockdownSettings()
-                        requireContext().showToast(getString(R.string.password_removed))
-                    }
-                }
-            }
-            .show()
-    }
-
-    private fun showSetNewPasswordDialog() {
-        showPasswordInputDialog(getString(R.string.set_lockdown_password), showGenerate = true) { newPassword ->
-            if (newPassword.length < 4) {
-                requireContext().showToast(getString(R.string.password_too_short))
-                return@showPasswordInputDialog
-            }
-            showPasswordInputDialog(getString(R.string.confirm_password), showGenerate = false) { confirmPassword ->
-                if (newPassword == confirmPassword) {
-                    prefs.lockdownPasswordHash = PasswordHelper.hashPassword(newPassword)
-                    prefs.lockdownPasswordPlaintext = newPassword
-                    populateLockdownSettings()
-                    requireContext().showToast(getString(R.string.password_set_success))
-                } else {
-                    requireContext().showToast(getString(R.string.passwords_do_not_match))
-                }
-            }
-        }
-    }
-
-    private fun requirePasswordThen(action: () -> Unit) {
-        if (!prefs.isLockdownPasswordSet) {
-            action()
-            return
-        }
-        showPasswordInputDialog(getString(R.string.enter_password)) { password ->
-            if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) {
-                action()
-            } else {
-                requireContext().showToast(getString(R.string.password_incorrect))
-            }
-        }
-    }
-
-    private fun showPasswordInputDialog(
-        title: String,
-        showGenerate: Boolean = false,
-        onPasswordEntered: (String) -> Unit,
-    ) {
-        val container = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(48, 32, 48, 16)
-        }
-        val editText = EditText(requireContext()).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = getString(R.string.enter_password)
-        }
-        container.addView(editText)
-
-        val toggleRow = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 8, 0, 0)
-        }
-        val eyeCheckbox = android.widget.CheckBox(requireContext()).apply {
-            text = "Show"
-            textSize = 14f
-            setOnCheckedChangeListener { _, isChecked ->
-                editText.inputType = if (isChecked)
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                else
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                editText.setSelection(editText.text.length)
-            }
-        }
-        toggleRow.addView(eyeCheckbox)
-        container.addView(toggleRow)
-
-        val builder = AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setView(container)
-            .setPositiveButton(getString(R.string.okay)) { _, _ ->
-                onPasswordEntered(editText.text.toString())
-            }
-            .setNegativeButton(getString(R.string.close), null)
-        if (showGenerate) {
-            builder.setNeutralButton(getString(R.string.generate_password)) { _, _ ->
-                generateAndSetPassword(onPasswordEntered)
-            }
-        } else if (prefs.passwordRecoveryEnabled) {
-            builder.setNeutralButton(getString(R.string.recover_password)) { _, _ ->
-                showRecoveryOptionsDialog()
-            }
-        }
-        builder.show()
-    }
-
-    private fun generateAndSetPassword(onPasswordEntered: (String) -> Unit) {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*"
-        val password = (1..32).map { chars.random() }.joinToString("")
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.catastrophic_warning))
-            .setMessage(getString(R.string.generated_password_warning, password))
-            .setPositiveButton(getString(R.string.proceed)) { _, _ ->
-                prefs.lockdownPasswordHash = PasswordHelper.hashPassword(password)
-                prefs.lockdownPasswordPlaintext = password
-                populateLockdownSettings()
-                requireContext().showToast(getString(R.string.password_set_success))
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    private fun showRecoveryOptionsDialog() {
-        val methods = mutableListOf<Pair<String, () -> Unit>>()
-        if (prefs.recoveryTap500) methods.add(getString(R.string.recovery_tap_500) to {
-            requireContext().showToast(getString(R.string.recovery_tap_500_info))
-        })
-        if (prefs.recoveryClue) methods.add(getString(R.string.recovery_clue) to { useRecoveryClue() })
-        if (prefs.recoveryEssay) methods.add(getString(R.string.recovery_essay) to { useRecoveryEssay() })
-        if (prefs.recoveryPay) methods.add(getString(R.string.recovery_pay) + " (${payAmounts[prefs.recoveryPayAmount]})" to { useRecoveryPay() })
-
-        if (methods.isEmpty()) {
-            requireContext().showToast(getString(R.string.no_recovery_methods))
-            return
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.recover_password))
-            .setItems(methods.map { it.first }.toTypedArray()) { _, which ->
-                methods[which].second()
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
-    }
-
-    // --- Password Recovery ---
-
-    private fun toggleRecoverySetting() {
-        if (prefs.passwordRecoveryEnabled) {
-            // Turning off recovery — requires password if set
-            if (prefs.isLockdownPasswordSet) {
-                requirePasswordThen {
-                    prefs.passwordRecoveryEnabled = false
-                    populateLockdownSettings()
-                }
-            } else {
-                prefs.passwordRecoveryEnabled = false
-                populateLockdownSettings()
-            }
-        } else {
-            // Turning on recovery — requires password if set
-            if (prefs.isLockdownPasswordSet) {
-                requirePasswordThen {
-                    prefs.passwordRecoveryEnabled = true
-                    populateLockdownSettings()
-                }
-            } else {
-                prefs.passwordRecoveryEnabled = true
-                populateLockdownSettings()
-            }
-        }
-    }
-
-    private fun toggleRecoveryMethod(getter: () -> Boolean, setter: (Boolean) -> Unit) {
-        if (prefs.isLockdownPasswordSet) {
-            requirePasswordThen {
-                setter(!getter())
-                populateRecoveryStatuses()
-            }
-        } else {
-            setter(!getter())
-            populateRecoveryStatuses()
-        }
-    }
-
-    private fun onRecoveryClueToggle() {
-        if (prefs.recoveryClue) {
-            // Turning off or viewing clue
-            if (prefs.isLockdownPasswordSet) {
-                requirePasswordThen {
-                    prefs.recoveryClue = false
-                    prefs.recoveryClueText = ""
-                    populateRecoveryStatuses()
-                }
-            } else {
-                prefs.recoveryClue = false
-                prefs.recoveryClueText = ""
-                populateRecoveryStatuses()
-            }
-        } else {
-            // Turning on — prompt for clue text
-            val action: () -> Unit = {
-                val editText = EditText(requireContext()).apply {
-                    hint = getString(R.string.enter_clue)
-                    setPadding(48, 32, 48, 32)
-                }
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.enter_clue))
-                    .setView(editText)
-                    .setPositiveButton(getString(R.string.okay)) { _, _ ->
-                        val clue = editText.text.toString().trim()
-                        if (clue.isNotEmpty()) {
-                            prefs.recoveryClue = true
-                            prefs.recoveryClueText = clue
-                            populateRecoveryStatuses()
-                        }
-                    }
-                    .setNegativeButton(getString(R.string.cancel), null)
-                    .show()
-            }
-            if (prefs.isLockdownPasswordSet) requirePasswordThen(action) else action()
-        }
-    }
-
-    private val payAmounts = arrayOf("$3", "$9", "$20", "$50", "$99", "$299")
-
-    private fun onRecoveryPayToggle() {
-        if (prefs.recoveryPay) {
-            if (prefs.isLockdownPasswordSet) {
-                requirePasswordThen {
-                    prefs.recoveryPay = false
-                    prefs.recoveryPayAmount = 0
-                    populateRecoveryStatuses()
-                }
-            } else {
-                prefs.recoveryPay = false
-                prefs.recoveryPayAmount = 0
-                populateRecoveryStatuses()
-            }
-        } else {
-            val action: () -> Unit = {
-                AlertDialog.Builder(requireContext())
-                    .setTitle(getString(R.string.select_amount))
-                    .setItems(payAmounts) { _, which ->
-                        prefs.recoveryPay = true
-                        prefs.recoveryPayAmount = which
-                        populateRecoveryStatuses()
-                    }
-                    .setNegativeButton(getString(R.string.cancel), null)
-                    .show()
-            }
-            if (prefs.isLockdownPasswordSet) requirePasswordThen(action) else action()
-        }
-    }
-
-    private fun onRecoveryTitleTapped() {
-        if (!prefs.isLockdownPasswordSet || !prefs.recoveryTap500) return
-        recoveryTapCount++
-        if (recoveryTapCount >= 500) {
-            recoveryTapCount = 0
-            showPasswordRevealDialog()
-        } else if (recoveryTapCount % 50 == 0) {
-            requireContext().showToast(getString(R.string.recovery_tap_progress, recoveryTapCount))
-        }
-    }
-
-    private fun showPasswordRevealDialog() {
-        val password = prefs.lockdownPasswordPlaintext
-        if (password.isEmpty()) return
-        val textView = TextView(requireContext()).apply {
-            text = password
-            textSize = 20f
-            setPadding(48, 32, 48, 32)
-            setTextIsSelectable(true)
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.your_password_is))
-            .setView(textView)
-            .setPositiveButton(getString(R.string.okay), null)
-            .show()
-    }
-
-    private fun showInfoDialog(title: String, message: String) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton(getString(R.string.okay), null)
-            .show()
-    }
-
-    // Recovery usage methods — called from password dialog "Recover password" button
-
-    fun useRecoveryClue() {
-        if (!prefs.recoveryClue || prefs.recoveryClueText.isEmpty()) return
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.your_clue))
-            .setMessage(prefs.recoveryClueText)
-            .setPositiveButton(getString(R.string.okay), null)
-            .show()
-    }
-
-    fun useRecoveryEssay() {
-        if (!prefs.recoveryEssay) return
-        val editText = EditText(requireContext()).apply {
-            hint = getString(R.string.essay_prompt)
-            setPadding(48, 32, 48, 32)
-            maxLines = 10
-            // Disable paste
-            setCustomSelectionActionModeCallback(object : android.view.ActionMode.Callback {
-                override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
-                    menu?.removeItem(android.R.id.paste)
-                    return true
-                }
-                override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
-                    menu?.removeItem(android.R.id.paste)
-                    return true
-                }
-                override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?) = false
-                override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
-            })
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.recovery_essay))
-            .setMessage(getString(R.string.essay_prompt))
-            .setView(editText)
-            .setPositiveButton(getString(R.string.okay)) { _, _ ->
-                val text = editText.text.toString()
-                if (text.length >= 500) {
-                    showPasswordRevealDialog()
-                } else {
-                    requireContext().showToast(getString(R.string.essay_too_short, text.length))
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-
-    fun useRecoveryPay() {
-        requireContext().showToast(getString(R.string.recovery_pay_not_available))
+        showRestoreSummary()
     }
 
     override fun onDestroyView() {
-        recoveryTapCount = 0
+        info?.dismiss()
+        info = null
         super.onDestroyView()
-        _binding = null
     }
+}
 
-    override fun onDestroy() {
-        viewModel.checkForMessages.call()
-        super.onDestroy()
+/**
+ * The header the stats pages share: ‹, an icon, and the title, large. Tapping ‹ goes back.
+ */
+fun pageHeader(context: android.content.Context, icon: String?, title: String, onBack: () -> Unit): View {
+    val ink = context.getColorFromAttr(R.attr.primaryColor)
+    return LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(12.dpToPx(), 0, 20.dpToPx(), 16.dpToPx())
+        addView(TextView(context, null, 0, R.style.TextLarge).apply {
+            text = "‹"
+            textSize = 28f
+            setTextColor(ink)
+            setPadding(8.dpToPx(), 0, 14.dpToPx(), 0)
+            contentDescription = context.getString(R.string.close)
+            setOnClickListener { onBack() }
+        })
+        if (icon != null) addView(View(context).apply { background = StatIcons.drawable(icon, ink, 24.dpToPx()) },
+            LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { marginEnd = 12.dpToPx() })
+        addView(TextView(context, null, 0, R.style.TextLarge).apply {
+            text = title
+            textSize = 28f
+            setTextColor(ink)
+            isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
 }

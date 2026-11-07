@@ -30,7 +30,6 @@ import app.olauncher.helper.Vibecoding
 import app.olauncher.helper.Medicines
 import app.olauncher.helper.Social
 import app.olauncher.helper.SingleLiveEvent
-import app.olauncher.helper.WallpaperWorker
 import app.olauncher.helper.Weather
 import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getAppsList
@@ -458,23 +457,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         isOlauncherDefault.value = isOlauncherDefault(appContext)
     }
 
-    fun setWallpaperWorker() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        val uploadWorkRequest = PeriodicWorkRequestBuilder<WallpaperWorker>(4, TimeUnit.HOURS)
-            .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.HOURS)
-            .setConstraints(constraints)
-            .build()
-        WorkManager
-            .getInstance(appContext)
-            .enqueueUniquePeriodicWork(
-                Constants.WALLPAPER_WORKER_NAME,
-                ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
-                uploadWorkRequest
-            )
-    }
-
+    /** The old daily wallpaper download is gone; stops it where it was still scheduled */
     fun cancelWallpaperWorker() {
         WorkManager.getInstance(appContext).cancelUniqueWork(Constants.WALLPAPER_WORKER_NAME)
         prefs.dailyWallpaperUrl = ""

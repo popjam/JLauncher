@@ -11,7 +11,7 @@ object SwipeTargets {
     const val SWIPE_BACK = "swipeBack"
 
     fun get(context: Context, left: Boolean): Target =
-        prefs(context).getString(key(left), null)?.let { runCatching { Target.valueOf(it) }.getOrNull() } ?: Target.APP
+        prefs(context).getString(key(left), null)?.let { runCatching { Target.valueOf(it) }.getOrNull() } ?: if (left) Target.STATS else Target.APP
 
     fun set(context: Context, left: Boolean, target: Target) = prefs(context).edit().putString(key(left), target.name).apply()
 

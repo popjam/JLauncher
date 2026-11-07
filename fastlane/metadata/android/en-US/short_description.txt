@@ -1,1 +1,1 @@
-Minimalist launcher to reduce your screen time. Daily wallpapers. Zero ads.
+A minimal text launcher with a mood and life tracker built in.

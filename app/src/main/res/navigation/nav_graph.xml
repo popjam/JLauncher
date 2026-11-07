@@ -95,10 +95,6 @@
         android:label="JournalFragment">
     </fragment>
 
-    <fragment
-        android:id="@+id/statsSettingsFragment"
-        android:name="app.olauncher.ui.StatsSettingsFragment"
-        android:label="StatsSettingsFragment" />
 
     <!-- Everything about one day, and changing it -->
     <fragment
@@ -138,8 +134,7 @@
     <fragment
         android:id="@+id/settingsFragment"
         android:name="app.olauncher.ui.SettingsFragment"
-        android:label="SettingsFragment"
-        android:layout="@layout/fragment_settings">
+        android:label="SettingsFragment">
         <action
             android:id="@+id/action_settingsFragment_to_appListFragment"
             app:destination="@id/appListFragment"
@@ -172,7 +167,7 @@
     <!-- Settings and tracking for the stats -->
     <action
         android:id="@+id/action_global_statsSettingsFragment"
-        app:destination="@id/statsSettingsFragment"
+        app:destination="@id/settingsFragment"
         app:enterAnim="@anim/fade_enter"
         app:exitAnim="@anim/fade_exit"
         app:popEnterAnim="@anim/fade_enter"
