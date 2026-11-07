@@ -305,13 +305,13 @@ class DayPageFragment : CardPageFragment() {
         val day = Social.days(context)[date] ?: return
         val homes = Social.homes(context)
         val work = Social.work(context)
-        fun name(place: Int) = when (place) {
+        fun name(place: Int) = if (Social.isNamed(place)) app.olauncher.helper.Places.place(context, place)?.name ?: getString(R.string.social_out_place) else when (place) {
             Social.OUT -> getString(R.string.social_out_place)
             Social.UNKNOWN -> getString(R.string.social_unknown_place)
             Social.WORK -> work?.name ?: getString(R.string.work)
             else -> homes.getOrNull(place)?.name ?: getString(R.string.social_home_n, place + 1)
         }
-        fun color(place: Int) = when (place) {
+        fun color(place: Int) = if (Social.isNamed(place)) app.olauncher.helper.Places.place(context, place)?.color ?: 0xFF4FC3F7.toInt() else when (place) {
             Social.OUT -> 0xFF4FC3F7.toInt()
             Social.UNKNOWN -> faint(50)
             Social.WORK -> 0xFF7986CB.toInt()

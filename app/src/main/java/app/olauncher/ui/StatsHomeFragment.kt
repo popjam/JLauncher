@@ -1019,6 +1019,7 @@ class StatsHomeFragment : CardPageFragment() {
      */
     private fun extraMeasures(context: android.content.Context): List<Measured> {
         val list = mutableListOf<Measured>()
+        val social = stats.firstOrNull { it.kind == StatKind.SOCIAL }
         val sleep = stats.firstOrNull { it.kind == StatKind.SLEEP }
         val nights = Sleep.nights(context)
         if (sleep != null && nights.size >= 2 * INSIGHT_DAYS) {
@@ -1058,8 +1059,19 @@ class StatsHomeFragment : CardPageFragment() {
                 getString(if (little) R.string.ins_late_less else R.string.ins_late_more)
             }
         }
+        // Each named place: gone to (half an hour or more there) or not, on days mostly tracked
+        val socialDays = Social.days(context)
+        val today = LocalDate.now()
+        if (social != null) app.olauncher.helper.Places.places(context).forEach { place ->
+            val went = socialDays.filter { (date, day) -> date == today || day.trackedMs >= 12 * 3_600_000L }.mapValues { (_, day) ->
+                if (app.olauncher.helper.PlaceMath.wentTo(day.stretches.filter { it.place == place.id }.sumOf { it.ms })) 1f else 0f
+            }
+            list.add(Measured("place:" + place.id, place.name, place.color, StatIcons.forStat(social), ValueKind.YES_NO, went, ::percentText).also {
+                it.opens = social.id
+                it.says = { yes -> getString(if (yes) R.string.ins_at_place else R.string.ins_not_at_place, place.name) }
+            })
+        }
         // Which home: the one stayed at most that day
-        val social = stats.firstOrNull { it.kind == StatKind.SOCIAL }
         val homes = Social.homes(context)
         val first = homes.getOrNull(0)
         val second = homes.getOrNull(1)

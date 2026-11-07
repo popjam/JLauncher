@@ -14,6 +14,7 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import app.olauncher.R
 import app.olauncher.data.MoodStore
+import app.olauncher.helper.Places
 import app.olauncher.helper.Social
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.setStatDot
@@ -40,9 +41,19 @@ internal fun StatPageFragment.socialState(): String {
     return listOf(Social.hasLocation(context), Social.hasBackgroundLocation(context), Social.homes(context).map { it?.ssid }, Social.work(context)?.ssid).toString()
 }
 
-internal fun StatPageFragment.homeName(slot: Int) =
-    if (slot == Social.WORK) Social.work(requireContext())?.name ?: getString(R.string.work)
-    else Social.homes(requireContext()).getOrNull(slot)?.name ?: getString(R.string.social_home_n, slot + 1)
+internal fun StatPageFragment.homeName(slot: Int) = when {
+    Social.isNamed(slot) -> Places.place(requireContext(), slot)?.name ?: getString(R.string.social_out_place)
+    slot == Social.WORK -> Social.work(requireContext())?.name ?: getString(R.string.work)
+    else -> Social.homes(requireContext()).getOrNull(slot)?.name ?: getString(R.string.social_home_n, slot + 1)
+}
+
+/** A place's colour: a home's, work's, a named place's, out (the stat's) or unknown */
+internal fun StatPageFragment.placeColor(place: Int) = when {
+    place == Social.OUT -> stat.color
+    place == Social.UNKNOWN -> faint(70)
+    Social.isNamed(place) -> Places.place(requireContext(), place)?.color ?: stat.color
+    else -> homeColors.getOrElse(place) { stat.color }
+}
 
 internal fun StatPageFragment.socialDayText(date: LocalDate, day: Social.Day) = listOfNotNull(
     dateText(date),
@@ -191,9 +202,17 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
     val context = requireContext()
     val first = Social.firstChange(context) ?: return
     val card = Card(getString(R.string.social_places))
-    val names = listOf(homeName(0), homeName(1), homeName(Social.WORK), getString(R.string.social_out_place), getString(R.string.social_unknown_place))
-    val places = listOf(0, 1, Social.WORK, Social.OUT, Social.UNKNOWN)
-    val colors = listOf(homeColors[0], homeColors[1], homeColors[Social.WORK], stat.color, faint(70))
+    val named = Places.places(context).map { it.id }
+    val places = listOf(0, 1, Social.WORK) + named + listOf(Social.OUT, Social.UNKNOWN)
+    val names = places.map {
+        when (it) {
+            Social.OUT -> getString(if (named.isEmpty()) R.string.social_out_place else R.string.social_elsewhere)
+            Social.UNKNOWN -> getString(R.string.social_unknown_place)
+            else -> homeName(it)
+        }
+    }
+    val colors = places.map { placeColor(it) }
+    val unknown = places.lastIndex
     fun draw() {
         val spanDays = listOf(7L, 30L, 365L)[placesPeriod]
         val now = System.currentTimeMillis()
@@ -207,8 +226,8 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
             }
         }
         // Untracked time counts as unknown
-        val known = totals.sum() - totals[4]
-        totals[4] = maxOf(0L, now - start - known)
+        val known = totals.sum() - totals[unknown]
+        totals[unknown] = maxOf(0L, now - start - known)
         val all = totals.sum().toFloat()
         card.segment(listOf(R.string.period_week, R.string.period_month, R.string.period_year), placesPeriod) {
             placesPeriod = it
@@ -254,6 +273,143 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
         }
     }
     draw()
+}
+
+/**
+ * Places you go, found from where the phone's been: ones to name (tap to see where on the map), and the
+ * ones named, with their time this month. Holding a named one renames, recolours or removes it.
+ */
+internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) {
+    val context = requireContext()
+    if (!Social.hasLocation(context)) return
+    val card = Card(getString(R.string.places_title))
+    if (!Places.enabled(context)) return card.showNote(getString(R.string.places_off))
+    val suggestions = Places.suggestions(context)
+    val named = Places.places(context)
+    if (suggestions.isEmpty() && named.isEmpty()) return card.showNote(getString(R.string.places_none_yet))
+    val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    fun openMap(lat: Double, lon: Double, label: String) {
+        val uri = android.net.Uri.parse("geo:0,0?q=" + lat + "," + lon + "(" + android.net.Uri.encode(label) + ")")
+        runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+            .onFailure { android.widget.Toast.makeText(context, R.string.places_no_map, android.widget.Toast.LENGTH_SHORT).show() }
+    }
+    fun row(title: String, detail: String, color: Int?, onTap: () -> Unit, onHold: (() -> Unit)?, buttons: List<Pair<Int, () -> Unit>>): android.widget.TextView {
+        val titleView = card.textView(15f, 255).apply {
+            text = title
+            if (color != null) setStatDot(color)
+        }
+        list.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            setOnClickListener { onTap() }
+            if (onHold != null) setOnLongClickListener {
+                onHold()
+                true
+            }
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(titleView)
+                addView(card.textView(12f, 140).apply {
+                    text = detail
+                    updatePadding(top = 2.dpToPx())
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            buttons.forEach { (label, action) ->
+                addView(card.textView(13f, 255).apply {
+                    setText(label)
+                    setBackgroundResource(R.drawable.bg_stat_chip)
+                    setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+                    setOnClickListener { action() }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 6.dpToPx() })
+            }
+        })
+        return titleView
+    }
+    fun ask(title: String, start: String, onSave: (String) -> Unit) {
+        val input = EditText(context).apply {
+            setText(start)
+            setSingleLine()
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(android.widget.FrameLayout(context).apply {
+                setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+                addView(input)
+            })
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(onSave) }
+            .show()
+    }
+    // To name: where it is from the address lookup, filled in once known
+    suggestions.forEach { suggestion ->
+        var near: String? = null
+        val titleView = row(getString(R.string.places_new), listOf(
+            resources.getQuantityString(R.plurals.places_visits, suggestion.visits, suggestion.visits),
+            resources.getQuantityString(R.plurals.day_count, suggestion.days, suggestion.days),
+            duration(suggestion.ms),
+        ).joinToString(" · "), null,
+            onTap = { openMap(suggestion.lat, suggestion.lon, near ?: getString(R.string.places_new)) }, onHold = null,
+            buttons = listOf(
+                R.string.places_name to {
+                    ask(getString(R.string.places_name_title), near.orEmpty()) { name ->
+                        Places.name(context, suggestion, name)
+                        if (_binding != null) render()
+                    }
+                },
+                R.string.places_not to {
+                    Places.dismiss(context, suggestion)
+                    if (_binding != null) render()
+                },
+            ))
+        Thread {
+            val name = runCatching { Places.nearName(context, suggestion.lat, suggestion.lon) }.getOrNull() ?: return@Thread
+            titleView.post {
+                near = name
+                titleView.text = getString(R.string.places_new_near, name)
+            }
+        }.start()
+    }
+    // Named: time there this month
+    val monthStart = LocalDate.now().withDayOfMonth(1)
+    named.forEach { place ->
+        val month = days.filterKeys { it >= monthStart }.values
+        val ms = month.sumOf { d -> d.stretches.filter { it.place == place.id }.sumOf { it.ms } }
+        val went = month.count { d -> d.stretches.any { it.place == place.id } }
+        row(place.name, listOf(getString(R.string.places_this_month, duration(ms)),
+            resources.getQuantityString(R.plurals.day_count, went, went)).joinToString(" · "), place.color,
+            onTap = { openMap(place.lat, place.lon, place.name) },
+            onHold = {
+                AlertDialog.Builder(context)
+                    .setTitle(place.name)
+                    .setItems(arrayOf(getString(R.string.places_rename), getString(R.string.places_recolor), getString(R.string.places_remove))) { _, which ->
+                        when (which) {
+                            0 -> ask(getString(R.string.places_rename), place.name) { name ->
+                                Places.rename(context, place.id, name)
+                                if (_binding != null) render()
+                            }
+                            1 -> {
+                                Places.recolor(context, place.id)
+                                if (_binding != null) render()
+                            }
+                            else -> AlertDialog.Builder(context)
+                                .setMessage(getString(R.string.places_remove_ask, place.name))
+                                .setNegativeButton(R.string.cancel, null)
+                                .setPositiveButton(R.string.places_remove) { _, _ ->
+                                    Places.remove(context, place.id)
+                                    if (_binding != null) render()
+                                }
+                                .show()
+                        }
+                    }
+                    .show()
+            }, buttons = emptyList())
+    }
+    if (suggestions.isNotEmpty()) card.subtitle(resources.getQuantityString(R.plurals.places_to_name, suggestions.size, suggestions.size))
+    card.root.addView(list, card.root.indexOfChild(card.scene))
+    card.scene.isVisible = false
 }
 
 /** This week at work: days, hours, and when you usually get there and leave, from work's Wi-Fi */
@@ -348,6 +504,7 @@ internal fun StatPageFragment.socialTimelineCard(days: Map<LocalDate, Social.Day
     card.keyItem(stat.color, getString(R.string.social_key_out))
     Social.homes(requireContext()).forEachIndexed { slot, home -> if (home != null) card.keyItem(homeColors[slot], home.name) }
     Social.work(requireContext())?.let { card.keyItem(homeColors[Social.WORK], it.name) }
+    Places.places(requireContext()).forEach { card.keyItem(it.color, it.name) }
     card.describe = { key -> socialDayText(key as LocalDate, days.getValue(key)) }
     val zone = java.time.ZoneId.systemDefault()
     card.draw { s ->
@@ -371,7 +528,7 @@ internal fun StatPageFragment.socialTimelineCard(days: Map<LocalDate, Social.Day
                 val color = when (stretch.place) {
                     Social.UNKNOWN -> null
                     Social.OUT -> stat.color
-                    else -> ColorUtils.setAlphaComponent(homeColors[stretch.place], 120)
+                    else -> if (Social.isNamed(stretch.place)) placeColor(stretch.place) else ColorUtils.setAlphaComponent(placeColor(stretch.place), 120)
                 } ?: return@forEach
                 s.rect(x(date, stretch.start), mid - bar / 2, maxOf(x(date, stretch.end), x(date, stretch.start) + s.dp(2f)), mid + bar / 2, color, s.dp(3f))
             }

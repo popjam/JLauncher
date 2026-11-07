@@ -185,7 +185,30 @@ class StatsSettingsFragment : CardPageFragment() {
                 row(card, home?.name ?: getString(R.string.social_home_n, slot + 1), home?.ssid ?: getString(R.string.social_not_set)) { open() }
             }.toTypedArray(),
             row(card, work?.name ?: getString(R.string.work), work?.ssid ?: getString(R.string.social_work_not_set)) { open() },
+            placesRow(card),
+            row(card, getString(R.string.places_delete), getString(R.string.places_delete_note)) {
+                AlertDialog.Builder(context)
+                    .setMessage(R.string.places_delete_ask)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.places_delete) { _, _ ->
+                        app.olauncher.helper.Places.deleteHistory(context)
+                        if (isAdded) render()
+                    }
+                    .show()
+            },
         )
+    }
+
+    /** Finding places on or off, with today's location checks and Wi-Fi scans */
+    private fun placesRow(card: Card): View {
+        val context = requireContext()
+        val on = app.olauncher.helper.Places.enabled(context)
+        val (checks, scans) = app.olauncher.helper.Places.todayCounts(context)
+        val detail = if (on) getString(R.string.places_on_counts, resources.getQuantityString(R.plurals.places_checks, checks, checks), resources.getQuantityString(R.plurals.places_scans, scans, scans)) else getString(R.string.off)
+        return row(card, getString(R.string.places_find), detail) {
+            app.olauncher.helper.Places.setEnabled(context, !on)
+            render()
+        }
     }
 
     /** What swiping left and right on the home screen opens */

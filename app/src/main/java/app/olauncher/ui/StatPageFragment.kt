@@ -218,6 +218,7 @@ class StatPageFragment : CardPageFragment() {
                 socialTodayCard(days)
                 socialHomesCard(days)
                 socialPlacesCard(days)
+                socialSpotsCard(days)
                 socialTimelineCard(days)
                 socialStayInCard(days)
                 socialMoodCard(days)

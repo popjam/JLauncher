@@ -361,6 +361,7 @@ class SpendingListener : NotificationListenerService() {
     private var music: MusicTracker? = null
     private var wifi: WifiWatcher? = null
     private var steps: StepWatcher? = null
+    private var places: PlaceWatcher? = null
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         runCatching { Spending.record(applicationContext, sbn) }
@@ -376,6 +377,8 @@ class SpendingListener : NotificationListenerService() {
         wifi = WifiWatcher(applicationContext).also { it.start() }
         steps?.stop()
         steps = StepWatcher(applicationContext).also { it.start() }
+        places?.stop()
+        places = PlaceWatcher(applicationContext).also { it.start() }
     }
 
     override fun onListenerDisconnected() {
@@ -386,9 +389,13 @@ class SpendingListener : NotificationListenerService() {
         wifi = null
         steps?.stop()
         steps = null
+        places?.stop()
+        places = null
     }
 
     override fun onDestroy() {
+        places?.stop()
+        places = null
         steps?.stop()
         steps = null
         music?.stop()

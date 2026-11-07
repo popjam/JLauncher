@@ -83,6 +83,18 @@ object Tracking {
                 })
         }
 
+        // Places, while finding them is on: a location in the last [PLACES_STALE_MS]
+        if (Places.enabled(context) && Social.hasLocation(context)) {
+            val last = Places.lastReading(context)
+            val fresh = last == 0L || now - last < PLACES_STALE_MS
+            list += Item("places", context.getString(R.string.tracking_places), fresh,
+                when {
+                    last == 0L -> context.getString(R.string.tracking_places_waiting)
+                    else -> context.getString(if (fresh) R.string.tracking_places_ok else R.string.tracking_places_stale, ago(last))
+                },
+                setOf(StatKind.SOCIAL), if (fresh) null else last)
+        }
+
         // Steps, where the phone has a counter
         if (Steps.hasSensor(context)) {
             val steps = Steps.hasPermission(context)
@@ -170,4 +182,5 @@ object Tracking {
     private const val WEEK_MS = 7 * 24 * 3_600_000L
     private const val STALE_MS = 2 * 24 * 3_600_000L
     private const val UNREAD_WORRY = 3
+    private const val PLACES_STALE_MS = 12 * 3_600_000L
 }

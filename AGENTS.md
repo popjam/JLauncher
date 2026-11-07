@@ -15,5 +15,5 @@ Google Drive (My Drive), replacing the old one. I install builds on my phone fro
 
 ## Tests
 Unit tests for the logic that doesn't need a phone (reading purchases, the weekly limit's
-carry-over, work days, Compare's grouping) live in `app/src/test`. Run them with
+carry-over, work days, Compare's grouping, finding places from locations) live in `app/src/test`. Run them with
 `./gradlew testDebugUnitTest` before releasing a build.

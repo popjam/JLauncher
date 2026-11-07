@@ -35,7 +35,13 @@ object Social {
 
     class Home(val ssid: String, val name: String)
 
-    /** A stretch of a day in one place: [OUT], [UNKNOWN] or a home's slot */
+    /** Whether [place] is one named in [Places] */
+    fun isNamed(place: Int) = place >= Places.FIRST_ID
+
+    /** Out of the house: anywhere but a home or unknown */
+    fun isOut(place: Int) = place == OUT || place == WORK || isNamed(place)
+
+    /** A stretch of a day in one place: [OUT], [UNKNOWN], a home's slot, [WORK] or a named place */
     class Stretch(val start: Long, val end: Long, val place: Int) {
         val ms get() = end - start
         val startTime: LocalDateTime get() = LocalDateTime.ofInstant(Instant.ofEpochMilli(start), ZoneId.systemDefault())
@@ -43,8 +49,8 @@ object Social {
     }
 
     class Day(val stretches: List<Stretch>) {
-        /** Out of the house: anywhere but a home, work included */
-        val outMs = stretches.filter { it.place == OUT || it.place == WORK }.sumOf { it.ms }
+        /** Out of the house: anywhere but a home, work and named places included */
+        val outMs = stretches.filter { isOut(it.place) }.sumOf { it.ms }
         val workMs get() = homeMs(WORK)
         val trackedMs = stretches.filter { it.place != UNKNOWN }.sumOf { it.ms }
         fun homeMs(slot: Int) = stretches.filter { it.place == slot }.sumOf { it.ms }
@@ -52,8 +58,15 @@ object Social {
         /** The home most of the day was spent at, if any */
         val mainHome: Int? get() = (0 until HOMES).filter { homeMs(it) > 0 }.maxByOrNull { homeMs(it) }
 
-        /** Each time out of [LEAVE_MS] or more */
-        val outings get() = stretches.filter { it.place == OUT && it.ms >= LEAVE_MS }
+        /** Each time out of [LEAVE_MS] or more, named places along the way included */
+        val outings: List<Stretch> get() {
+            val runs = mutableListOf<Stretch>()
+            stretches.filter { it.place == OUT || isNamed(it.place) }.forEach { s ->
+                val last = runs.lastOrNull()
+                if (last != null && last.end == s.start) runs[runs.lastIndex] = Stretch(last.start, s.end, OUT) else runs += Stretch(s.start, s.end, OUT)
+            }
+            return runs.filter { it.ms >= LEAVE_MS }
+        }
 
         /** Under an hour out */
         val stayedIn get() = outMs < STAYED_IN_MS
@@ -135,7 +148,8 @@ object Social {
             ssid == work(context)?.ssid -> WORK
             else -> homes.indexOfFirst { it?.ssid == ssid }.takeIf { it >= 0 } ?: OUT
         }
-        add(context, place)
+        // Off Wi-Fi at a named place is still there; Places says when you leave
+        if (!(place == OUT && isNamed(lastPlace(context)))) add(context, place)
         markAlive(context)
     }
 
@@ -225,6 +239,16 @@ object Social {
     }
 
     private fun lastPlace(context: Context) = changes(context).lastOrNull()?.second ?: UNKNOWN
+
+    /** Where you are now, as far as known */
+    fun currentPlace(context: Context) = lastPlace(context)
+
+    /** Marks the time from [start] to [end] that was [only] as [place] instead, for [Places] */
+    fun paint(context: Context, start: Long, end: Long, only: Int, place: Int) = synchronized(LOCK) {
+        val changes = changes(context)
+        val painted = PlaceMath.paint(changes, start, end, only, place)
+        if (painted != changes) save(context, painted)
+    }
 
     private fun changes(context: Context): List<Pair<Long, Int>> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyList()
@@ -323,6 +347,7 @@ object Social {
                 phrases = emptyList(), medicine = false, nextDay = false)
         } ?: return
         check(context)
+        runCatching { Places.schedule(context) }
         val store = MoodStore(context)
         val today = LocalDate.now()
         days(context).filterKeys { it > today.minusDays(DAYS_BACK) }.forEach { (date, day) ->

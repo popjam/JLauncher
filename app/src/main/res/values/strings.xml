@@ -1014,4 +1014,46 @@
     <string name="graph_weeks">Week</string>
     <string name="graph_months">Month</string>
     <string name="graph_years">Year</string>
+    <string name="social_elsewhere">Elsewhere</string>
+    <string name="places_title">Places you go</string>
+    <string name="places_off">Finding places is off in Settings &amp; tracking</string>
+    <string name="places_none_yet">Places you spend time at show up here after a few days</string>
+    <string name="places_new">New place</string>
+    <string name="places_new_near">New place near %1$s</string>
+    <string name="places_name">Name</string>
+    <string name="places_not">Not a place</string>
+    <string name="places_name_title">Name this place</string>
+    <string name="places_this_month">%1$s this month</string>
+    <string name="places_rename">Rename</string>
+    <string name="places_recolor">Change colour</string>
+    <string name="places_remove">Remove</string>
+    <string name="places_remove_ask">Remove %1$s? Its time goes back to being out, and it won’t be suggested again.</string>
+    <string name="places_no_map">No maps app to show it</string>
+    <string name="places_find">Find places</string>
+    <string name="places_on_counts">On · %1$s · %2$s today</string>
+    <plurals name="places_checks">
+        <item quantity="one">%d location check</item>
+        <item quantity="other">%d location checks</item>
+    </plurals>
+    <plurals name="places_scans">
+        <item quantity="one">%d Wi-Fi scan</item>
+        <item quantity="other">%d Wi-Fi scans</item>
+    </plurals>
+    <string name="places_delete">Delete location history</string>
+    <string name="places_delete_note">Named places and time counted at them stay</string>
+    <string name="places_delete_ask">Delete every visit kept? Places you’ve named stay, and so does the time already counted at them.</string>
+    <string name="tracking_places">Places</string>
+    <string name="tracking_places_waiting">Waiting for the first location</string>
+    <string name="tracking_places_ok">Last location %1$s ago</string>
+    <string name="tracking_places_stale">No location for %1$s</string>
+    <string name="ins_at_place">on days you go to %1$s</string>
+    <string name="ins_not_at_place">on days you don’t go to %1$s</string>
+    <plurals name="places_visits">
+        <item quantity="one">%d visit</item>
+        <item quantity="other">%d visits</item>
+    </plurals>
+    <plurals name="places_to_name">
+        <item quantity="one">%d to name</item>
+        <item quantity="other">%d to name</item>
+    </plurals>
 </resources>
