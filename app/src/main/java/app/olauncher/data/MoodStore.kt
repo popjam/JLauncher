@@ -146,7 +146,16 @@ class MoodStore(context: Context) {
      * The stats, or the last good copy if the file can't be read. Empty only when there's nothing at
      * all yet, or neither can be read (and then [update] won't save over them).
      */
-    fun load(): Data = synchronized(LOCK) { loadForWrite() ?: Data() }
+    fun load(): Data = synchronized(LOCK) {
+        // Read once for each time it's saved; what comes back is shared, so it's only read, never changed
+        val stamp = file.lastModified() to file.length()
+        if (cached != null && stamp == cachedStamp && cachedPath == file.path) return cached!!
+        val data = loadForWrite() ?: Data()
+        cached = data
+        cachedStamp = stamp
+        cachedPath = file.path
+        return data
+    }
 
     /** Like [load], but null when there's a file that can't be read and no good copy, so nothing is saved over it */
     private fun loadForWrite(): Data? {
@@ -566,6 +575,11 @@ class MoodStore(context: Context) {
     }
 
     companion object {
+        /** The last stats read, and the file's time and size then */
+        @Volatile private var cached: Data? = null
+        private var cachedStamp: Pair<Long, Long>? = null
+        private var cachedPath: String? = null
+
         const val DIR = "mood"
         const val FILE_NAME = "mood_data.json"
         const val DEFAULT_PROMPT_MINUTES = 21 * 60

@@ -1,10 +1,13 @@
 # JLauncher
 
 ## Releasing builds
-After every change, build the debug APK (`./gradlew assembleDebug`) and copy
-`app/build/outputs/apk/debug/app-debug.apk` to `JLauncher/JLauncher-debug.apk` in
+After every change, build the phone build (`./gradlew assembleFast`) and copy
+`app/build/outputs/apk/fast/app-fast.apk` to `JLauncher/JLauncher-debug.apk` in
 Google Drive (My Drive), replacing the old one. I install builds on my phone from there.
 
+- The `fast` build is the debug app (same package and key, so it installs over it and keeps
+  its data) but optimised and not debuggable, so it runs much faster. Use `assembleDebug` for
+  the emulator when you need `run-as` to load test data.
 - Windows PC: `G:\My Drive\JLauncher\JLauncher-debug.apk`. WSL can't see `G:`, so copy
   with PowerShell.
 - Make sure the APK was built after the last source edit.

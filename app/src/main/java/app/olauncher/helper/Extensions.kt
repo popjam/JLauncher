@@ -49,6 +49,8 @@ fun Activity.showLauncherSelector(requestCode: Int) {
         resetDefaultLauncher()
 }
 
+// Meant to show the chooser for every home app, this one included
+@android.annotation.SuppressLint("UnsafeImplicitIntentLaunch")
 fun Context.resetDefaultLauncher() {
     try {
         val componentName = ComponentName(this, FakeHomeActivity::class.java)

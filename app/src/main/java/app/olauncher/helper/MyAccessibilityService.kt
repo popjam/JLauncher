@@ -195,7 +195,12 @@ class MyAccessibilityService : AccessibilityService() {
         private const val SYSTEM_UI = "com.android.systemui"
 
         // Runs in the launcher's process, so the launcher can reach it directly
-        private var instance: MyAccessibilityService? = null
+        private var instanceRef: java.lang.ref.WeakReference<MyAccessibilityService>? = null
+        private var instance: MyAccessibilityService?
+            get() = instanceRef?.get()
+            set(value) {
+                instanceRef = value?.let { java.lang.ref.WeakReference(it) }
+            }
 
         val isRunning get() = instance != null
 

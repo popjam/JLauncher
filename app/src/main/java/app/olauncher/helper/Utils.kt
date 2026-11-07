@@ -525,6 +525,8 @@ fun openAlarmApp(context: Context) {
     }
 }
 
+// Meant for whichever calendar app is installed
+@android.annotation.SuppressLint("UnsafeImplicitIntentLaunch")
 fun openCalendar(context: Context) {
     try {
         val calendarUri = CalendarContract.CONTENT_URI
