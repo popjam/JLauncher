@@ -22,6 +22,19 @@ class BatteryTest {
     }
 
     @Test
+    fun lostCountsOnlyTimeOnBattery() {
+        // 3% off with the screen off, 10% with it on, then charging
+        val samples = listOf(
+            Sample(0, 80, charging = false, screenOn = false),
+            Sample(2 * hour, 77, charging = false, screenOn = true),
+            Sample(3 * hour, 67, charging = false, screenOn = false),
+            Sample(4 * hour, 90, charging = true, screenOn = false),
+        )
+        assertEquals(3, Battery.lost(samples, 0, screenOffOnly = true))
+        assertEquals(13, Battery.lost(samples, 0, screenOffOnly = false))
+    }
+
+    @Test
     fun chargingTimeIsLeftOut() {
         val samples = listOf(
             Sample(0, 30, charging = true, screenOn = false),

@@ -375,8 +375,10 @@ class SpendingListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val context = applicationContext
         worker.execute {
-            runCatching { Spending.record(context, sbn) }
-            runCatching { People.record(context, sbn) }
+            Workload.track(context, Workload.NOTIFICATIONS) {
+                runCatching { Spending.record(context, sbn) }
+                runCatching { People.record(context, sbn) }
+            }
         }
     }
 

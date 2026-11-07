@@ -116,6 +116,7 @@ object Places {
             if (runCatching { wifi.startScan() }.getOrDefault(false)) {
                 prefs(context).edit().putLong(LAST_SCAN, System.currentTimeMillis()).apply()
                 count(context, SCANS)
+                Workload.add(context, Workload.PLACES, scans = 1)
             }
         }
         return fresh.sortedByDescending { it.level }.take(NETS_KEPT).mapNotNull { r -> r.BSSID?.let(::code) }.toSet()
@@ -334,6 +335,7 @@ object Places {
         val provider = provider(manager) ?: return known
         val latch = CountDownLatch(1)
         var found: Location? = null
+        Workload.add(context, Workload.PLACES, locations = 1)
         runCatching {
             manager.getCurrentLocation(provider, null, context.mainExecutor) {
                 found = it
@@ -384,9 +386,11 @@ object Places {
 class PlacesWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
         runCatching {
-            if (Places.enabled(applicationContext) && !Tracking.listenerRunning(applicationContext) &&
-                System.currentTimeMillis() - Places.lastReading(applicationContext) >= Places.CHECK_MS - 60_000L) {
-                Places.record(applicationContext, Places.locate(applicationContext))
+            Workload.track(applicationContext, Workload.PLACES) {
+                if (Places.enabled(applicationContext) && !Tracking.listenerRunning(applicationContext) &&
+                    System.currentTimeMillis() - Places.lastReading(applicationContext) >= Places.CHECK_MS - 60_000L) {
+                    Places.record(applicationContext, Places.locate(applicationContext))
+                }
             }
         }
         return Result.success()
@@ -401,9 +405,23 @@ class PlaceWatcher(private val context: Context) {
     /** Readings are handled here, off the main thread */
     private val thread = android.os.HandlerThread("places").apply { start() }
 
+    /** Its own checks, which cost a location each */
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            runCatching { Places.record(context, location) }
+            Workload.add(context, Workload.PLACES, locations = 1)
+            runCatching { Workload.track(context, Workload.PLACES) { Places.record(context, location) } }
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
+
+    /** Locations other apps asked for, free but for the work of noting them */
+    private val passive = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            runCatching { Workload.track(context, Workload.PLACES) { Places.record(context, location) } }
         }
 
         @Deprecated("Deprecated in Java")
@@ -430,12 +448,13 @@ class PlaceWatcher(private val context: Context) {
             if (!Places.enabled(context) || !Social.hasLocation(context)) return
             val manager = manager ?: return
             Places.provider(manager)?.let { manager.requestLocationUpdates(it, Places.CHECK_MS, 0f, listener, thread.looper) }
-            manager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 5 * 60_000L, 0f, listener, thread.looper)
+            manager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 5 * 60_000L, 0f, passive, thread.looper)
         }
     }
 
     private fun stopUpdates() {
         runCatching { manager?.removeUpdates(listener) }
+        runCatching { manager?.removeUpdates(passive) }
     }
 
     fun stop() {

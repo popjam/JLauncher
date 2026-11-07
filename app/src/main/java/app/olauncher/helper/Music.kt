@@ -276,6 +276,6 @@ class MusicTracker(private val context: Context, private val listener: Component
         metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
 
     private inline fun runSafely(block: () -> Unit) {
-        runCatching(block).onFailure { it.printStackTrace() }
+        runCatching { Workload.track(context, Workload.MUSIC, block) }.onFailure { it.printStackTrace() }
     }
 }

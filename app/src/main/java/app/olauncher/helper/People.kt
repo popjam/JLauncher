@@ -159,6 +159,10 @@ object People {
         val now = System.currentTimeMillis()
         if (!force && now - prefs(context).getLong(REFRESHED, 0L) < REFRESH_MS) return
         prefs(context).edit().putLong(REFRESHED, now).apply()
+        Workload.track(context, Workload.PEOPLE) { refreshNow(context) }
+    }
+
+    private fun refreshNow(context: Context) {
         if (hasCallLog(context)) begin(context)
         if (since(context) == null) return
         val id = AutoStats.ensure(context, AutoStats.PEOPLE, NAME) { store ->

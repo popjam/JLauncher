@@ -1083,5 +1083,41 @@
     <string name="battery_uses">What uses it</string>
     <string name="battery_today">screen time today</string>
     <string name="battery_no_use">Nothing used much yet today</string>
-    <string name="battery_self_background">and in the background: %1$d location checks, %2$d Wi-Fi scans</string>
+    <string name="battery_self_below">its work in the background is below</string>
+    <string name="battery_own">What JLauncher uses</string>
+    <string name="battery_screen_off_short">Screen off</string>
+    <string name="battery_all_day">All day</string>
+    <string name="battery_own_waiting">Measuring from now. Check back after a night.</string>
+    <string name="battery_own_summary_off">About %1$s of the battery in the last 24 hours with the screen off, while the phone lost %2$d%%</string>
+    <string name="battery_own_summary_all">About %1$s of the battery in the last 24 hours, while the phone lost %2$d%%</string>
+    <string name="battery_own_small">That\'s %1$s of the drain, so most of it is something else</string>
+    <string name="battery_own_big">That\'s about %1$s of the drain: the top part below is the one to turn off</string>
+    <string name="battery_under_one">under 1%</string>
+    <string name="battery_own_note">Estimated from how long each part ran and what it asked the phone for</string>
+    <string name="battery_part_places">Places</string>
+    <string name="battery_part_wifi">Home and work (Wi-Fi)</string>
+    <string name="battery_part_steps">Steps</string>
+    <string name="battery_part_battery">Battery readings</string>
+    <string name="battery_part_notifications">Notifications (spending, people)</string>
+    <string name="battery_part_music">Music</string>
+    <string name="battery_part_weather">Weather</string>
+    <string name="battery_part_people">Calls</string>
+    <string name="battery_part_other">Everything else (screens and the rest)</string>
+    <string name="battery_working">%1$s working</string>
+    <plurals name="battery_runs">
+        <item quantity="one">ran once</item>
+        <item quantity="other">ran %1$d times</item>
+    </plurals>
+    <plurals name="battery_locations">
+        <item quantity="one">1 location check</item>
+        <item quantity="other">%1$d location checks</item>
+    </plurals>
+    <plurals name="battery_scans">
+        <item quantity="one">1 Wi-Fi scan</item>
+        <item quantity="other">%1$d Wi-Fi scans</item>
+    </plurals>
+    <plurals name="battery_downloads">
+        <item quantity="one">1 download</item>
+        <item quantity="other">%1$d downloads</item>
+    </plurals>
 </resources>

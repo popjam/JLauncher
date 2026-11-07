@@ -95,6 +95,17 @@ object Battery {
         return if (ms < 20 * 60_000L) null else lost / (ms / 3_600_000f)
     }
 
+    /** Percent lost on battery since [since], only with the screen off when [screenOffOnly] */
+    fun lost(samples: List<Sample>, since: Long, screenOffOnly: Boolean): Int {
+        var lost = 0
+        samples.zipWithNext().forEach { (a, b) ->
+            if (a.time < since || a.charging || b.charging || (screenOffOnly && a.screenOn)) return@forEach
+            if (b.time - a.time > 6 * 3_600_000L) return@forEach
+            lost += (a.level - b.level).coerceAtLeast(0)
+        }
+        return lost
+    }
+
     /** Charges a day over the last [days] days (as far as readings go back) */
     fun chargesPerDay(samples: List<Sample>, days: Int): Float? {
         val first = samples.firstOrNull()?.time ?: return null
@@ -120,7 +131,8 @@ class BatteryWatcher(private val context: Context) {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            runCatching { Battery.record(context) }
+            if (intent.action == Intent.ACTION_SCREEN_ON || intent.action == Intent.ACTION_SCREEN_OFF) Workload.screenChanged(context)
+            runCatching { Workload.track(context, Workload.BATTERY) { Battery.record(context) } }
         }
     }
 

@@ -13,7 +13,7 @@ import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.helper.Battery
-import app.olauncher.helper.Places
+import app.olauncher.helper.Workload
 import app.olauncher.helper.usageStats.EventLogWrapper
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
@@ -75,6 +75,118 @@ class BatteryFragment : CardPageFragment() {
         drainCard(samples)
         chargingCard(samples)
         usesCard()
+        ownCard(samples)
+    }
+
+    /** Whether JLauncher's own use shows for screen-off time only */
+    private var screenOffOnly = true
+
+    /**
+     * What JLauncher itself uses, part by part, measured as each runs, against what the phone lost over
+     * the same time: so a drain can be put down to one part of it, or ruled out.
+     */
+    private fun ownCard(samples: List<Battery.Sample>) {
+        val context = requireContext()
+        val card = Card(getString(R.string.battery_own))
+        val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        card.addBody(body)
+        fun fill() {
+            card.segment(listOf(R.string.battery_screen_off_short, R.string.battery_all_day), if (screenOffOnly) 0 else 1) {
+                screenOffOnly = it == 0
+                fill()
+            }
+            body.removeAllViews()
+            val since = System.currentTimeMillis() - Battery.DAY_MS
+            val uses = Workload.since(context, since, screenOffOnly)
+            if (uses.isEmpty()) {
+                body.addView(card.textView(14f, 170).apply { text = getString(R.string.battery_own_waiting) })
+                return
+            }
+            val capacity = Workload.capacityMah(context)
+            fun percent(mAh: Double) = mAh * 100 / capacity
+            val total = percent(uses.values.sumOf { it.mAh })
+            val lost = Battery.lost(samples, since, screenOffOnly)
+            body.addView(card.textView(14f, 230).apply {
+                text = getString(if (screenOffOnly) R.string.battery_own_summary_off else R.string.battery_own_summary_all, share(total), lost)
+            })
+            if (lost > 0) body.addView(card.textView(12.5f, 150).apply {
+                val ofDrain = total * 100 / lost
+                val shown = if (ofDrain < 1) getString(R.string.battery_under_one) else "${ofDrain.roundToInt().coerceAtMost(100)}%"
+                text = getString(if (ofDrain >= 25) R.string.battery_own_big else R.string.battery_own_small, shown)
+                updatePadding(top = 4.dpToPx(), bottom = 6.dpToPx())
+            })
+            val most = uses.values.maxOf { it.mAh }
+            uses.forEach { (part, use) ->
+                body.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, 7.dpToPx(), 0, 7.dpToPx())
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        addView(card.textView(15f, 240).apply { text = partName(part) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(card.textView(14f, 200).apply { text = share(percent(use.mAh)) })
+                    })
+                    addView(View(context).apply {
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = 3.dpToPx().toFloat()
+                            setColor(faint(120))
+                        }
+                    }, LinearLayout.LayoutParams(((resources.displayMetrics.widthPixels - 80.dpToPx()) * (use.mAh / most)).toInt().coerceAtLeast(3.dpToPx()), 4.dpToPx()).apply {
+                        topMargin = 5.dpToPx()
+                    })
+                    addView(card.textView(12.5f, 140).apply {
+                        text = partDetails(use)
+                        updatePadding(top = 4.dpToPx())
+                    })
+                })
+            }
+            body.addView(card.textView(12f, 110).apply {
+                text = getString(R.string.battery_own_note)
+                updatePadding(top = 8.dpToPx())
+            })
+        }
+        fill()
+    }
+
+    /** A share of the battery: two places when it's small, as most of these are */
+    private fun share(percent: Double) = when {
+        percent < 0.01 -> "<0.01%"
+        percent < 1 -> String.format(Locale.getDefault(), "%.2f%%", percent)
+        else -> String.format(Locale.getDefault(), "%.1f%%", percent)
+    }
+
+    private fun partName(part: String) = getString(when (part) {
+        Workload.PLACES -> R.string.battery_part_places
+        Workload.WIFI -> R.string.battery_part_wifi
+        Workload.STEPS -> R.string.battery_part_steps
+        Workload.BATTERY -> R.string.battery_part_battery
+        Workload.NOTIFICATIONS -> R.string.battery_part_notifications
+        Workload.MUSIC -> R.string.battery_part_music
+        Workload.WEATHER -> R.string.battery_part_weather
+        Workload.PEOPLE -> R.string.battery_part_people
+        else -> R.string.battery_part_other
+    })
+
+    /** "Ran 32 times · 1.4s working · 18 location checks · 6 Wi-Fi scans" */
+    private fun partDetails(use: Workload.Use): String {
+        val r = resources
+        return listOfNotNull(
+            use.runs.takeIf { it > 0 }?.let { r.getQuantityString(R.plurals.battery_runs, it.toInt(), it.toInt()) },
+            use.cpuUs.takeIf { it >= 1000 }?.let { working(it) },
+            use.locations.takeIf { it > 0 }?.let { r.getQuantityString(R.plurals.battery_locations, it.toInt(), it.toInt()) },
+            use.scans.takeIf { it > 0 }?.let { r.getQuantityString(R.plurals.battery_scans, it.toInt(), it.toInt()) },
+            use.downloads.takeIf { it > 0 }?.let { r.getQuantityString(R.plurals.battery_downloads, it.toInt(), it.toInt()) },
+        ).joinToString(" · ")
+    }
+
+    /** Processor time: "40ms", "1.4s" or "3m 10s" working */
+    private fun working(us: Long): String {
+        val ms = us / 1000
+        val text = when {
+            ms < 1000 -> "${ms}ms"
+            ms < 60_000 -> String.format(Locale.getDefault(), "%.1fs", ms / 1000f)
+            else -> "${ms / 60_000}m ${ms % 60_000 / 1000}s"
+        }
+        return getString(R.string.battery_working, text)
     }
 
     private fun hours(h: Float) = when {
@@ -215,9 +327,8 @@ class BatteryFragment : CardPageFragment() {
         fun name(pkg: String) = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
         val self = context.packageName
         val top = usage.entries.filter { it.key != self }.sortedByDescending { it.value }.take(6)
-        val (checks, scans) = Places.todayCounts(context)
         val rows = top.map { Triple(name(it.key), it.value, null as String?) } +
-            Triple(getString(R.string.app_name), usage[self] ?: 0L, getString(R.string.battery_self_background, checks, scans))
+            Triple(getString(R.string.app_name), usage[self] ?: 0L, getString(R.string.battery_self_below))
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         rows.forEach { (label, ms, extra) ->
             list.addView(LinearLayout(context).apply {

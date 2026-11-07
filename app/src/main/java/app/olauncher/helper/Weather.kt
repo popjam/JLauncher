@@ -208,6 +208,7 @@ object Weather {
                     "&timezone=auto&forecast_days=7&forecast_hours=48" +
                     if (fahrenheit) "&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch" else ""
         )
+        Workload.add(context, Workload.WEATHER, runs = 1, downloads = 1)
         val connection = url.openConnection() as HttpURLConnection
         val body = try {
             connection.connectTimeout = 10_000
@@ -335,6 +336,7 @@ object Weather {
             locationManager.isProviderEnabled(LocationManager.FUSED_PROVIDER) -> LocationManager.FUSED_PROVIDER
             else -> return lastKnown
         }
+        Workload.add(context, Workload.WEATHER, locations = 1)
         val fresh = withTimeoutOrNull(LOCATION_TIMEOUT_MS) {
             suspendCancellableCoroutine { continuation ->
                 val cancellationSignal = CancellationSignal()

@@ -454,7 +454,7 @@ class WifiWatcher(private val context: Context) {
     /** The Wi-Fi last seen, so signal changes on the same one are ignored */
     private var last: String? = null
 
-    private fun changed(capabilities: NetworkCapabilities) {
+    private fun changed(capabilities: NetworkCapabilities): Unit = Workload.track(context, Workload.WIFI) {
         runCatching {
             val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 (capabilities.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
@@ -467,9 +467,10 @@ class WifiWatcher(private val context: Context) {
         }
     }
 
-    private fun lost() {
+    private fun lost(): Unit = Workload.track(context, Workload.WIFI) {
         last = null
         runCatching { Social.check(context) }
+        Unit
     }
 
     /** Switching off: from now until it's back is unknown */

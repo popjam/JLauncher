@@ -160,7 +160,7 @@ class StepWatcher(private val context: Context) : SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        runCatching { Steps.counted(context, event.values[0].toLong()) }
+        runCatching { Workload.track(context, Workload.STEPS) { Steps.counted(context, event.values[0].toLong()) } }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
