@@ -469,6 +469,19 @@ object StatIcons {
         "..XX....XX.",
         "...........",
     )
+    val BATTERY = icon(
+        "...........",
+        "....XXX....",
+        "..XXXXXXX..",
+        "..X.....X..",
+        "..X.....X..",
+        "..X.....X..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "...........",
+    )
     val SUN = icon(
         ".....X.....",
         ".X...X...X.",

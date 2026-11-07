@@ -101,6 +101,10 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
             data.days.values.count { !it.note.isNullOrBlank() }.takeIf { it > 0 }?.toString()) {
             findNavController().navigate(R.id.action_statListFragment_to_journalFragment)
         })
+        rows.addView(row(getString(R.string.battery), StatIcons.BATTERY, context.getColorFromAttr(R.attr.primaryColor),
+            app.olauncher.helper.Battery.samples(context).lastOrNull()?.let { "${it.level}%" }) {
+            findNavController().navigate(R.id.batteryFragment)
+        })
         val values = todayValues(data)
         stats.forEach { stat ->
             rows.addView(row(stat.name, StatIcons.forStat(stat), stat.color, values[stat.id]) {

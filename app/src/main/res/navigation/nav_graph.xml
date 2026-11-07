@@ -131,6 +131,12 @@
             app:popUpTo="@+id/appListFragment"
             app:popUpToInclusive="true" />
     </fragment>
+    <!-- The phone's battery -->
+    <fragment
+        android:id="@+id/batteryFragment"
+        android:name="app.olauncher.ui.BatteryFragment"
+        android:label="BatteryFragment" />
+
     <fragment
         android:id="@+id/settingsFragment"
         android:name="app.olauncher.ui.SettingsFragment"

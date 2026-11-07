@@ -97,6 +97,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private val batteryChanged = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: android.content.Intent) {
             if (_binding != null) populateDateTime()
+            runCatching { app.olauncher.helper.Battery.record(context) }
         }
     }
 

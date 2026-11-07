@@ -367,6 +367,7 @@ class SpendingListener : NotificationListenerService() {
     private var wifi: WifiWatcher? = null
     private var steps: StepWatcher? = null
     private var places: PlaceWatcher? = null
+    private var battery: BatteryWatcher? = null
 
     /** One thread for reading notifications, in the order they come */
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -392,6 +393,8 @@ class SpendingListener : NotificationListenerService() {
         steps = StepWatcher(applicationContext).also { it.start() }
         places?.stop()
         places = PlaceWatcher(applicationContext).also { it.start() }
+        battery?.stop()
+        battery = BatteryWatcher(applicationContext).also { it.start() }
     }
 
     override fun onListenerDisconnected() {
@@ -404,9 +407,13 @@ class SpendingListener : NotificationListenerService() {
         steps = null
         places?.stop()
         places = null
+        battery?.stop()
+        battery = null
     }
 
     override fun onDestroy() {
+        battery?.stop()
+        battery = null
         places?.stop()
         places = null
         steps?.stop()
