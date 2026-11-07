@@ -778,21 +778,67 @@ class StatsHomeFragment : CardPageFragment() {
 
     private fun kindOf(m: Measured) = stats.firstOrNull { it.id == m.key.substringBefore(':') }?.kind
 
-    private class Insight(val x: Measured, val y: Measured, val lag: Int, val strength: Float, val text: String)
+    private class Insight(val x: Measured, val y: Measured, val lag: Int, val strength: Float, val text: String, val detail: String)
+
+    /** What an insight can be about: how you rate things (mood, energy, anxiety…) and how long you sleep */
+    private fun isOutcome(m: Measured) = m.kind == ValueKind.SCORE || (m.kind == ValueKind.AMOUNT && kindOf(m) == app.olauncher.helper.StatKind.SLEEP)
+
+    /** A stat's name as it reads mid-sentence: medicines as they are, the rest in lower case */
+    private fun inSentence(m: Measured): String {
+        val stat = stats.firstOrNull { it.id == m.key.substringBefore(':') }
+        return if (stat?.isMedicine == true) m.name else m.name.lowercase(Locale.getDefault())
+    }
+
+    /** "You're in a better mood", "You feel calmer"…: the better side of [y], as words */
+    private fun better(y: Measured): String {
+        val name = inSentence(y)
+        return when {
+            y.key == MoodStore.MOOD -> getString(R.string.ins_mood)
+            kindOf(y) == app.olauncher.helper.StatKind.SLEEP -> getString(R.string.ins_sleep)
+            "energy" in name -> getString(R.string.ins_energy)
+            "anxi" in name || "stress" in name -> getString(R.string.ins_anxiety)
+            else -> getString(R.string.ins_score, name)
+        }
+    }
+
+    /** When [x] is on its high side ([high]) or low side, as words: "on work days", "on days with less screen time" */
+    private fun whenX(x: Measured, high: Boolean): String {
+        val name = inSentence(x)
+        val stat = stats.firstOrNull { it.id == x.key.substringBefore(':') }
+        return when (x.kind) {
+            ValueKind.YES_NO -> getString(R.string.ins_on, x.cond(if (high) x.yesNo.second else x.yesNo.first, false))
+            ValueKind.SCORE -> getString(if (high) R.string.ins_when_better else R.string.ins_when_worse, name)
+            ValueKind.AMOUNT -> when {
+                x.key == STEPS_KEY -> getString(if (high) R.string.ins_steps_more else R.string.ins_steps_less)
+                else -> when (stat?.kind) {
+                    app.olauncher.helper.StatKind.SCREEN -> getString(if (high) R.string.ins_screen_more else R.string.ins_screen_less)
+                    app.olauncher.helper.StatKind.SLEEP -> getString(if (high) R.string.ins_sleep_more else R.string.ins_sleep_less)
+                    app.olauncher.helper.StatKind.MUSIC -> getString(if (high) R.string.ins_music_more else R.string.ins_music_less)
+                    app.olauncher.helper.StatKind.VIBECODING -> getString(if (high) R.string.ins_vibe_more else R.string.ins_vibe_less)
+                    app.olauncher.helper.StatKind.MONEY -> getString(if (high) R.string.ins_money_more else R.string.ins_money_less)
+                    app.olauncher.helper.StatKind.SOCIAL -> getString(if (high) R.string.ins_social_more else R.string.ins_social_less)
+                    else -> getString(if (high) R.string.ins_count_more else R.string.ins_count_less, name)
+                }
+            }
+        }
+    }
 
     /**
-     * Every stat against every other, the same day and the next, keeping the clearest differences: each
-     * side needs [INSIGHT_DAYS] days, and the difference has to be a good part of how much the second
-     * stat usually varies. One per pair of stats, the strongest first.
+     * Plain takeaways: for each thing you rate (and sleep), what goes with it being better, in one short
+     * line, with its numbers under it. Only the same day (sleep is the night before it), and only clear
+     * differences with [INSIGHT_DAYS] days on each side; a medicine's dose isn't one of the causes. One
+     * per pair of stats, the strongest first.
      */
     private fun findInsights(comparables: List<Measured>): List<Insight> {
         val found = mutableListOf<Insight>()
         fun base(m: Measured) = m.key.substringBefore(':')
-        for (x in comparables) for (y in comparables) {
-            // Outcomes are scores and amounts; a stat isn't set against itself, or one made from it
-            if (y.kind == ValueKind.YES_NO || base(x) == base(y) || setOf(kindOf(x), kindOf(y)) in MADE_FROM) continue
-            // Sleep already comes before its day, so it's only set against that day
-            for (lag in if (x.before) 0..0 else 0..1) {
+        for (y in comparables) {
+            if (!isOutcome(y)) continue
+            for (x in comparables) {
+                if (base(x) == base(y) || setOf(kindOf(x), kindOf(y)) in MADE_FROM) continue
+                if (x.key.endsWith(":dose") && kindOf(x) == app.olauncher.helper.StatKind.MEDICINE) continue
+                // Sleep is the night after a day (kept against the morning it ends), so it's set against the day before
+                val lag = if (kindOf(y) == app.olauncher.helper.StatKind.SLEEP && !x.before) 1 else 0
                 val groups = groups(x, y, lag)
                 val valid = groups.filter { it.values.size >= INSIGHT_DAYS }
                 if (valid.size < 2) continue
@@ -800,10 +846,24 @@ class StatsHomeFragment : CardPageFragment() {
                 val mean = all.average().toFloat()
                 val spread = Math.sqrt(all.sumOf { ((it - mean) * (it - mean)).toDouble() } / all.size).toFloat()
                 if (spread <= 0f) continue
-                val diff = valid.last().values.average().toFloat() - valid.first().values.average().toFloat()
+                val low = valid.first()
+                val high = valid.last()
+                val diff = high.values.average().toFloat() - low.values.average().toFloat()
                 val strength = abs(diff) / spread
                 if (strength < INSIGHT_STRENGTH) continue
-                found += Insight(x, y, lag, strength, sentence(x, y, lag, valid.map { Group(it.label, it.values) }))
+                // Said from the better side: what goes with y being better
+                val highBetter = diff > 0
+                val (best, other) = if (highBetter) high to low else low to high
+                val text = if (x.kind == ValueKind.SCORE && y.kind == ValueKind.SCORE) {
+                    if (highBetter) getString(R.string.ins_together, inSentence(y), inSentence(x))
+                    else getString(R.string.ins_opposite, inSentence(x), inSentence(y))
+                } else getString(R.string.ins_sentence, better(y), whenX(x, highBetter).let { w ->
+                    // "on days off" → "after days off" for the night after
+                    if (lag == 1 && w.startsWith(getString(R.string.ins_on_word) + " ")) getString(R.string.ins_after_word) + w.substring(getString(R.string.ins_on_word).length) else w
+                })
+                val detail = getString(R.string.ins_detail, y.name, y.format(best.values.average().toFloat()), y.format(other.values.average().toFloat()),
+                    best.values.size, other.values.size)
+                found += Insight(x, y, lag, strength, text.replaceFirstChar { it.uppercase() }, detail)
             }
         }
         return found.groupBy { setOf(base(it.x), base(it.y)) }.values.map { same -> same.maxBy { it.strength } }
@@ -823,12 +883,16 @@ class StatsHomeFragment : CardPageFragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 9.dpToPx(), 0, 9.dpToPx())
                 setBackgroundResource(android.R.drawable.list_selector_background)
-                addView(View(context).apply { background = StatIcons.drawable(insight.x.icon, insight.x.color, 16.dpToPx()) },
-                    LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 6.dpToPx() })
-                addView(View(context).apply { background = StatIcons.drawable(insight.y.icon, insight.y.color, 16.dpToPx()) },
-                    LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 14.dpToPx() })
-                addView(card.textView(14f, 235).apply { text = insight.text },
-                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(View(context).apply { background = StatIcons.drawable(insight.x.icon, insight.x.color, 18.dpToPx()) },
+                    LinearLayout.LayoutParams(18.dpToPx(), 18.dpToPx()).apply { marginEnd = 14.dpToPx() })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(card.textView(15f, 240).apply { text = insight.text })
+                    addView(card.textView(12.5f, 140).apply {
+                        text = insight.detail
+                        updatePadding(top = 2.dpToPx())
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 setOnLongClickListener {
                     stats.firstOrNull { it.id == insight.x.key.substringBefore(':') }?.let { openStat(it.id) }
                     true
@@ -1117,7 +1181,7 @@ class StatsHomeFragment : CardPageFragment() {
 
         /** Pairs where one is counted from the other (time at work is time out), so a link is no news */
         private val MADE_FROM = setOf(setOf(app.olauncher.helper.StatKind.WORK, app.olauncher.helper.StatKind.SOCIAL))
-        private const val INSIGHT_STRENGTH = 0.4f
+        private const val INSIGHT_STRENGTH = 0.45f
         private const val INSIGHTS_SHOWN = 5
         private const val STEPS_KEY = "steps"
         private const val REMEMBER_AFTER_DAYS = 7L
