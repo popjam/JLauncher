@@ -97,6 +97,8 @@ class MainActivity : AppCompatActivity() {
 
         if (prefs.firstOpen) {
             viewModel.firstOpen(true)
+            // A quick look round, once the home screen's up
+            binding.root.post { if (!isFinishing) app.olauncher.ui.Tutorial.show(this) }
             prefs.firstOpen = false
             prefs.firstOpenTime = System.currentTimeMillis()
             viewModel.setDefaultClockApp()

@@ -1013,4 +1013,16 @@
         <item quantity="one">%d stat</item>
         <item quantity="other">%d stats</item>
     </plurals>
+    <string name="tutorial">Tutorial</string>
+    <string name="info_tutorial">A quick look round the app.</string>
+    <string name="tutorial_step">%1$d of %2$d</string>
+    <string name="tutorial_skip">Skip</string>
+    <string name="tutorial_next">Next</string>
+    <string name="tutorial_done">Done</string>
+    <string name="tutorial_home_title">Just your apps</string>
+    <string name="tutorial_home">Tap a name to open it. Swipe up for every app, and type to find one.\n\nHold an app to rename or hide it.</string>
+    <string name="tutorial_stats_title">Swipe left for stats</string>
+    <string name="tutorial_stats">A quick check-in each evening, and stats that fill themselves in: screen time, sleep, places and more.\n\nHold any day to see all of it.</string>
+    <string name="tutorial_settings_title">Hold home for settings</string>
+    <string name="tutorial_settings">Everything can be changed there. Hold any setting to see what it does.</string>
 </resources>

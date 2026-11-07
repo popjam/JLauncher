@@ -61,8 +61,8 @@ object Places {
         if (!enabled(context) || !Social.hasLocation(context)) return
         val now = System.currentTimeMillis()
         val prefs = prefs(context)
-        // Two sources can hand over the same fix: once a minute is plenty
-        if (now - prefs.getLong(LAST_READING, 0L) < MIN_GAP_MS && location?.provider == LocationManager.PASSIVE_PROVIDER) return
+        // Other apps' fixes come in often: a reading every few minutes is plenty
+        if (now - prefs.getLong(LAST_READING, 0L) < MIN_GAP_MS) return
         count(context, CHECKS)
         val nets = nearbyNets(context)
         val fix = location?.takeIf { now - it.time < STALE_FIX_MS }
@@ -371,7 +371,7 @@ object Places {
     private const val SCANS = "scans"
     private const val WORK_NAME = "places"
     const val CHECK_MS = 15 * 60_000L
-    private const val MIN_GAP_MS = 60_000L
+    private const val MIN_GAP_MS = 5 * 60_000L
     private const val STALE_FIX_MS = 30 * 60_000L
     private const val SCAN_FRESH_MS = 30 * 60_000L
     private const val NETS_KEPT = 5

@@ -97,7 +97,7 @@ class SettingsFragment : CardPageFragment() {
 
     private val askCallLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         val context = requireContext().applicationContext
-        Thread { runCatching { People.refresh(context) } }.start()
+        Thread { runCatching { People.refresh(context, force = true) } }.start()
         render()
     }
 
@@ -1126,6 +1126,7 @@ class SettingsFragment : CardPageFragment() {
         card.body(
             if (!(prefs.lockdownModeOn && prefs.lockdownChangeLauncher)) row(card, getString(if (isDefault) R.string.change_default_launcher else R.string.set_as_default_launcher),
                 null, R.string.info_default) { viewModel.resetLauncherLiveData.call() } else null,
+            row(card, getString(R.string.tutorial), null, R.string.info_tutorial) { Tutorial.show(requireActivity()) },
             row(card, getString(R.string.app_info), null, R.string.info_app_info) {
                 openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
             },

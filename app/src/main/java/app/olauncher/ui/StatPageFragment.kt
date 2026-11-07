@@ -598,7 +598,7 @@ class StatPageFragment : CardPageFragment() {
     internal val askLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) { if (_binding != null) render() }
     internal val askCallLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         Thread {
-            runCatching { app.olauncher.helper.People.refresh(requireContext().applicationContext) }
+            runCatching { app.olauncher.helper.People.refresh(requireContext().applicationContext, force = true) }
             view?.post { if (_binding != null) render() }
         }.start()
     }

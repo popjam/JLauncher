@@ -154,7 +154,11 @@ object People {
     }
 
     /** Adds the People stat once there's something to count, and fills in the last [DAYS_BACK] days */
-    fun refresh(context: Context) {
+    fun refresh(context: Context, force: Boolean = false) {
+        // The call log needn't be read every time home shows
+        val now = System.currentTimeMillis()
+        if (!force && now - prefs(context).getLong(REFRESHED, 0L) < REFRESH_MS) return
+        prefs(context).edit().putLong(REFRESHED, now).apply()
         if (hasCallLog(context)) begin(context)
         if (since(context) == null) return
         val id = AutoStats.ensure(context, AutoStats.PEOPLE, NAME) { store ->
@@ -186,6 +190,8 @@ object People {
     private val LOCK = Any()
     private const val PREFS = "people"
     private const val SINCE = "since"
+    private const val REFRESHED = "refreshed"
+    private const val REFRESH_MS = 10 * 60_000L
     private const val SEEN = "seen"
     private const val MESSAGES = "messages"
     private const val SEEN_MS = 3 * 24 * 3_600_000L
