@@ -78,6 +78,23 @@ object BackupManager {
         val mood = backup.optJSONObject("mood") ?: backup.takeIf { it.has("days") }
         val days = mood?.let { MoodStore(context).restoreFrom(it) } ?: 0
         // Histories fill in what the phone hasn't got, so restoring an older backup never loses newer data
+        val summary = mutableListOf(context.resources.getQuantityString(app.olauncher.R.plurals.restored_days, days, days))
+        backup.optJSONObject("extras")?.let { extras ->
+            fun count(name: String, key: String): Int = runCatching {
+                val value = extras.getJSONObject(name).getJSONObject(key).getString("value")
+                if (value.trimStart().startsWith("[")) JSONArray(value).length() else JSONObject(value).length()
+            }.getOrDefault(0)
+            listOf(
+                Triple("spending", "purchases", app.olauncher.R.plurals.restored_purchases),
+                Triple("music", "days", app.olauncher.R.plurals.restored_music),
+                Triple("sleep", "nights", app.olauncher.R.plurals.restored_sleep),
+                Triple("social", "changes", app.olauncher.R.plurals.restored_places),
+            ).forEach { (name, key, plural) ->
+                val n = count(name, key)
+                if (n > 0) summary += context.resources.getQuantityString(plural, n, n)
+            }
+        }
+        context.getSharedPreferences(RESTORE_STATE, 0).edit().putString(RESTORE_SUMMARY, summary.joinToString("\n")).apply()
         backup.optJSONObject("extras")?.let { extras ->
             extras.keys().forEach { name ->
                 if (name !in EXTRA_PREFS) return@forEach
@@ -155,6 +172,17 @@ object BackupManager {
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(Prefs.FILE_NAME, 0)
+
+    private const val RESTORE_STATE = "restore_state"
+    private const val RESTORE_SUMMARY = "summary"
+
+    /** What the last restore brought back, once: shown after the app restarts with it */
+    fun takeRestoreSummary(context: Context): String? {
+        val prefs = context.getSharedPreferences(RESTORE_STATE, 0)
+        val summary = prefs.getString(RESTORE_SUMMARY, null) ?: return null
+        prefs.edit().remove(RESTORE_SUMMARY).apply()
+        return summary
+    }
 
     /** The other settings files backed up: histories JLauncher keeps itself, and the choices made on its pages */
     private val EXTRA_PREFS = listOf(

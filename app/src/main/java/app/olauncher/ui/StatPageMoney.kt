@@ -172,7 +172,7 @@ internal fun StatPageFragment.weekLimitCard() {
     val limit = Spending.weekLimitCents(context)
     if (limit <= 0) {
         card.showNote(getString(R.string.week_limit_none))
-        card.chipRow(listOf(getString(R.string.week_limit_set) to moneyGold), null) { askWeekLimit() }
+        card.chipRow(listOf(getString(R.string.week_limit_set) to moneyGold), null) { askWeekLimit { if (isAdded) render() } }
         return
     }
     val today = LocalDate.now()
@@ -197,7 +197,7 @@ internal fun StatPageFragment.weekLimitCard() {
     if (weeks.size > 1) card.subtitle(getString(R.string.week_limit_broken, pastOver, weeks.size - 1))
     card.keyItem(moneyGold, getString(R.string.week_limit_under))
     card.keyItem(over, getString(R.string.week_limit_over_key))
-    card.chipRow(listOf(getString(R.string.week_limit_change, moneyShort(limit)) to moneyGold), null) { askWeekLimit() }
+    card.chipRow(listOf(getString(R.string.week_limit_change, moneyShort(limit)) to moneyGold), null) { askWeekLimit { if (isAdded) render() } }
     card.describe = { key ->
         val i = key as Int
         val cents = weekCents[i]
@@ -240,7 +240,8 @@ internal fun StatPageFragment.weekLimitCard() {
     }
 }
 
-internal fun StatPageFragment.askWeekLimit() {
+/** The weekly limit, carrying over, and the home screen widget, then [onDone] */
+internal fun androidx.fragment.app.Fragment.askWeekLimit(onDone: () -> Unit) {
     val context = requireContext()
     val current = Spending.weekLimitCents(context)
     val input = EditText(context).apply {
@@ -272,9 +273,9 @@ internal fun StatPageFragment.askWeekLimit() {
             if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, (dollars * 100).roundToInt().toLong())
             Spending.setCarryOver(context, carry.isChecked)
             Spending.setShowOnHome(context, onHome.isChecked)
-            if (isAdded) render()
+            onDone()
         }
-        .apply { if (current > 0) setNeutralButton(R.string.week_limit_remove) { _, _ -> Spending.setWeekLimitCents(context, 0); if (isAdded) render() } }
+        .apply { if (current > 0) setNeutralButton(R.string.week_limit_remove) { _, _ -> Spending.setWeekLimitCents(context, 0); onDone() } }
         .setNegativeButton(R.string.close, null)
         .show()
         .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)

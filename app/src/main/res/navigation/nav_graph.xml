@@ -95,6 +95,11 @@
         android:label="JournalFragment">
     </fragment>
 
+    <fragment
+        android:id="@+id/statsSettingsFragment"
+        android:name="app.olauncher.ui.StatsSettingsFragment"
+        android:label="StatsSettingsFragment" />
+
     <!-- Everything about one day, and changing it -->
     <fragment
         android:id="@+id/dayFragment"
@@ -163,6 +168,15 @@
         android:name="app.olauncher.ui.PauseFragment"
         android:label="PauseFragment"
         tools:layout="@layout/fragment_pause" />
+
+    <!-- Settings and tracking for the stats -->
+    <action
+        android:id="@+id/action_global_statsSettingsFragment"
+        app:destination="@id/statsSettingsFragment"
+        app:enterAnim="@anim/fade_enter"
+        app:exitAnim="@anim/fade_exit"
+        app:popEnterAnim="@anim/fade_enter"
+        app:popExitAnim="@anim/fade_exit" />
 
     <!-- A stat held anywhere opens its page -->
     <action

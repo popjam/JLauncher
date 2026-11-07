@@ -112,6 +112,7 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
         val linkFolder = {
             BackupManager.setBackupFolder(requireContext(), uri)
             populateBackupSettings()
+        showRestoreSummary()
         }
         val existing = BackupManager.findBackupInFolder(requireContext(), uri)
             ?.let { BackupManager.read(requireContext(), it) }
@@ -998,6 +999,16 @@ class SettingsFragment : Fragment(), View.OnClickListener, View.OnLongClickListe
     }
 
     // --- Backup ---
+
+    /** After a restore (and the restart it needs): what came back, and that nothing newer was replaced */
+    private fun showRestoreSummary() {
+        val summary = BackupManager.takeRestoreSummary(requireContext()) ?: return
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.backup_restored)
+            .setMessage(summary + "\n\n" + getString(R.string.restored_note))
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
 
     private fun populateBackupSettings() {
         val folder = BackupManager.backupFolder(requireContext())

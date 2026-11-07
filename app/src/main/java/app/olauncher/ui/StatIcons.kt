@@ -90,6 +90,32 @@ object StatIcons {
 
     private fun icon(vararg rows: String) = rows.joinToString("\n")
 
+    val GEAR = icon(
+        ".....X.....",
+        "..X.XXX.X..",
+        ".XXXXXXXXX.",
+        "..XXX.XXX..",
+        ".XXX...XXX.",
+        "XXX.....XXX",
+        ".XXX...XXX.",
+        "..XXX.XXX..",
+        ".XXXXXXXXX.",
+        "..X.XXX.X..",
+        ".....X.....",
+    )
+    val WARNING = icon(
+        ".....X.....",
+        "....XXX....",
+        "....X.X....",
+        "...XX.XX...",
+        "...XX.XX...",
+        "..XXX.XXX..",
+        "..XXX.XXX..",
+        ".XXXXXXXXX.",
+        ".XXXX.XXXX.",
+        "XXXXXXXXXXX",
+        "...........",
+    )
     val BOOK = icon(
         "...........",
         ".XXXX.XXXX.",

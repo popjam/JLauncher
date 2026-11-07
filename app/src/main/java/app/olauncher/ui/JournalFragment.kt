@@ -83,24 +83,8 @@ class JournalFragment : Fragment() {
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dpToPx(), 48.dpToPx(), 20.dpToPx(), 64.dpToPx())
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                    text = "‹"
-                    textSize = 28f
-                    setTextColor(ink)
-                    setPadding(4.dpToPx(), 0, 16.dpToPx(), 0)
-                    setOnClickListener { findNavController().popBackStack() }
-                })
-                addView(View(context).apply { background = StatIcons.drawable(StatIcons.BOOK, ink, 24.dpToPx()) },
-                    LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                    setText(R.string.journal)
-                    textSize = 28f
-                    setTextColor(ink)
-                })
-            })
+            addView(pageHeader(context, StatIcons.BOOK, getString(R.string.journal)) { findNavController().popBackStack() },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = (-20).dpToPx() })
             addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = 20.dpToPx()
             })

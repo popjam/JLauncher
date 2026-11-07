@@ -14,6 +14,7 @@ import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
+import app.olauncher.helper.Tracking
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.AutoStats
 import app.olauncher.helper.Music
@@ -60,6 +61,7 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
 
     override fun onResume() {
         super.onResume()
+        Tracking.restartIfStopped(requireContext())
         // Stats can change on their pages (renamed, recoloured, deleted) or today's values move on
         build()
     }
@@ -70,6 +72,22 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         val data = store.load()
         stats = context.allStats(data)
         rows.removeAllViews()
+        // What's stopped filling stats in, if anything
+        val problems = Tracking.problems(context)
+        if (problems.isNotEmpty()) rows.addView(TextView(context, null, 0, R.style.TextSmall).apply {
+            text = problems.joinToString("\n") { "⚠  " + it.title + " · " + it.detail }
+            textSize = 13f
+            setTextColor(context.getColorFromAttr(R.attr.primaryColor))
+            setLineSpacing(0f, 1.2f)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = 16.dpToPx().toFloat()
+                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(0xFFFFB300.toInt(), 48))
+            }
+            setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 12.dpToPx())
+            setOnClickListener { findNavController().navigate(R.id.action_global_statsSettingsFragment) }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(20.dpToPx(), 0, 20.dpToPx(), 12.dpToPx())
+        })
         rows.addView(row(getString(R.string.stats_home), StatIcons.HOME, context.getColorFromAttr(R.attr.primaryColor), null, home = true) {
             findNavController().navigate(R.id.action_statListFragment_to_statsHomeFragment)
         })
@@ -86,6 +104,10 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
                 setOnLongClickListener { startDrag(it) }
             })
         }
+        rows.addView(row(getString(R.string.stats_settings), StatIcons.GEAR, context.getColorFromAttr(R.attr.primaryColor),
+            problems.size.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.tracking_problems, it, it) }, faded = true) {
+            findNavController().navigate(R.id.action_global_statsSettingsFragment)
+        })
         rows.addView(row(getString(R.string.new_stat), ADD, context.getColorFromAttr(R.attr.primaryColor), null, faded = true) {
             StatEditor.show(context, store, null) { if (view != null) build() }
         })

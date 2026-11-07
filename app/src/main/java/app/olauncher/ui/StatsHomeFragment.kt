@@ -155,6 +155,17 @@ class StatsHomeFragment : CardPageFragment() {
                 data = store.load()
             }
         }
+        // Stats added since last time start hidden, unless set to show
+        val known = prefs.getStringSet(KNOWN, null)
+        val ids = stats.map { it.id }.toSet()
+        if (known != null && !showsNewStats(requireContext())) {
+            val added = ids - known
+            if (added.isNotEmpty()) {
+                store.setHiddenInGraph(data.hiddenInGraph + added)
+                data = store.load()
+            }
+        }
+        if (known != ids) prefs.edit().putStringSet(KNOWN, ids).apply()
         scores = stats.associate { stat ->
             stat.id to data.days.entries.mapNotNull { (key, day) ->
                 val face = day.face(stat.id) ?: return@mapNotNull null
@@ -173,13 +184,30 @@ class StatsHomeFragment : CardPageFragment() {
         lineCard(weekly = true)
         lineCard(weekly = false)
         rememberCard()
-        comparables = buildComparables()
-        insightsCard()
+        // Insights and Compare need every stat side by side, worked out off the main thread
+        val insights = Card(getString(R.string.insights)).apply {
+            subtitle(getString(R.string.insights_note))
+            showNote(getString(R.string.insights_working))
+        }
         thisWeekCard()
-        compareCard()
+        val compare = Card(getString(R.string.compare_two)).apply { showNote(getString(R.string.insights_working)) }
         streaksCard()
         renderBubble()
+        val generation = ++renderGeneration
+        Thread {
+            val built = runCatching { buildComparables() }.getOrDefault(emptyList())
+            val found = runCatching { findInsights(built) }.getOrDefault(emptyList())
+            view?.post {
+                if (generation != renderGeneration || view == null) return@post
+                comparables = built
+                fillInsights(insights, found)
+                fillCompare(compare)
+            }
+        }.start()
     }
+
+    /** Each render's number, so work finished for an older one is dropped */
+    private var renderGeneration = 0
 
     private fun redrawPicked() {
         load()
@@ -188,27 +216,7 @@ class StatsHomeFragment : CardPageFragment() {
     }
 
     private fun header() {
-        val context = requireContext()
-        cardList.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(12.dpToPx(), 0, 12.dpToPx(), 4.dpToPx())
-            addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                text = "‹"
-                setTextColor(ink)
-                alpha = 0.7f
-                contentDescription = getString(R.string.back)
-                setPadding(12.dpToPx(), 4.dpToPx(), 12.dpToPx(), 4.dpToPx())
-                setOnClickListener { findNavController().popBackStack() }
-            })
-            addView(View(context).apply { background = StatIcons.drawable(StatIcons.HOME, ink, 22.dpToPx()) },
-                LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()).apply { marginEnd = 12.dpToPx() })
-            addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                text = getString(R.string.stats_home)
-                textSize = 24f
-                setTextColor(ink)
-            })
-        })
+        cardList.addView(pageHeader(requireContext(), StatIcons.HOME, getString(R.string.stats_home)) { findNavController().popBackStack() })
     }
 
     // --- The days: a grid of the last days, and the picked day's mood and thoughts ---
@@ -546,7 +554,16 @@ class StatsHomeFragment : CardPageFragment() {
         val format: (Float) -> String,
         val yesNo: Pair<String, String> = "no" to "yes",
         val scoreLabel: (Int) -> String = { it.toString() },
-    )
+    ) {
+        /** Days in a group, as words: a group's [label], fully ("days with over 2h of music") or short after "than" ("with up to 1h") */
+        var cond: (label: String, short: Boolean) -> String = { label, short -> if (short) label else label }
+
+        /** The difference in it, as words: "you sleep 1.2h more" ([up] is more or better) */
+        var outcome: (amount: String, up: Boolean) -> String = { amount, up -> "$name ${if (up) "+" else "−"}$amount" }
+
+        /** Whether it comes before its day (last night's sleep), so it's only set against that same day */
+        var before = false
+    }
 
     private var comparables: List<Measured> = emptyList()
 
@@ -613,13 +630,78 @@ class StatsHomeFragment : CardPageFragment() {
                 } else list.add(scoreComparable(stat, icon))
             }
         }
+        list.forEach { phrase(it) }
         val steps = app.olauncher.helper.Steps.days(context)
         if (steps.isNotEmpty()) list.add(Measured(STEPS_KEY, getString(R.string.steps_title), 0xFF4DB6AC.toInt(), StatIcons.STEPS, ValueKind.AMOUNT,
-            steps.mapValues { it.value.toFloat() }, { v -> if (v >= 1000) String.format(Locale.getDefault(), "%.1fk", v / 1000) else Math.round(v).toString() }))
+            steps.mapValues { it.value.toFloat() }, { v -> if (v >= 1000) String.format(Locale.getDefault(), "%.1fk", v / 1000) else Math.round(v).toString() }).also {
+            it.cond = { label, short -> if (short) getString(R.string.cond_short_with, label) else getString(R.string.cond_steps, label) }
+            it.outcome = { amount, up -> getString(R.string.out_steps, amount, getString(if (up) R.string.word_more else R.string.word_fewer)) }
+        })
         return list
     }
 
     private fun percentText(v: Float) = "${Math.round(v * 100)}%"
+
+    /** How [m] reads in a sentence, by what it is: the days in its groups, and what a difference in it means */
+    private fun phrase(m: Measured) {
+        val stat = stats.firstOrNull { it.id == m.key.substringBefore(':') } ?: return
+        val lower = stat.name.lowercase(Locale.getDefault())
+        // Medicines keep their names as they are; everything else reads in lower case
+        val name = if (stat.isMedicine) stat.name else lower
+        fun more(up: Boolean) = getString(if (up) R.string.word_more else R.string.word_less)
+        val dose = m.key.endsWith(":dose")
+        when {
+            m.kind == ValueKind.YES_NO -> {
+                val (yes, no) = when (stat.kind) {
+                    app.olauncher.helper.StatKind.WORK -> getString(R.string.cond_work_yes) to getString(R.string.cond_work_no)
+                    app.olauncher.helper.StatKind.EXERCISE -> getString(R.string.cond_exercise_yes) to getString(R.string.cond_exercise_no)
+                    app.olauncher.helper.StatKind.MEDITATION -> getString(R.string.cond_meditation_yes) to getString(R.string.cond_meditation_no)
+                    app.olauncher.helper.StatKind.MEDICINE -> getString(R.string.cond_medicine_yes, name) to getString(R.string.cond_medicine_no, name)
+                    else -> getString(R.string.cond_with, name) to getString(R.string.cond_without, name)
+                }
+                m.cond = { label, short -> (if (label == m.yesNo.second) yes else no).let { if (short) getString(R.string.cond_short_on, it) else it } }
+            }
+            m.kind == ValueKind.SCORE -> {
+                m.cond = { label, short -> if (short) getString(R.string.cond_score_short, label.lowercase(Locale.getDefault())) else getString(R.string.cond_score, name, label.lowercase(Locale.getDefault())) }
+                m.outcome = { amount, up -> getString(R.string.out_score, name, amount, getString(if (up) R.string.word_better else R.string.word_worse)) }
+            }
+            dose -> {
+                m.cond = { label, short -> if (short) getString(R.string.cond_short_on, label) else getString(R.string.cond_dose, label, name) }
+                m.outcome = { amount, up -> getString(R.string.out_dose, amount, more(up), name) }
+            }
+            else -> when (stat.kind) {
+                app.olauncher.helper.StatKind.SCREEN -> {
+                    m.cond = { label, short -> if (short) getString(R.string.cond_short_with, label) else getString(R.string.cond_amount, label, getString(R.string.noun_screen)) }
+                    m.outcome = { amount, up -> getString(R.string.out_screen, amount, more(up)) }
+                }
+                app.olauncher.helper.StatKind.SLEEP -> {
+                    m.before = true
+                    m.cond = { label, short -> if (short) getString(R.string.cond_sleep_short, label) else getString(R.string.cond_sleep, label) }
+                    m.outcome = { amount, up -> getString(R.string.out_sleep, amount, more(up)) }
+                }
+                app.olauncher.helper.StatKind.MUSIC -> {
+                    m.cond = { label, short -> if (short) getString(R.string.cond_short_with, label) else getString(R.string.cond_amount, label, getString(R.string.noun_music)) }
+                    m.outcome = { amount, up -> getString(R.string.out_music, amount, more(up)) }
+                }
+                app.olauncher.helper.StatKind.VIBECODING -> {
+                    m.cond = { label, short -> if (short) getString(R.string.cond_short_with, label) else getString(R.string.cond_amount, label, getString(R.string.noun_vibecoding)) }
+                    m.outcome = { amount, up -> getString(R.string.out_vibecoding, amount, more(up)) }
+                }
+                app.olauncher.helper.StatKind.MONEY -> {
+                    m.cond = { label, short -> if (short) getString(R.string.cond_money_short, label) else getString(R.string.cond_money, label) }
+                    m.outcome = { amount, up -> getString(R.string.out_money, amount, more(up)) }
+                }
+                app.olauncher.helper.StatKind.SOCIAL -> {
+                    m.cond = { label, short -> if (short) getString(R.string.cond_social_short, label) else getString(R.string.cond_social, label) }
+                    m.outcome = { amount, up -> getString(R.string.out_social, amount, more(up)) }
+                }
+                else -> {
+                    m.cond = { label, short -> if (short) getString(R.string.cond_short_with, label.lowercase(Locale.getDefault())) else getString(R.string.cond_count, label.lowercase(Locale.getDefault()), name) }
+                    m.outcome = { amount, up -> getString(R.string.out_count, amount, more(up), name) }
+                }
+            }
+        }
+    }
 
     private fun scoreComparable(stat: StatInfo, icon: String) = Measured(stat.id, stat.name, stat.color, icon, ValueKind.SCORE,
         scores[stat.id].orEmpty().mapValues { it.value.toFloat() }, ::decimal, scoreLabel = { score ->
@@ -658,7 +740,6 @@ class StatsHomeFragment : CardPageFragment() {
 
     /** What [x]'s groups come to for [y]: its first group of enough days against its last, in a sentence */
     private fun sentence(x: Measured, y: Measured, lag: Int, valid: List<Group>): String {
-        val yName = if (lag == 1) getString(R.string.compare_next_day_of, y.name) else y.name
         val first = valid.first()
         val last = valid.last()
         val diff = last.average!! - first.average!!
@@ -672,12 +753,27 @@ class StatsHomeFragment : CardPageFragment() {
             ValueKind.YES_NO -> getString(R.string.compare_points, Math.round(abs(diff) * 100))
             ValueKind.AMOUNT -> y.format(abs(diff))
         }
-        val way = getString(if (diff > 0) R.string.compare_higher else R.string.compare_lower)
-        return when {
-            small -> getString(R.string.compare_barely, yName, x.name)
-            x.kind == ValueKind.YES_NO -> getString(R.string.compare_yes_no, yName, amount, way, last.label, first.label, last.values.size, first.values.size)
-            else -> getString(R.string.compare_range, yName, amount, way, x.name, last.label, first.label)
+        val counts = " " + getString(R.string.insight_counts, last.values.size, first.values.size)
+        // One day of a kind: "work days" → "a work day", "days with over 2h…" → "a day with over 2h…"
+        fun one(days: String) = when {
+            days.startsWith("days ") -> "a day " + days.removePrefix("days ")
+            days.endsWith(" days") -> "a " + days.removeSuffix("s")
+            else -> days
         }
+        val hi = x.cond(last.label, false)
+        if (small) {
+            val text = if (x.kind == ValueKind.YES_NO) getString(R.string.insight_barely_yes_no, y.name, hi, x.cond(first.label, false))
+            else getString(R.string.insight_barely, y.name, x.name.lowercase(Locale.getDefault()))
+            return text + counts
+        }
+        val outcome = y.outcome(amount, diff > 0)
+        val text = when {
+            x.before -> getString(R.string.insight_after, hi, outcome, x.cond(first.label, true))
+            lag == 1 -> getString(R.string.insight_next_day, one(hi), outcome,
+                if (x.kind == ValueKind.YES_NO) one(x.cond(first.label, false)) else getString(R.string.insight_one, x.cond(first.label, true)))
+            else -> getString(R.string.insight_same_day, hi, outcome, x.cond(first.label, true))
+        }
+        return text.replaceFirstChar { it.uppercase() } + counts
     }
 
     private fun kindOf(m: Measured) = stats.firstOrNull { it.id == m.key.substringBefore(':') }?.kind
@@ -689,13 +785,14 @@ class StatsHomeFragment : CardPageFragment() {
      * side needs [INSIGHT_DAYS] days, and the difference has to be a good part of how much the second
      * stat usually varies. One per pair of stats, the strongest first.
      */
-    private fun findInsights(): List<Insight> {
+    private fun findInsights(comparables: List<Measured>): List<Insight> {
         val found = mutableListOf<Insight>()
         fun base(m: Measured) = m.key.substringBefore(':')
         for (x in comparables) for (y in comparables) {
             // Outcomes are scores and amounts; a stat isn't set against itself, or one made from it
             if (y.kind == ValueKind.YES_NO || base(x) == base(y) || setOf(kindOf(x), kindOf(y)) in MADE_FROM) continue
-            for (lag in 0..1) {
+            // Sleep already comes before its day, so it's only set against that day
+            for (lag in if (x.before) 0..0 else 0..1) {
                 val groups = groups(x, y, lag)
                 val valid = groups.filter { it.values.size >= INSIGHT_DAYS }
                 if (valid.size < 2) continue
@@ -714,11 +811,9 @@ class StatsHomeFragment : CardPageFragment() {
     }
 
     /** The clearest links in the data, in plain words; tapping one opens it in Compare */
-    private fun insightsCard() {
-        val card = Card(getString(R.string.insights))
-        card.subtitle(getString(R.string.insights_note))
-        val insights = runCatching { findInsights() }.getOrDefault(emptyList())
+    private fun fillInsights(card: Card, insights: List<Insight>) {
         if (insights.isEmpty()) return card.showNote(getString(R.string.insights_none))
+        card.note.isVisible = false
         card.scene.isVisible = false
         val context = requireContext()
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -755,9 +850,9 @@ class StatsHomeFragment : CardPageFragment() {
      * (yes or no, each face, or low, middle and high amounts), on the same day or the next, with a line
      * saying what it comes to.
      */
-    private fun compareCard() {
-        if (comparables.size < 2) return
-        val card = Card(getString(R.string.compare_two))
+    private fun fillCompare(card: Card) {
+        if (comparables.size < 2) return card.showNote(getString(R.string.needs_more_days))
+        card.note.isVisible = false
         compareRoot = card.root
         fun pick(onPick: (String) -> Unit) {
             val options = comparables
@@ -1032,5 +1127,13 @@ class StatsHomeFragment : CardPageFragment() {
         private const val FIRST_PICK = 5
         private const val PREFS = "stats_home"
         private const val PICKED = "picked"
+        private const val KNOWN = "known"
+        private const val NEW_ON_HOME = "new_on_home"
+
+        /** Whether stats added later show here straight away (otherwise they start hidden) */
+        fun showsNewStats(context: android.content.Context) = context.getSharedPreferences(PREFS, 0).getBoolean(NEW_ON_HOME, false)
+
+        fun setShowsNewStats(context: android.content.Context, on: Boolean) =
+            context.getSharedPreferences(PREFS, 0).edit().putBoolean(NEW_ON_HOME, on).apply()
     }
 }

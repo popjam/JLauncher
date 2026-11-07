@@ -26,6 +26,7 @@ import app.olauncher.helper.Steps
 import app.olauncher.helper.Vibecoding
 import app.olauncher.helper.Social
 import app.olauncher.helper.Spending
+import app.olauncher.helper.Tracking
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.StatKind
 import app.olauncher.helper.allStats
@@ -155,6 +156,7 @@ class StatPageFragment : CardPageFragment() {
         }
 
         binding.cards.removeAllViews()
+        trackingNotice()
         spendingShownOn = null
         socialShownState = null
         val context = requireContext()
@@ -232,16 +234,38 @@ class StatPageFragment : CardPageFragment() {
             }
             else -> dailyCard()
         }
-        trendCard()
-        overTimeCard()
-        when {
-            stat.kind == StatKind.MONEY || stat.kind == StatKind.MUSIC || stat.kind == StatKind.WORK || unit != null -> {}
-            stat.medicine -> doseCard()
-            else -> howOftenCard()
+        // The cards every stat has, over time, follow once the page is showing, so it opens straight away
+        val generation = ++renderGeneration
+        binding.cards.post {
+            if (_binding == null || generation != renderGeneration) return@post
+            trendCard()
+            overTimeCard()
+            when {
+                stat.kind == StatKind.MONEY || stat.kind == StatKind.MUSIC || stat.kind == StatKind.WORK || unit != null -> {}
+                stat.medicine -> doseCard()
+                else -> howOftenCard()
+            }
+            if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE) weekdayCard()
+            // Set against the medicines, or on a medicine's page every stat set against it; not for things counted like Coffee
+            if (stat.isMedicine || !stat.medicine) takenVsNotCard()
         }
-        if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE) weekdayCard()
-        // Set against the medicines, or on a medicine's page every stat set against it; not for things counted like Coffee
-        if (stat.isMedicine || !stat.medicine) takenVsNotCard()
+    }
+
+    /** Each render's number, so the later cards of an older one aren't added */
+    internal var renderGeneration = 0
+
+    /** At the top, when something that fills this stat in has stopped: what, since when, and a fix */
+    internal fun trackingNotice() {
+        val context = requireContext()
+        val problems = Tracking.problemsFor(context, stat.kind)
+        if (problems.isEmpty()) return
+        val card = Card(getString(R.string.tracking_paused), icon = StatIcons.WARNING, iconColor = 0xFFFFB300.toInt())
+        card.showNote(problems.joinToString("\n") { problem ->
+            problem.title + ": " + problem.detail + (problem.since?.let { " · " + getString(R.string.tracking_since, dateText(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate())) } ?: "")
+        })
+        card.note.gravity = android.view.Gravity.START
+        val fixable = problems.firstOrNull { it.fix != null }
+        if (fixable != null) card.chipRow(listOf(getString(R.string.tracking_fix) to 0xFFFFB300.toInt()), null) { fixable.fix?.invoke(context) }
     }
 
     /** The stat's name and icon on a band of its colour, with back and Edit on it */

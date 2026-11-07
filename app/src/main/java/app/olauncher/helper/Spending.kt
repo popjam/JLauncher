@@ -130,6 +130,21 @@ object Spending {
         app.olauncher.data.BackupManager.requestSync(context)
     }
 
+    /** Every category (or shop) set by hand as essential (true) or not */
+    fun groupRules(context: Context): Map<String, Boolean> = groupRules(prefs(context).getString(GROUP_RULES, null))
+
+    private fun noteUnread(context: Context, time: Long) = synchronized(LOCK) {
+        val prefs = prefs(context)
+        val times = prefs.getString(UNREAD, null)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty()
+        if (time in times) return
+        val kept = (times + time).filter { it > System.currentTimeMillis() - 14 * DAY_MS }.takeLast(30)
+        prefs.edit().putString(UNREAD, kept.joinToString(",")).apply()
+    }
+
+    /** How many CommBank notifications with amounts couldn't be read as purchases since [time] */
+    fun unreadSince(context: Context, time: Long) =
+        prefs(context).getString(UNREAD, null)?.split(',')?.mapNotNull { it.toLongOrNull() }?.count { it >= time } ?: 0
+
     /** How [group] is set to count, if it's been set */
     fun groupRule(context: Context, group: String): Boolean? = groupRules(prefs(context).getString(GROUP_RULES, null))[group]
 
@@ -152,7 +167,12 @@ object Spending {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val body = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
         val text = listOf(title, body).filter { it.isNotBlank() }.joinToString(" · ")
-        val cents = purchaseCents(sbn.packageName, text) ?: return
+        val cents = purchaseCents(sbn.packageName, text) ?: run {
+            // An amount, and not money coming in: likely a purchase worded in a way not understood
+            val lower = text.lowercase()
+            if (sbn.packageName == COMMBANK && AMOUNT.containsMatchIn(text) && SKIP.none { it in lower }) noteUnread(context, sbn.postTime)
+            return
+        }
         val purchase = Purchase(sbn.postTime, cents, sbn.packageName, text.take(MAX_TEXT), sbn.key)
 
         val date = synchronized(LOCK) {
@@ -298,6 +318,7 @@ object Spending {
     private const val KEY = "purchases"
     private const val WEEK_LIMIT = "week_limit"
     private const val GROUP_RULES = "group_rules"
+    private const val UNREAD = "unread"
     private const val CARRY = "carry_over"
     private const val CARRY_SINCE = "carry_since"
     private const val ON_HOME = "on_home"
@@ -347,6 +368,7 @@ class SpendingListener : NotificationListenerService() {
 
     // Catches purchases notified while it wasn't connected, if they're still showing
     override fun onListenerConnected() {
+        Tracking.listenerConnected(applicationContext)
         runCatching { activeNotifications?.forEach { Spending.record(applicationContext, it) } }
         music?.stop()
         music = MusicTracker(applicationContext, ComponentName(this, SpendingListener::class.java)).also { it.start() }
@@ -357,6 +379,7 @@ class SpendingListener : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        Tracking.listenerDisconnected(applicationContext)
         music?.stop()
         music = null
         wifi?.stop()

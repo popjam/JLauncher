@@ -70,24 +70,10 @@ class DayPageFragment : CardPageFragment() {
             updatePadding(top = 4.dpToPx(), bottom = 64.dpToPx())
         }
         val ink = context.getColorFromAttr(R.attr.primaryColor)
-        title = TextView(context, null, 0, R.style.TextLarge).apply {
-            textSize = 24f
-            setTextColor(ink)
-        }
-        val header = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(12.dpToPx(), 0, 12.dpToPx(), 12.dpToPx())
-            addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                text = "×"
-                textSize = 26f
-                setTextColor(ink)
-                alpha = 0.8f
-                setPadding(8.dpToPx(), 0, 12.dpToPx(), 0)
-                contentDescription = getString(R.string.close)
-                setOnClickListener { findNavController().popBackStack() }
-            })
-            addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val header = pageHeader(context, null, "") { findNavController().popBackStack() }.also { h ->
+            // The day's name goes in the header's title
+            title = (h as LinearLayout).getChildAt(h.childCount - 1) as TextView
+            title.textSize = 24f
         }
         return FrameLayout(context).apply {
             isClickable = true
@@ -333,9 +319,8 @@ class DayPageFragment : CardPageFragment() {
             else -> 0xFF81C784.toInt()
         }
         val card = Card(getString(R.string.day_places), icon = StatIcons.SOCIAL, iconColor = faint(200))
-        val zone = ZoneId.systemDefault()
-        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        val length = 24 * 3_600_000f
+        val (start, end) = Social.dayBounds(context, date)
+        val length = (end - start).toFloat()
         val stretches = day.stretches
         card.describe = { key ->
             val s = stretches[key as Int]

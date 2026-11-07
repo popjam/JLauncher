@@ -100,6 +100,9 @@ object Social {
     /** Whether anywhere is set, so there's something to track */
     private fun anyPlace(context: Context) = homes(context).any { it != null } || work(context) != null
 
+    /** Whether a home or work is set, so places are being tracked */
+    fun hasPlaces(context: Context) = anyPlace(context)
+
     /** When tracking began: the first change kept */
     fun firstChange(context: Context): Long? = changes(context).firstOrNull()?.first
 
@@ -148,8 +151,54 @@ object Social {
         if (alive in last.first until bootedAt && last.second != UNKNOWN) save(context, changes + (alive to UNKNOWN))
     }
 
-    /** Notes the phone is running now, for [afterStart] */
-    private fun markAlive(context: Context) = prefs(context).edit().putLong(ALIVE, System.currentTimeMillis()).apply()
+    /** Notes the phone is running now, for [afterStart], and the time zone it's in */
+    private fun markAlive(context: Context) {
+        prefs(context).edit().putLong(ALIVE, System.currentTimeMillis()).apply()
+        recordZone(context)
+    }
+
+    // --- Time zones: each day is split at midnight where you were that day ---
+
+    /** When the time zone changed, and to what, oldest first */
+    private fun zones(context: Context): List<Pair<Long, ZoneId>> {
+        val json = prefs(context).getString(ZONES, null) ?: return emptyList()
+        if (json === parsedZonesJson) return parsedZones
+        val array = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
+        return List(array.length()) { array.getJSONArray(it) }.mapNotNull { z ->
+            runCatching { z.getLong(0) to ZoneId.of(z.getString(1)) }.getOrNull()
+        }.also {
+            parsedZonesJson = json
+            parsedZones = it
+        }
+    }
+
+    private var parsedZonesJson: String? = null
+    private var parsedZones: List<Pair<Long, ZoneId>> = emptyList()
+
+    /** Notes the zone the phone is in now, if it's moved since last noted */
+    private fun recordZone(context: Context) = synchronized(LOCK) {
+        val zones = zones(context)
+        val now = ZoneId.systemDefault()
+        if (zones.lastOrNull()?.second == now) return
+        // The first zone noted covers everything before it too
+        val since = if (zones.isEmpty()) changes(context).firstOrNull()?.first ?: System.currentTimeMillis() else System.currentTimeMillis()
+        val array = JSONArray()
+        (zones + (since to now)).forEach { (time, zone) -> array.put(JSONArray().put(time).put(zone.id)) }
+        prefs(context).edit().putString(ZONES, array.toString()).apply()
+    }
+
+    /** The zone [date] was spent in: the one in force at its noon */
+    private fun zoneOn(zones: List<Pair<Long, ZoneId>>, date: LocalDate): ZoneId {
+        if (zones.isEmpty()) return ZoneId.systemDefault()
+        return zones.lastOrNull { (time, zone) -> time <= date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli() }?.second
+            ?: zones.first().second
+    }
+
+    /** Where [date] starts and ends, in the zone it was spent in */
+    fun dayBounds(context: Context, date: LocalDate): Pair<Long, Long> {
+        val zone = zoneOn(zones(context), date)
+        return date.atStartOfDay(zone).toInstant().toEpochMilli() to date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
 
     /** Checked from the foreground too, in case the background watcher missed a change. */
     fun check(context: Context) {
@@ -208,7 +257,7 @@ object Social {
         // Worked out again when the changes do, or a minute on (today grows as it goes)
         val key = changes to System.currentTimeMillis() / 60_000
         synchronized(LOCK) { if (daysKey?.let { it.first === key.first && it.second == key.second } == true) return daysCache }
-        return computeDays(changes).also {
+        return computeDays(changes, zones(context)).also {
             synchronized(LOCK) {
                 daysKey = key
                 daysCache = it
@@ -216,20 +265,29 @@ object Social {
         }
     }
 
-    private fun computeDays(changes: List<Pair<Long, Int>>): Map<LocalDate, Day> {
-        val zone = ZoneId.systemDefault()
+    private fun computeDays(changes: List<Pair<Long, Int>>, zones: List<Pair<Long, ZoneId>>): Map<LocalDate, Day> {
         val now = System.currentTimeMillis()
-        val first = Instant.ofEpochMilli(changes.first().first).atZone(zone).toLocalDate()
+        val firstZone = zones.firstOrNull()?.second ?: ZoneId.systemDefault()
+        val first = Instant.ofEpochMilli(changes.first().first).atZone(firstZone).toLocalDate()
         val days = mutableMapOf<LocalDate, Day>()
         var date = first
         val today = LocalDate.now()
+        // The first change still running at each day's start, so each day only looks at its own
+        var from = 0
         while (date <= today) {
+            // Midnight to midnight where the day was spent; a day the clocks change is 23 or 25 hours
+            val zone = zoneOn(zones, date)
             val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
             val end = minOf(now, date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
-            val stretches = changes.mapIndexedNotNull { i, (time, place) ->
-                val from = maxOf(time, start)
-                val to = minOf(changes.getOrNull(i + 1)?.first ?: now, end)
-                if (to > from) Stretch(from, to, place) else null
+            while (from + 1 < changes.size && changes[from + 1].first <= start) from++
+            val stretches = mutableListOf<Stretch>()
+            var i = from
+            while (i < changes.size && changes[i].first < end) {
+                val (time, place) = changes[i]
+                val stretchFrom = maxOf(time, start)
+                val stretchTo = minOf(changes.getOrNull(i + 1)?.first ?: now, end)
+                if (stretchTo > stretchFrom) stretches += Stretch(stretchFrom, stretchTo, place)
+                i++
             }
             val day = Day(merge(stretches))
             if (day.trackedMs > 0) days[date] = day
@@ -324,6 +382,7 @@ object Social {
     const val NAME = "Social"
     const val WORK_NAME = "Work"
     private const val ALIVE = "alive"
+    private const val ZONES = "zones"
     private val WORK_COLOR = 0xFF7986CB.toInt()
     private val WORK_LABELS = listOf("Off", "Worked")
     private const val WORK_SINCE = "workSince"
