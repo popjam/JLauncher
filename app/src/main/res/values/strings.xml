@@ -746,8 +746,8 @@
     <string name="compare_some">some</string>
     <string name="compare_dose">%1$s (dose)</string>
     <string name="compare_taken">%1$s (taken)</string>
-    <string name="compare_up_to">≤ %1$s</string>
-    <string name="compare_over">&gt; %1$s</string>
+    <string name="compare_up_to">up to %1$s</string>
+    <string name="compare_over">over %1$s</string>
     <string name="compare_same_day">Same day</string>
     <string name="compare_next_day">Next day</string>
     <string name="compare_next_day_of">Next day’s %1$s</string>
@@ -765,4 +765,18 @@
     <string name="essential_reset_this">This one: back to automatic</string>
     <string name="essential_reset_group">All %1$s: back to automatic</string>
     <string name="work_days_a_week">days worked each week</string>
+    <string name="insights">What goes together</string>
+    <string name="insights_note">from your days</string>
+    <string name="insights_none">Links between your stats show here once there are enough days to tell</string>
+    <string name="journal">Journal</string>
+    <string name="journal_search">Search your notes</string>
+    <string name="journal_empty">Notes you write each day show here</string>
+    <plurals name="journal_count">
+        <item quantity="one">%d note</item>
+        <item quantity="other">%d notes</item>
+    </plurals>
+    <plurals name="journal_found">
+        <item quantity="one">%d note found</item>
+        <item quantity="other">%d notes found</item>
+    </plurals>
 </resources>

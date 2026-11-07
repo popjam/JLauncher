@@ -73,6 +73,13 @@
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
         <action
+            android:id="@+id/action_statListFragment_to_journalFragment"
+            app:destination="@id/journalFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+        <action
             android:id="@+id/action_statListFragment_to_statsHomeFragment"
             app:destination="@id/statsHomeFragment"
             app:enterAnim="@anim/fade_enter"
@@ -80,6 +87,12 @@
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
     </fragment>
+
+    <!-- Every note written, searchable, from the stat list -->
+    <fragment
+        android:id="@+id/journalFragment"
+        android:name="app.olauncher.ui.JournalFragment"
+        android:label="JournalFragment" />
 
     <!-- Every stat together, at the top of the stat list -->
     <fragment

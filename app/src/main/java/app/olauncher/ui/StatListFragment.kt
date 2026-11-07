@@ -73,6 +73,10 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         rows.addView(row(getString(R.string.stats_home), StatIcons.HOME, context.getColorFromAttr(R.attr.primaryColor), null, home = true) {
             findNavController().navigate(R.id.action_statListFragment_to_statsHomeFragment)
         })
+        rows.addView(row(getString(R.string.journal), StatIcons.BOOK, context.getColorFromAttr(R.attr.primaryColor),
+            data.days.values.count { !it.note.isNullOrBlank() }.takeIf { it > 0 }?.toString()) {
+            findNavController().navigate(R.id.action_statListFragment_to_journalFragment)
+        })
         val values = todayValues(data)
         stats.forEach { stat ->
             rows.addView(row(stat.name, StatIcons.forStat(stat), stat.color, values[stat.id]) {

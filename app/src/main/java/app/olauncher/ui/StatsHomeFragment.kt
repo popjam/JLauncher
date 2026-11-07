@@ -50,6 +50,11 @@ import kotlin.random.Random
 class StatsHomeFragment : CardPageFragment() {
 
     private lateinit var cardList: LinearLayout
+    private lateinit var scrollView: ScrollView
+
+    /** The Compare card, and how to redraw it, so an insight can open its pair there */
+    private var compareRoot: View? = null
+    private var compareRedraw: (() -> Unit)? = null
     override val cards: LinearLayout get() = cardList
 
     private lateinit var store: MoodStore
@@ -91,7 +96,7 @@ class StatsHomeFragment : CardPageFragment() {
             orientation = LinearLayout.VERTICAL
             updatePadding(top = 48.dpToPx(), bottom = 120.dpToPx())
         }
-        val scroll = ScrollView(context).apply {
+        val scroll = ScrollView(context).also { scrollView = it }.apply {
             overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = false
             addView(cardList)
@@ -168,6 +173,8 @@ class StatsHomeFragment : CardPageFragment() {
         lineCard(weekly = true)
         lineCard(weekly = false)
         rememberCard()
+        comparables = buildComparables()
+        insightsCard()
         thisWeekCard()
         moodLinksCard()
         compareCard()
@@ -692,15 +699,105 @@ class StatsHomeFragment : CardPageFragment() {
         }
     }
 
+    /** What [x]'s groups come to for [y]: its first group of enough days against its last, in a sentence */
+    private fun sentence(x: Measured, y: Measured, lag: Int, valid: List<Group>): String {
+        val yName = if (lag == 1) getString(R.string.compare_next_day_of, y.name) else y.name
+        val first = valid.first()
+        val last = valid.last()
+        val diff = last.average!! - first.average!!
+        val small = when (y.kind) {
+            ValueKind.SCORE -> abs(diff) < 0.15f
+            ValueKind.YES_NO -> abs(diff) < 0.05f
+            ValueKind.AMOUNT -> abs(diff) < 0.05f * maxOf(abs(first.average!!), abs(last.average!!), 0.01f)
+        }
+        val amount = when (y.kind) {
+            ValueKind.SCORE -> decimal(abs(diff))
+            ValueKind.YES_NO -> getString(R.string.compare_points, Math.round(abs(diff) * 100))
+            ValueKind.AMOUNT -> y.format(abs(diff))
+        }
+        val way = getString(if (diff > 0) R.string.compare_higher else R.string.compare_lower)
+        return when {
+            small -> getString(R.string.compare_barely, yName, x.name)
+            x.kind == ValueKind.YES_NO -> getString(R.string.compare_yes_no, yName, amount, way, last.label, first.label, last.values.size, first.values.size)
+            else -> getString(R.string.compare_range, yName, amount, way, x.name, last.label, first.label)
+        }
+    }
+
+    private fun kindOf(m: Measured) = stats.firstOrNull { it.id == m.key.substringBefore(':') }?.kind
+
+    private class Insight(val x: Measured, val y: Measured, val lag: Int, val strength: Float, val text: String)
+
+    /**
+     * Every stat against every other, the same day and the next, keeping the clearest differences: each
+     * side needs [INSIGHT_DAYS] days, and the difference has to be a good part of how much the second
+     * stat usually varies. One per pair of stats, the strongest first.
+     */
+    private fun findInsights(): List<Insight> {
+        val found = mutableListOf<Insight>()
+        fun base(m: Measured) = m.key.substringBefore(':')
+        for (x in comparables) for (y in comparables) {
+            // Outcomes are scores and amounts; a stat isn't set against itself, or one made from it
+            if (y.kind == ValueKind.YES_NO || base(x) == base(y) || setOf(kindOf(x), kindOf(y)) in MADE_FROM) continue
+            for (lag in 0..1) {
+                val groups = groups(x, y, lag)
+                val valid = groups.filter { it.values.size >= INSIGHT_DAYS }
+                if (valid.size < 2) continue
+                val all = groups.flatMap { it.values }
+                val mean = all.average().toFloat()
+                val spread = Math.sqrt(all.sumOf { ((it - mean) * (it - mean)).toDouble() } / all.size).toFloat()
+                if (spread <= 0f) continue
+                val diff = valid.last().values.average().toFloat() - valid.first().values.average().toFloat()
+                val strength = abs(diff) / spread
+                if (strength < INSIGHT_STRENGTH) continue
+                found += Insight(x, y, lag, strength, sentence(x, y, lag, valid.map { Group(it.label, it.values) }))
+            }
+        }
+        return found.groupBy { setOf(base(it.x), base(it.y)) }.values.map { same -> same.maxBy { it.strength } }
+            .sortedByDescending { it.strength }.take(INSIGHTS_SHOWN)
+    }
+
+    /** The clearest links in the data, in plain words; tapping one opens it in Compare */
+    private fun insightsCard() {
+        val card = Card(getString(R.string.insights))
+        card.subtitle(getString(R.string.insights_note))
+        val insights = runCatching { findInsights() }.getOrDefault(emptyList())
+        if (insights.isEmpty()) return card.showNote(getString(R.string.insights_none))
+        card.scene.isVisible = false
+        val context = requireContext()
+        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        insights.forEach { insight ->
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 9.dpToPx(), 0, 9.dpToPx())
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                addView(View(context).apply { background = StatIcons.drawable(insight.x.icon, insight.x.color, 16.dpToPx()) },
+                    LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 6.dpToPx() })
+                addView(View(context).apply { background = StatIcons.drawable(insight.y.icon, insight.y.color, 16.dpToPx()) },
+                    LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 14.dpToPx() })
+                addView(card.textView(14f, 235).apply { text = insight.text },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                setOnClickListener {
+                    compareX = insight.x.key
+                    compareY = insight.y.key
+                    compareLag = insight.lag
+                    compareRedraw?.invoke()
+                    compareRoot?.let { root -> scrollView.post { scrollView.smoothScrollTo(0, root.top - 16.dpToPx()) } }
+                }
+            })
+        }
+        card.root.addView(list, card.root.indexOfChild(card.scene))
+    }
+
     /**
      * Any stat against any other, whatever each holds: the second's average for each group of the first
      * (yes or no, each face, or low, middle and high amounts), on the same day or the next, with a line
      * saying what it comes to.
      */
     private fun compareCard() {
-        comparables = buildComparables()
         if (comparables.size < 2) return
         val card = Card(getString(R.string.compare_two))
+        compareRoot = card.root
         fun pick(onPick: (String) -> Unit) {
             val options = comparables
             AlertDialog.Builder(requireContext())
@@ -751,25 +848,7 @@ class StatsHomeFragment : CardPageFragment() {
             }
             summary.isVisible = true
             val yName = if (compareLag == 1) getString(R.string.compare_next_day_of, y.name) else y.name
-            val first = valid.first()
-            val last = valid.last()
-            val diff = last.average!! - first.average!!
-            val small = when (y.kind) {
-                ValueKind.SCORE -> abs(diff) < 0.15f
-                ValueKind.YES_NO -> abs(diff) < 0.05f
-                ValueKind.AMOUNT -> abs(diff) < 0.05f * maxOf(abs(first.average!!), abs(last.average!!), 0.01f)
-            }
-            val amount = when (y.kind) {
-                ValueKind.SCORE -> decimal(abs(diff))
-                ValueKind.YES_NO -> getString(R.string.compare_points, Math.round(abs(diff) * 100))
-                ValueKind.AMOUNT -> y.format(abs(diff))
-            }
-            val way = getString(if (diff > 0) R.string.compare_higher else R.string.compare_lower)
-            summary.text = when {
-                small -> getString(R.string.compare_barely, yName, x.name)
-                x.kind == ValueKind.YES_NO -> getString(R.string.compare_yes_no, yName, amount, way, last.label, first.label, last.values.size, first.values.size)
-                else -> getString(R.string.compare_range, yName, amount, way, x.name, last.label, first.label)
-            }
+            summary.text = sentence(x, y, compareLag, valid)
             card.describe = { key ->
                 val group = groups[key as Int]
                 listOf(getString(R.string.stat_label, x.name, group.label),
@@ -804,12 +883,13 @@ class StatsHomeFragment : CardPageFragment() {
                         s.rect(center - bar / 2, minOf(yOf(average), bottom - s.dp(3f)), center + bar / 2, bottom, color, s.dp(6f))
                     }
                     val label = group.label
-                    s.text(if (label.length > 9) label.take(8) + "…" else label, center, bottom + s.dp(18f), faint(160), s.sp(11.5f))
+                    s.text(if (label.length > 12) label.take(11) + "…" else label, center, bottom + s.dp(18f), faint(160), s.sp(11.5f))
                     s.target(i, RectF(axis + i * column, 0f, axis + (i + 1) * column, bottom + s.dp(26f)))
                 }
                 s.height = bottom + s.dp(26f)
             }
         }
+        compareRedraw = ::draw
         draw()
     }
 
@@ -960,6 +1040,8 @@ class StatsHomeFragment : CardPageFragment() {
     }
 
     override fun onDestroyView() {
+        compareRoot = null
+        compareRedraw = null
         noteInput?.hideKeyboard()
         noteInput = null
         redraws.clear()
@@ -971,6 +1053,12 @@ class StatsHomeFragment : CardPageFragment() {
         private const val GRID_DAYS = 18
         private val DEFAULT_NAMES = setOf("energy", "libido", "anxiety")
         private const val MIN_GROUP = 3
+        private const val INSIGHT_DAYS = 5
+
+        /** Pairs where one is counted from the other (time at work is time out), so a link is no news */
+        private val MADE_FROM = setOf(setOf(app.olauncher.helper.StatKind.WORK, app.olauncher.helper.StatKind.SOCIAL))
+        private const val INSIGHT_STRENGTH = 0.4f
+        private const val INSIGHTS_SHOWN = 5
         private const val STEPS_KEY = "steps"
         private const val REMEMBER_AFTER_DAYS = 7L
         private const val MIN_LINK_DAYS = 4
