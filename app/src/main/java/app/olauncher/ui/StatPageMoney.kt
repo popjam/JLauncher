@@ -15,6 +15,7 @@ import androidx.core.view.updatePadding
 import app.olauncher.R
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatKind
+import app.olauncher.helper.Subscriptions
 import app.olauncher.helper.dpToPx
 import app.olauncher.ui.CardPageFragment.Card
 import app.olauncher.ui.StatPageFragment.Companion.CUPS_HOT
@@ -121,6 +122,8 @@ internal fun StatPageFragment.spendingCard() {
     }
     val timeFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    val subscriptions = Subscriptions.all(context)
+    fun isSubscription(p: Spending.Purchase) = subscriptions.any { it.merchant == p.merchant && abs(it.cents - p.cents) <= maxOf(50L, it.cents / 4) }
     purchases.take(SPENDING_SHOWN).forEach { purchase ->
         val time = java.time.Instant.ofEpochMilli(purchase.time).atZone(java.time.ZoneId.systemDefault())
         val `when` = if (purchase.date == today) time.format(timeFormat).lowercase(Locale.getDefault()) else dateText(purchase.date)
@@ -147,7 +150,8 @@ internal fun StatPageFragment.spendingCard() {
                     ellipsize = TextUtils.TruncateAt.END
                 })
                 addView(card.textView(12f, 140).apply {
-                    text = listOfNotNull(purchase.category, getString(R.string.essential).takeIf { purchase.essential }).joinToString(" · ").ifEmpty { `when` }
+                    text = listOfNotNull(purchase.category, getString(R.string.essential).takeIf { purchase.essential },
+                        getString(R.string.subscription).takeIf { isSubscription(purchase) }).joinToString(" · ").ifEmpty { `when` }
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
@@ -300,6 +304,11 @@ internal fun StatPageFragment.askEssential(purchase: Spending.Purchase) {
     }
     if (purchase.mark != null) options += getString(R.string.essential_reset_this) to { Spending.setEssential(context, purchase, null) }
     if (rule != null) options += getString(R.string.essential_reset_group, group) to { Spending.setGroupEssential(context, group, null) }
+    if (Subscriptions.of(context, purchase) != null) {
+        options += getString(R.string.subscription_not) to { Subscriptions.remove(context, purchase.merchant) }
+    } else {
+        options += getString(R.string.subscription_is) to { askPeriod(purchase.merchant, purchase.cents, null) }
+    }
     AlertDialog.Builder(context)
         .setTitle(getString(R.string.essential_title, purchase.merchant, money(purchase.cents)))
         .setItems(options.map { it.first }.toTypedArray()) { _, which ->
@@ -307,6 +316,93 @@ internal fun StatPageFragment.askEssential(purchase: Spending.Purchase) {
             if (_binding != null) render()
         }
         .show()
+}
+
+/** How often [merchant] charges, to mark it as a subscription; [current] ticked */
+internal fun StatPageFragment.askPeriod(merchant: String, cents: Long, current: Subscriptions.Period?) {
+    val context = requireContext()
+    val periods = Subscriptions.Period.values()
+    AlertDialog.Builder(context)
+        .setTitle(getString(R.string.subscription_how_often, merchant))
+        .setSingleChoiceItems(periods.map { getString(periodName(it)) }.toTypedArray(), current?.ordinal ?: Subscriptions.Period.MONTHLY.ordinal) { dialog, which ->
+            Subscriptions.mark(context, merchant, cents, periods[which])
+            dialog.dismiss()
+            if (_binding != null) render()
+        }
+        .setNegativeButton(R.string.cancel, null)
+        .show()
+}
+
+internal fun periodName(period: Subscriptions.Period) = when (period) {
+    Subscriptions.Period.WEEKLY -> R.string.weekly
+    Subscriptions.Period.FORTNIGHTLY -> R.string.fortnightly
+    Subscriptions.Period.MONTHLY -> R.string.monthly
+    Subscriptions.Period.YEARLY -> R.string.yearly
+}
+
+/**
+ * Subscriptions: what they come to a month, then each with what it charges, how often and when next.
+ * Found from charges that repeat, or marked by holding a purchase; holding one here removes it or
+ * changes how often it charges.
+ */
+internal fun StatPageFragment.subscriptionsCard() {
+    val context = requireContext()
+    if (!Spending.isEnabled(context) || Spending.purchases(context).isEmpty()) return
+    val subscriptions = Subscriptions.all(context)
+    val card = Card(getString(R.string.subscriptions))
+    if (subscriptions.isEmpty()) {
+        card.showNote(getString(R.string.subscriptions_none))
+        return
+    }
+    card.headline(money(subscriptions.sumOf { it.monthlyCents }),
+        resources.getQuantityString(R.plurals.subscriptions_a_month, subscriptions.size, subscriptions.size))
+    val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    subscriptions.forEach { sub ->
+        list.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            updatePadding(top = 7.dpToPx(), bottom = 7.dpToPx())
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            setOnLongClickListener {
+                val options = listOf<Pair<String, () -> Unit>>(
+                    getString(R.string.subscription_not) to { Subscriptions.remove(context, sub.merchant); if (_binding != null) render() },
+                    getString(R.string.subscription_change) to { askPeriod(sub.merchant, sub.cents, sub.period) },
+                )
+                AlertDialog.Builder(context)
+                    .setTitle(getString(R.string.essential_title, sub.merchant, money(sub.cents)))
+                    .setItems(options.map { it.first }.toTypedArray()) { _, which -> options[which].second() }
+                    .show()
+                true
+            }
+            addView(card.textView(15f, 255).apply {
+                text = money(sub.cents)
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(moneyGold)
+            }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(card.textView(14f, 235).apply {
+                    text = sub.merchant
+                    isSingleLine = true
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+                addView(card.textView(12f, 140).apply {
+                    text = getString(periodName(sub.period)) + " · " + getString(R.string.subscription_next, dateText(sub.next))
+                    isSingleLine = true
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (sub.period != Subscriptions.Period.MONTHLY) addView(card.textView(12f, 130).apply {
+                text = getString(R.string.subscription_per_month, money(sub.monthlyCents))
+                updatePadding(left = 10.dpToPx())
+            })
+        })
+    }
+    list.addView(card.textView(12f, 110).apply {
+        text = getString(R.string.subscriptions_hint)
+        updatePadding(top = 8.dpToPx())
+    })
+    card.addBody(list)
 }
 
 /** Dollars short enough for a day's square: "$4.50", "$45", "$1.2k" */

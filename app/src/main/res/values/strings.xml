@@ -1120,4 +1120,22 @@
         <item quantity="one">1 download</item>
         <item quantity="other">%1$d downloads</item>
     </plurals>
+    <string name="subscription">Subscription</string>
+    <string name="subscriptions">Subscriptions</string>
+    <string name="subscriptions_none">None found yet. They show once a charge repeats, or hold a purchase to mark one.</string>
+    <plurals name="subscriptions_a_month">
+        <item quantity="one">a month, 1 subscription</item>
+        <item quantity="other">a month, %1$d subscriptions</item>
+    </plurals>
+    <string name="subscriptions_hint">Hold one to remove it or change how often it charges</string>
+    <string name="subscription_is">It\'s a subscription</string>
+    <string name="subscription_not">Not a subscription</string>
+    <string name="subscription_change">Change how often</string>
+    <string name="subscription_how_often">How often does %1$s charge?</string>
+    <string name="subscription_next">next %1$s</string>
+    <string name="subscription_per_month">%1$s/mo</string>
+    <string name="weekly">Weekly</string>
+    <string name="fortnightly">Fortnightly</string>
+    <string name="monthly">Monthly</string>
+    <string name="yearly">Yearly</string>
 </resources>

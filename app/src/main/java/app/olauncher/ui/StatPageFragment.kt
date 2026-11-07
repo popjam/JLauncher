@@ -183,6 +183,7 @@ class StatPageFragment : CardPageFragment() {
                 weekLimitCard()
                 moneyCalendarCard()
                 moneyMonthCard()
+                subscriptionsCard()
                 moneyCategoriesCard(essential = false)
                 moneyShopsCard()
                 moneyCategoriesCard(essential = true)
