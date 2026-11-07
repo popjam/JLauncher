@@ -36,6 +36,7 @@ object BackupManager {
         LAST_SYNC,
         SYNC_FAILED,
         "FIRST_OPEN",                   // first-run setup state
+        "LOCKDOWN_PASSWORD_PLAINTEXT",  // the password itself, kept only on the phone
         "HOME_PAGE",                    // page currently shown on the home screen
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
         "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone

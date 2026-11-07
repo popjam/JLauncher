@@ -27,7 +27,6 @@ import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.Sleep
 import app.olauncher.helper.Steps
 import app.olauncher.helper.Vibecoding
-import app.olauncher.helper.Medicines
 import app.olauncher.helper.Social
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.Weather
@@ -480,6 +479,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cached = Weather.cached(appContext)
         weather.value = cached
         if (!force && cached != null && prefs.weatherLastUpdated.hasBeenMinutes(60).not()) return
+        if (!force && System.currentTimeMillis() - lastWeatherTry < 30 * 60_000L) return
+        lastWeatherTry = System.currentTimeMillis()
         if (!weatherFetching.compareAndSet(false, true)) return
         weatherLoading.value = true
 
@@ -500,6 +501,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val screenTimeLoading = AtomicBoolean(false)
+
+    /** When the stats' own refreshes last ran */
+    @Volatile private var lastStatsRefresh = 0L
+    private val STATS_REFRESH_MS = 10 * 60_000L
+
+    /** When the weather was last tried, so a phone offline doesn't try on every visit home */
+    private var lastWeatherTry = 0L
 
     /** [force] skips the once-a-minute limit, e.g. when the day rolls over. */
     fun getTodaysScreenTime(force: Boolean = false) {
@@ -531,6 +539,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // The home screen shows every device's screen time together: the phone's now, the rest as last read
                 postCombinedScreenTime(timeSpent)
                 refreshRecentUsage(eventLogWrapper)
+                // The rest change slowly: every 10 minutes is plenty, not every time home shows
+                val now = System.currentTimeMillis()
+                if (now - lastStatsRefresh < STATS_REFRESH_MS) return@launch
+                lastStatsRefresh = now
                 // Sleep comes from the same usage access; quiet days for Music are filled in alongside
                 runCatching { Sleep.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Music.fillQuietDays(appContext) }.onFailure { it.printStackTrace() }
@@ -538,12 +550,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { app.olauncher.helper.People.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { app.olauncher.helper.WeatherHistory.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { PhoneHabits.refresh(appContext) }.onFailure { it.printStackTrace() }
-                runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
+                // The listener keeps steps up to date while it runs
+                if (!app.olauncher.helper.StepWatcher.running) runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { DeviceTime.refresh(appContext) }.onFailure { it.printStackTrace() }
                 // Again once the Mac's and TV's are fresh
                 postCombinedScreenTime(timeSpent)
                 runCatching { Vibecoding.refresh(appContext) }.onFailure { it.printStackTrace() }
-                runCatching { Medicines.ensure(appContext) }.onFailure { it.printStackTrace() }
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

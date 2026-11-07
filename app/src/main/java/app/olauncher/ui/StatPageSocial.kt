@@ -367,6 +367,7 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
         Thread {
             val name = runCatching { Places.nearName(context, suggestion.lat, suggestion.lon) }.getOrNull() ?: return@Thread
             titleView.post {
+                if (!isAdded) return@post
                 near = name
                 titleView.text = getString(R.string.places_new_near, name)
             }

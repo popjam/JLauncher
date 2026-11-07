@@ -38,6 +38,7 @@ import app.olauncher.databinding.FragmentHomeBinding
 import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.Spending
 import app.olauncher.helper.SwipeTargets
+import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
@@ -235,14 +236,6 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             populateHomeScreen(it)
         }
         viewModel.isOlauncherDefault.observe(viewLifecycleOwner, Observer {
-            if (it != true) {
-                if (prefs.dailyWallpaper && prefs.appTheme == AppCompatDelegate.MODE_NIGHT_YES) {
-                    prefs.dailyWallpaper = false
-                    viewModel.cancelWallpaperWorker()
-                }
-                prefs.homeBottomAlignment = false
-                setHomeAlignment()
-            }
             if (binding.firstRunTips.isVisible) return@Observer
             binding.setDefaultLauncher.isVisible = it.not()
                     && prefs.hideSetDefaultLauncher.not()
@@ -785,13 +778,15 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 )
             )
         } catch (e: Exception) {
-            findNavController().navigate(
-                R.id.appListFragment,
-                bundleOf(
-                    Constants.Key.FLAG to flag,
-                    Constants.Key.RENAME to rename
+            runCatching {
+                findNavController().navigate(
+                    R.id.appListFragment,
+                    bundleOf(
+                        Constants.Key.FLAG to flag,
+                        Constants.Key.RENAME to rename
+                    )
                 )
-            )
+            }
             e.printStackTrace()
         }
     }
@@ -912,10 +907,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 if (!prefs.lockModeOn) return
                 // The first tap already turned the page; put it back before locking
                 if (lastPageStep != 0) changePage(-lastPageStep)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    binding.lock.performClick()
-                else
-                    lockPhone()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    if (isAccessServiceEnabled(requireContext())) binding.lock.performClick()
+                    else requireContext().showToast(getString(R.string.please_turn_on_double_tap_to_unlock))
+                } else lockPhone()
             }
 
             // Every tap turns the page straight away, so rapid taps turn as many pages

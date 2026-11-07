@@ -384,7 +384,8 @@ object Places {
 class PlacesWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
         runCatching {
-            if (Places.enabled(applicationContext) && System.currentTimeMillis() - Places.lastReading(applicationContext) >= Places.CHECK_MS - 60_000L) {
+            if (Places.enabled(applicationContext) && !Tracking.listenerRunning(applicationContext) &&
+                System.currentTimeMillis() - Places.lastReading(applicationContext) >= Places.CHECK_MS - 60_000L) {
                 Places.record(applicationContext, Places.locate(applicationContext))
             }
         }

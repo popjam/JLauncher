@@ -363,9 +363,15 @@ class SpendingListener : NotificationListenerService() {
     private var steps: StepWatcher? = null
     private var places: PlaceWatcher? = null
 
+    /** One thread for reading notifications, in the order they come */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        runCatching { Spending.record(applicationContext, sbn) }
-        runCatching { People.record(applicationContext, sbn) }
+        val context = applicationContext
+        worker.execute {
+            runCatching { Spending.record(context, sbn) }
+            runCatching { People.record(context, sbn) }
+        }
     }
 
     // Catches purchases notified while it wasn't connected, if they're still showing

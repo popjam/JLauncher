@@ -56,19 +56,35 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
         }
     }
     timer.post(tick)
-    AlertDialog.Builder(requireContext())
+    val main = android.os.Handler(android.os.Looper.getMainLooper())
+    // Leaving the page (home pressed, screen off) throws the recording away rather than leave the mic on
+    var dialog: AlertDialog? = null
+    val stopper = object : androidx.lifecycle.DefaultLifecycleObserver {
+        override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+            timer.removeCallbacks(tick)
+            Thread { recorder.cancel() }.start()
+            runCatching { dialog?.dismiss() }
+            owner.lifecycle.removeObserver(this)
+        }
+    }
+    viewLifecycleOwner.lifecycle.addObserver(stopper)
+    val lifecycle = viewLifecycleOwner.lifecycle
+    dialog = AlertDialog.Builder(requireContext())
         .setTitle(R.string.voice_recording)
         .setView(timer)
         .setCancelable(false)
         .setNegativeButton(R.string.cancel) { _, _ ->
+            lifecycle.removeObserver(stopper)
             timer.removeCallbacks(tick)
             Thread { recorder.cancel() }.start()
         }
         .setPositiveButton(R.string.voice_done) { _, _ ->
+            lifecycle.removeObserver(stopper)
             timer.removeCallbacks(tick)
             Thread {
                 val file = recorder.stop()
-                timer.post {
+                // The dialog (and the timer in it) is gone by now, so back to the main thread directly
+                main.post {
                     if (file == null) return@post Toast.makeText(context, R.string.voice_too_short, Toast.LENGTH_SHORT).show()
                     onSaved()
                     if (!VoiceNotes.canTranscribe(context)) return@post Toast.makeText(context, R.string.voice_no_text, Toast.LENGTH_LONG).show()

@@ -131,6 +131,12 @@ object Steps {
 /** Listens to the step counter while the notification listener runs, so steps land on the right day. */
 class StepWatcher(private val context: Context) : SensorEventListener {
 
+    companion object {
+        /** Whether one is listening, so nothing else needs to ask the sensor */
+        @Volatile var running = false
+        private const val BATCH_US = 5 * 60 * 1000 * 1000
+    }
+
     private val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
 
     fun start() {
@@ -138,11 +144,12 @@ class StepWatcher(private val context: Context) : SensorEventListener {
         val manager = manager ?: return
         val sensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return
         // Batched by the hardware for up to a few minutes, so it barely wakes the phone
-        runCatching { manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL, BATCH_US) }
+        running = runCatching { manager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL, BATCH_US) }.getOrDefault(false)
     }
 
     fun stop() {
         runCatching { manager?.unregisterListener(this) }
+        running = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -150,8 +157,4 @@ class StepWatcher(private val context: Context) : SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    private companion object {
-        const val BATCH_US = 5 * 60 * 1000 * 1000
-    }
 }

@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name" translatable="false">JLauncher</string>
-    <string name="lock_layout_description" translatable="false">lock layout description to be used a unique id to lock screen</string>
-    <string name="recents_layout_description" translatable="false">recents layout description to be used a unique id to show recent apps</string>
+    <string name="lock_layout_description" translatable="false">Lock screen</string>
+    <string name="recents_layout_description" translatable="false">Recent apps</string>
     <string name="day_battery" formatted="false" translatable="false">%s, %d%%</string>
     <string name="tag_1" translatable="false">1</string>
     <string name="tag_2" translatable="false">2</string>
@@ -19,7 +19,7 @@
     <string name="set_as_default_launcher_u"><u>Set as default launcher</u></string>
     <string name="double_tap_to_lock_screen">Double tap to lock</string>
     <string name="home_button_show_recents">Home button for recents</string>
-    <string name="admin_permission_message">JLauncher promises to use the accessibility permission responsibly. JLauncher does not collect or share any data.</string>
+    <string name="admin_permission_message">Lets JLauncher lock the screen when you double tap.</string>
     <string name="about">About</string>
     <string name="off">Off</string>
     <string name="on">On</string>
@@ -30,7 +30,7 @@
     <string name="home_pages">Pages</string>
     <string name="left">Left</string>
     <string name="right">Right</string>
-    <string name="center">Center</string>
+    <string name="center">Centre</string>
     <string name="home_layout_alignment">Alignment</string>
     <string name="okay">Okay</string>
     <string name="auto_show_keyboard">Auto show keyboard</string>
@@ -41,8 +41,6 @@
     <string name="system_default">System</string>
     <string name="dark">Dark</string>
     <string name="light">Light</string>
-    <string name="rate_us_message">Hi, you won\'t see this message again.
-        \n\nIf you\'re finding JLauncher useful, could you please leave a 5-star review? It\'ll mean the world to us. Thank you!</string>
     <string name="back">Back</string>
     <string name="edit">Edit</string>
     <string name="stat_daily">Daily</string>
@@ -844,7 +842,7 @@
     <string name="lockdown">Lockdown</string>
     <string name="keyboard_message">The keyboard is the fastest way to find an app. You can turn this off in Settings.</string>
     <string name="app_usage_message">Screen time needs usage access. Nothing leaves your phone.</string>
-    <string name="accessibility_service_description">The accessibility permission is required to enable double tap to lock, home button to show recent apps, and the wellness screen for apps opened from outside JLauncher. Any data acquired by JLauncher via this service will not leave your device.</string>
+    <string name="accessibility_service_description">Used for double tap to lock, home for recent apps, and pausing apps. Nothing leaves your phone.</string>
     <string name="close">Close</string>
     <string name="date_only">Date only</string>
     <string name="hidden_apps_message">Find hidden apps in Settings, under Apps.</string>
@@ -857,8 +855,8 @@
     <string name="delete">Uninstall</string>
     <string name="text_size">Text size</string>
     <string name="enabled">Enabled</string>
-    <string name="please_turn_on_double_tap_to_unlock">Please turn on double tap to lock</string>
-    <string name="launcher_failed_to_lock_device">JLauncher failed to lock device.\nPlease check your app settings.</string>
+    <string name="please_turn_on_double_tap_to_unlock">Turn on double tap to lock in Settings first.</string>
+    <string name="launcher_failed_to_lock_device">Couldn\'t lock the phone.</string>
     <string name="long_press_to_select_app">Long press to select app</string>
     <string name="unable_to_open_app">Unable to open app</string>
     <string name="system_app_cannot_delete">System app, cannot delete</string>
@@ -917,8 +915,8 @@
     <string name="password_incorrect">Incorrect password</string>
     <string name="passwords_do_not_match">Passwords do not match</string>
     <string name="password_too_short">Password must be at least 4 characters</string>
-    <string name="catastrophic_warning">CATASTROPHIC WARNING</string>
-    <string name="lockdown_password_warning">If you forget your lockdown password, you may permanently lose access to certain phone functions unless JLauncher is removed via Settings, Play Store, or ADB.\n\nPlease consider enabling Password Recovery before setting a password.\n\nAre you sure you want to proceed?</string>
+    <string name="catastrophic_warning">Before you set a password</string>
+    <string name="lockdown_password_warning">If you forget it, you\'ll have to uninstall JLauncher to get back in. Turn on a way to recover it first.</string>
     <string name="proceed">Proceed</string>
     <string name="cancel">Cancel</string>
     <string name="lockdown_password_recovery">Password recovery</string>

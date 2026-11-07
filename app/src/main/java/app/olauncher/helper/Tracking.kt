@@ -164,6 +164,12 @@ object Tracking {
         runCatching { NotificationListenerService.requestRebind(ComponentName(context, SpendingListener::class.java)) }
     }
 
+    /** Whether the notification listener (and the watchers in it) is running now */
+    fun listenerRunning(context: Context): Boolean {
+        val prefs = prefs(context)
+        return Spending.isEnabled(context) && prefs.getLong(DISCONNECTED, 0L) <= prefs.getLong(CONNECTED, 0L) && prefs.getLong(CONNECTED, 0L) > 0
+    }
+
     fun listenerConnected(context: Context) = prefs(context).edit().putLong(CONNECTED, System.currentTimeMillis()).apply()
 
     fun listenerDisconnected(context: Context) = prefs(context).edit().putLong(DISCONNECTED, System.currentTimeMillis()).apply()

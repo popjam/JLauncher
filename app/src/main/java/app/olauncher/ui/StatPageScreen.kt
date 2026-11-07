@@ -346,5 +346,8 @@ internal fun StatPageFragment.pornCard() {
 internal fun StatPageFragment.macSetupCard() {
     val card = Card(getString(R.string.mac_screen_time))
     card.showNote(getString(R.string.mac_setup))
-    card.chipRow(listOf(getString(R.string.mac_choose_folder) to ink), null) { pickDeviceFolder.launch(null) }
+    card.chipRow(listOf(getString(R.string.mac_choose_folder) to ink), null) {
+        androidx.lifecycle.ViewModelProvider(requireActivity())[app.olauncher.MainViewModel::class.java].isPickingFile = true
+        pickDeviceFolder.launch(null)
+    }
 }

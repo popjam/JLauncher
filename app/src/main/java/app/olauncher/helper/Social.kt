@@ -167,7 +167,9 @@ object Social {
 
     /** Notes the phone is running now, for [afterStart], and the time zone it's in */
     private fun markAlive(context: Context) {
-        prefs(context).edit().putLong(ALIVE, System.currentTimeMillis()).apply()
+        val now = System.currentTimeMillis()
+        if (now - prefs(context).getLong(ALIVE, 0L) < ALIVE_EVERY_MS) return
+        prefs(context).edit().putLong(ALIVE, now).apply()
         recordZone(context)
     }
 
@@ -407,6 +409,7 @@ object Social {
     const val NAME = "Social"
     const val WORK_NAME = "Work"
     private const val ALIVE = "alive"
+    private const val ALIVE_EVERY_MS = 10 * 60_000L
     private const val ZONES = "zones"
     private val WORK_COLOR = 0xFF7986CB.toInt()
     private val WORK_LABELS = listOf("Off", "Worked")
@@ -448,17 +451,24 @@ class WifiWatcher(private val context: Context) {
         }
     }
 
+    /** The Wi-Fi last seen, so signal changes on the same one are ignored */
+    private var last: String? = null
+
     private fun changed(capabilities: NetworkCapabilities) {
         runCatching {
             val ssid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                 (capabilities.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
                     ?.takeIf { it.isNotBlank() && it != WifiManager.UNKNOWN_SSID && it != "<unknown ssid>" }
             else null
-            Social.record(context, true, ssid ?: Social.currentSsid(context))
+            val now = ssid ?: Social.currentSsid(context)
+            if (now == last) return
+            last = now
+            Social.record(context, true, now)
         }
     }
 
     private fun lost() {
+        last = null
         runCatching { Social.check(context) }
     }
 

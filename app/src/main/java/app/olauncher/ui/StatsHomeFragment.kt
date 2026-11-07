@@ -143,8 +143,16 @@ class StatsHomeFragment : CardPageFragment() {
     override fun onResume() {
         super.onResume()
         noteDate = null
+        // Coming back unchanged (same stats, same day, same cards) keeps what's drawn
+        val shown = listOf(store.lastSaved(), LocalDate.now(), app.olauncher.helper.Arrangement.shown(requireContext(),
+            app.olauncher.helper.Arrangement.STATS_HOME, app.olauncher.helper.Arrangement.STATS_HOME_CARDS))
+        if (shown == renderedFor && cardList.childCount > 0) return
+        renderedFor = shown
         render()
     }
+
+    /** What the page was last drawn from */
+    private var renderedFor: List<Any>? = null
 
     override fun onPause() {
         saveNote()

@@ -637,7 +637,7 @@ class StatPageFragment : CardPageFragment() {
         Thread {
             DeviceTime.refresh(context, force = true)
             Vibecoding.refresh(context, force = true)
-            binding.root.post { if (_binding != null) render() }
+            _binding?.root?.post { if (_binding != null) render() }
         }.start()
     }
 

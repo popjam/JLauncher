@@ -168,14 +168,21 @@ object Weather {
     /** The last forecast fetched, if it still covers today and is in the unit wanted now. */
     fun cached(context: Context): Forecast? {
         val prefs = Prefs(context)
-        val forecast = try {
-            parse(prefs.weatherData)
+        val json = prefs.weatherData
+        val forecast = (if (json == parsedJson) parsed else try {
+            parse(json)
         } catch (e: Exception) {
             null
-        } ?: return null
+        }.also {
+            parsedJson = json
+            parsed = it
+        }) ?: return null
         if (forecast.today == null || forecast.fahrenheit != useFahrenheit(context)) return null
         return forecast.copy(place = prefs.weatherPlace)
     }
+
+    private var parsedJson: String? = null
+    private var parsed: Forecast? = null
 
     /** Network call, run off the main thread. Returns null on failure. */
     suspend fun fetch(context: Context): Forecast? {

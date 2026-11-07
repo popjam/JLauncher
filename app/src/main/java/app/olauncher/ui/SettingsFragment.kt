@@ -103,14 +103,24 @@ class SettingsFragment : CardPageFragment() {
 
     private val exportBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@registerForActivityResult
-        val exported = BackupManager.export(requireContext(), uri)
-        requireContext().showToast(getString(if (exported) R.string.backup_exported else R.string.export_failed))
+        // Drive can be slow, so off the main thread
+        val context = requireContext().applicationContext
+        Thread {
+            val exported = runCatching { BackupManager.export(context, uri) }.getOrDefault(false)
+            main.post { context.showToast(context.getString(if (exported) R.string.backup_exported else R.string.export_failed)) }
+        }.start()
     }
 
     private val importBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        val backup = BackupManager.read(requireContext(), uri)
-        if (backup == null) requireContext().showToast(getString(R.string.import_failed)) else restoreBackup(backup)
+        val context = requireContext().applicationContext
+        Thread {
+            val backup = runCatching { BackupManager.read(context, uri) }.getOrNull()
+            main.post {
+                if (!isAdded) return@post
+                if (backup == null) context.showToast(getString(R.string.import_failed)) else restoreBackup(backup)
+            }
+        }.start()
     }
 
     private val pickBackupFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -123,11 +133,19 @@ class SettingsFragment : CardPageFragment() {
             render()
             showRestoreSummary()
         }
-        val existing = BackupManager.findBackupInFolder(requireContext(), uri)?.let { BackupManager.read(requireContext(), it) }
+        val context = requireContext().applicationContext
+        Thread {
+            val existing = runCatching { BackupManager.findBackupInFolder(context, uri)?.let { BackupManager.read(context, it) } }.getOrNull()
+            main.post { if (isAdded) folderPicked(existing, link) }
+        }.start()
+    }
+
+    /** A backup folder's been picked: use it, or first ask whether to restore the backup already in it */
+    private fun folderPicked(existing: JSONObject?, link: () -> Unit) {
         if (existing == null) {
             link()
             requireContext().showToast(getString(R.string.backup_folder_set))
-            return@registerForActivityResult
+            return
         }
         // Don't silently overwrite either side: ask which to keep
         val savedAt = BackupManager.savedAt(existing)?.let {
@@ -155,6 +173,7 @@ class SettingsFragment : CardPageFragment() {
         }.start()
     }
     private var reportDays = 30
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // --- The page ---
 
@@ -862,7 +881,6 @@ class SettingsFragment : CardPageFragment() {
             method(R.string.recovery_tap_500, R.string.recovery_tap_500_info, { prefs.recoveryTap500 }) { prefs.recoveryTap500 = !prefs.recoveryTap500; render() },
             method(R.string.recovery_clue, R.string.recovery_clue_info, { prefs.recoveryClue }) { toggleClue() },
             method(R.string.recovery_essay, R.string.recovery_essay_info, { prefs.recoveryEssay }) { prefs.recoveryEssay = !prefs.recoveryEssay; render() },
-            method(R.string.recovery_pay, R.string.recovery_pay_info, { prefs.recoveryPay }) { togglePay() },
         )
     }
 
@@ -883,25 +901,6 @@ class SettingsFragment : CardPageFragment() {
                     prefs.recoveryClueText = clue
                     render()
                 }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private val payAmounts = arrayOf("$3", "$9", "$20", "$50", "$99", "$299")
-
-    private fun togglePay() {
-        if (prefs.recoveryPay) {
-            prefs.recoveryPay = false
-            prefs.recoveryPayAmount = 0
-            return render()
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.select_amount)
-            .setItems(payAmounts) { _, which ->
-                prefs.recoveryPay = true
-                prefs.recoveryPayAmount = which
-                render()
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -1008,9 +1007,6 @@ class SettingsFragment : CardPageFragment() {
             AlertDialog.Builder(context).setTitle(R.string.your_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
         }
         if (prefs.recoveryEssay) ways += getString(R.string.recovery_essay) to { essay() }
-        if (prefs.recoveryPay) ways += (getString(R.string.recovery_pay) + " (" + payAmounts[prefs.recoveryPayAmount] + ")") to {
-            context.showToast(getString(R.string.recovery_pay_not_available))
-        }
         if (ways.isEmpty()) return context.showToast(getString(R.string.no_recovery_methods))
         AlertDialog.Builder(context)
             .setTitle(R.string.recover_password)
