@@ -70,7 +70,7 @@ enum class StatKind(val shades: Pair<Int, Int>? = null) {
     EXERCISE(0xFFA7F3EB.toInt() to 0xFF00897B.toInt()),
     MUSIC(0xFFA5ECF5.toInt() to 0xFF00838F.toInt()),
     WORK(0xFFC5CAE9.toInt() to 0xFF3949AB.toInt()),
-    MEDITATION, SLEEP, VIBECODING, SOCIAL, LIBIDO, PLAIN;
+    MEDITATION, SLEEP, VIBECODING, SOCIAL, LIBIDO, WEATHER, PEOPLE, PLAIN;
 }
 
 /** Sleep's faces by id, happiest (most sleep) first: bright blue down to slate */
@@ -86,6 +86,8 @@ fun Context.statKind(id: String, name: String, medicine: Boolean, data: MoodStor
         AutoStats.SOCIAL -> return StatKind.SOCIAL
         AutoStats.VIBECODING -> return StatKind.VIBECODING
         AutoStats.WORK -> return StatKind.WORK
+        AutoStats.WEATHER -> return StatKind.WEATHER
+        AutoStats.PEOPLE -> return StatKind.PEOPLE
     }
     val lower = name.lowercase()
     return when {

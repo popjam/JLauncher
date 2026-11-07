@@ -144,6 +144,7 @@ class JournalFragment : Fragment() {
             else -> resources.getQuantityString(R.plurals.journal_found, shown.size, shown.size)
         }
         list.removeAllViews()
+        val voiced = app.olauncher.helper.VoiceNotes.dates(context)
         val ink = ink
         val highlight = ColorUtils.setAlphaComponent(0xFFFFD54F.toInt(), 110)
         var lastMonth: String? = null
@@ -172,7 +173,7 @@ class JournalFragment : Fragment() {
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                        text = dateText(date)
+                        text = if (date in voiced) getString(R.string.journal_with_voice, dateText(date)) else dateText(date)
                         textSize = 13f
                         setTextColor(ink)
                         alpha = 0.6f

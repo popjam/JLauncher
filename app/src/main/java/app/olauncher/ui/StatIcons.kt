@@ -32,6 +32,8 @@ object StatIcons {
             stat.kind == StatKind.MEDITATION -> LOTUS
             stat.kind == StatKind.LIBIDO -> HEART
             stat.kind == StatKind.WORK -> BRIEFCASE
+            stat.kind == StatKind.WEATHER -> SUN
+            stat.kind == StatKind.PEOPLE -> CHAT
             "energy" in name -> BOLT
             "anxi" in name || "stress" in name -> ANXIETY
             "ocd" in name || "compuls" in name -> LOOP
@@ -465,6 +467,32 @@ object StatIcons {
         ".XXXX..XXXX",
         ".XXXX..XXXX",
         "..XX....XX.",
+        "...........",
+    )
+    val SUN = icon(
+        ".....X.....",
+        ".X...X...X.",
+        "..X.....X..",
+        "....XXX....",
+        "...XXXXX...",
+        "XX.XXXXX.XX",
+        "...XXXXX...",
+        "....XXX....",
+        "..X.....X..",
+        ".X...X...X.",
+        ".....X.....",
+    )
+    val CHAT = icon(
+        "...........",
+        ".XXXXXXXXX.",
+        "XXXXXXXXXXX",
+        "XX.......XX",
+        "XX.X.X.X.XX",
+        "XX.......XX",
+        "XXXXXXXXXXX",
+        ".XXXXXXXXX.",
+        "..XX.......",
+        ".XX........",
         "...........",
     )
     val DIAMOND = icon(

@@ -107,6 +107,7 @@ class DayPageFragment : CardPageFragment() {
 
     override fun onPause() {
         saveNote()
+        stopVoicePlayback()
         super.onPause()
     }
 
@@ -209,10 +210,30 @@ class DayPageFragment : CardPageFragment() {
             }
             setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
             setOnFocusChangeListener { _, focused -> if (!focused) saveNote() }
+            // Holding it while not typing records a voice note, written into the note
+            setOnLongClickListener {
+                if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
+                recordVoiceNote(date, onText = { text -> addToNote(text) }, onSaved = { if (isAdded) render() })
+                true
+            }
         }
         card.root.addView(noteInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 14.dpToPx()
         })
+        voiceRows(card, date, onText = { text -> addToNote(text) }) { if (isAdded) render() }?.let { rows ->
+            card.root.addView(rows, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 6.dpToPx()
+            })
+        }
+    }
+
+    /** A voice note's words, added to the end of the note and saved */
+    private fun addToNote(text: String) {
+        val now = store.load().days[date.toString()]?.note.orEmpty().trim()
+        val note = if (now.isEmpty()) text else now + "\n" + text
+        store.setNote(date, note)
+        noteShown = note
+        noteInput?.setText(note)
     }
 
     /** Every stat with its face that day; tapping one edits it in the top card, holding one opens its page */

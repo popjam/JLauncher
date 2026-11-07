@@ -224,6 +224,19 @@ class StatPageFragment : CardPageFragment() {
                 socialMoodCard(days)
                 dailyCard()
             }
+            StatKind.WEATHER -> {
+                val days = app.olauncher.helper.WeatherHistory.days(context)
+                weatherTodayCard(days)
+                weatherMoodCard(days)
+                daylightMoodCard(days)
+                dailyCard()
+            }
+            StatKind.PEOPLE -> {
+                val days = app.olauncher.helper.People.days(context)
+                peopleTodayCard(days)
+                peopleMoodCard(days)
+                dailyCard()
+            }
             StatKind.LIBIDO -> {
                 pornCard()
                 dailyCard()
@@ -583,6 +596,12 @@ class StatPageFragment : CardPageFragment() {
     // --- Social: time out of the house, from home Wi-Fi ---
 
     internal val askLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) { if (_binding != null) render() }
+    internal val askCallLog = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        Thread {
+            runCatching { app.olauncher.helper.People.refresh(requireContext().applicationContext) }
+            view?.post { if (_binding != null) render() }
+        }.start()
+    }
 
     /** The homes' colours, then work's */
     internal val homeColors by lazy { listOf(0xFF81C784.toInt(), 0xFFFFB74D.toInt(), 0xFF7986CB.toInt()) }

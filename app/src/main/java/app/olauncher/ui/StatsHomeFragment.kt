@@ -352,6 +352,18 @@ class StatsHomeFragment : CardPageFragment() {
             minLines = 2
             setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
             setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
+            // Holding it while not typing records a voice note, written into the note
+            setOnLongClickListener {
+                if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
+                val date = selectedDate
+                recordVoiceNote(date, onText = { text ->
+                    val now = store.load().days[date.toString()]?.note.orEmpty().trim()
+                    val note = if (now.isEmpty()) text else now + "\n" + text
+                    store.setNote(date, note)
+                    if (noteDate == date) noteInput?.setText(note)
+                })
+                true
+            }
         }
         noteInput = input
         noteDate = selectedDate
@@ -669,6 +681,8 @@ class StatsHomeFragment : CardPageFragment() {
                     amount(app.olauncher.helper.Social.days(context).filter { (d, day) -> d == today || day.trackedMs >= 12 * 3_600_000L }
                         .mapValues { it.value.outMs / 3_600_000f }, ::hoursText)
                 }
+                StatKind.WEATHER -> amount(app.olauncher.helper.WeatherHistory.days(context).mapValues { it.value.sunHours }, ::hoursText)
+                StatKind.PEOPLE -> amount(app.olauncher.helper.People.days(context).mapValues { it.value.people.toFloat() }, ::numberText)
                 app.olauncher.helper.StatKind.WORK -> list.add(Measured(stat.id, stat.name, stat.color, icon, ValueKind.YES_NO,
                     faces.mapValues { if (stat.isBlank(it.value)) 0f else 1f }, ::percentText, getString(R.string.compare_off) to getString(R.string.compare_worked)))
                 else -> if (stat.medicine) {
@@ -904,6 +918,8 @@ class StatsHomeFragment : CardPageFragment() {
                     StatKind.VIBECODING -> getString(if (high) R.string.ins_vibe_more else R.string.ins_vibe_less)
                     StatKind.MONEY -> getString(if (high) R.string.ins_money_more else R.string.ins_money_less)
                     StatKind.SOCIAL -> getString(if (high) R.string.ins_social_more else R.string.ins_social_less)
+                    StatKind.WEATHER -> getString(if (high) R.string.ins_sun_more else R.string.ins_sun_less)
+                    StatKind.PEOPLE -> getString(if (high) R.string.ins_people_more else R.string.ins_people_less)
                     else -> getString(if (high) R.string.ins_count_more else R.string.ins_count_less, name)
                 }
             }
@@ -1070,6 +1086,26 @@ class StatsHomeFragment : CardPageFragment() {
                 it.opens = social.id
                 it.says = { yes -> getString(if (yes) R.string.ins_at_place else R.string.ins_not_at_place, place.name) }
             })
+        }
+        // The weather's other sides: rain, daylight and warmth, set against your days like the stat
+        val weather = stats.firstOrNull { it.kind == StatKind.WEATHER }
+        val skies = app.olauncher.helper.WeatherHistory.days(context)
+        if (weather != null && skies.isNotEmpty()) {
+            val icon = StatIcons.forStat(weather)
+            fun sky(key: String, kind: ValueKind, values: Map<LocalDate, Float>, format: (Float) -> String, says: (Boolean) -> String) =
+                list.add(Measured(weather.id + ":" + key, weather.name, weather.color, icon, kind, values, format).also {
+                    it.opens = weather.id
+                    it.says = says
+                })
+            sky("rain", ValueKind.YES_NO, skies.mapValues { if (it.value.rainy) 1f else 0f }, ::percentText) { rainy ->
+                getString(if (rainy) R.string.ins_rainy else R.string.ins_dry)
+            }
+            sky("daylight", ValueKind.AMOUNT, skies.mapValues { it.value.daylightHours }, ::hoursText) { more ->
+                getString(if (more) R.string.ins_daylight_more else R.string.ins_daylight_less)
+            }
+            sky("warmth", ValueKind.AMOUNT, skies.mapValues { it.value.max }, { "${Math.round(it)}°" }) { warm ->
+                getString(if (warm) R.string.ins_warmer else R.string.ins_cooler)
+            }
         }
         // Which home: the one stayed at most that day
         val homes = Social.homes(context)

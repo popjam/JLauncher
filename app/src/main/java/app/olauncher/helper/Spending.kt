@@ -365,6 +365,7 @@ class SpendingListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         runCatching { Spending.record(applicationContext, sbn) }
+        runCatching { People.record(applicationContext, sbn) }
     }
 
     // Catches purchases notified while it wasn't connected, if they're still showing

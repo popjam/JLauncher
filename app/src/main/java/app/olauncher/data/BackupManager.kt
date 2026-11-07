@@ -186,7 +186,7 @@ object BackupManager {
 
     /** The other settings files backed up: histories JLauncher keeps itself, and the choices made on its pages */
     private val EXTRA_PREFS = listOf(
-        "spending", "music", "social", "sleep", "steps", "phone_apps", "phone_habits", "auto_stats", "swipe_targets", "stats_home", "places",
+        "spending", "music", "social", "sleep", "steps", "phone_apps", "phone_habits", "auto_stats", "swipe_targets", "stats_home", "places", "people", "weather_days",
     )
 
     // --- Backup folder ---

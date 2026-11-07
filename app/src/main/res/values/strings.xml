@@ -249,7 +249,7 @@
     <string name="daily_mood_prompt">Daily mood prompt</string>
     <string name="prompt_time">Prompt time</string>
     <string name="thoughts">Thoughts</string>
-    <string name="thoughts_hint">Write 3 positive things...</string>
+    <string name="thoughts_hint">Write 3 positive things… or hold to talk</string>
     <string name="confirm">Confirm</string>
     <string name="no_data">No data</string>
     <string name="all">All</string>
@@ -773,7 +773,7 @@
         <item quantity="one">%d note found</item>
         <item quantity="other">%d notes found</item>
     </plurals>
-    <string name="day_note_hint">Anything about the day…</string>
+    <string name="day_note_hint">Anything about the day… or hold to talk</string>
     <string name="day_stats">Stats</string>
     <string name="day_tap_to_change">tap to change · hold to open</string>
     <string name="day_clear">Clear</string>
@@ -1056,4 +1056,64 @@
         <item quantity="one">%d to name</item>
         <item quantity="other">%d to name</item>
     </plurals>
+    <string name="voice_allow_mic">Allow the microphone, then hold the note again</string>
+    <string name="voice_cant_record">Couldn’t start recording</string>
+    <string name="voice_recording">Recording</string>
+    <string name="voice_done">Done</string>
+    <string name="voice_too_short">Too short to keep</string>
+    <string name="voice_writing">Writing it down…</string>
+    <string name="voice_no_text">Couldn’t write it out; the recording is kept on the day</string>
+    <string name="voice_play">▶  Voice note · %1$s</string>
+    <string name="voice_stop">■  Playing · %1$s</string>
+    <string name="voice_delete_ask">Delete this recording? Its words stay in the note.</string>
+    <string name="voice_delete">Delete</string>
+    <string name="journal_with_voice">%1$s · 🎙</string>
+    <string name="weather_sun_hours">%1$s sun</string>
+    <string name="weather_rain_mm">%1$s mm rain</string>
+    <string name="weather_daylight">%1$s daylight</string>
+    <string name="weather_and_mood">Weather and mood</string>
+    <string name="weather_group_sunny">Sunny</string>
+    <string name="weather_group_mixed">Mixed</string>
+    <string name="weather_group_grey">Grey</string>
+    <string name="weather_group_rainy">Rainy</string>
+    <string name="weather_daylight_and_mood">Daylight and mood</string>
+    <string name="weather_daylight_short">Under %1$s</string>
+    <string name="weather_daylight_middle">Middle</string>
+    <string name="weather_daylight_long">%1$s+</string>
+    <string name="people_waiting">Calls and messages show here as they come in</string>
+    <string name="people_talking">%1$s talking</string>
+    <string name="people_need_calls">Calls aren’t counted until the call log is allowed</string>
+    <string name="people_need_notifications">Messages aren’t counted until notification access is on</string>
+    <string name="people_count_calls">Count calls too</string>
+    <string name="people_tile_people">people a day</string>
+    <string name="people_tile_calls">calls a day</string>
+    <string name="people_tile_no_one">days with no one</string>
+    <string name="people_and_mood">People and mood</string>
+    <string name="people_group_none">No one</string>
+    <string name="people_group_one">1</string>
+    <string name="people_group_few">2–3</string>
+    <string name="people_group_many">4+</string>
+    <string name="ins_sun_more">on sunnier days</string>
+    <string name="ins_sun_less">on greyer days</string>
+    <string name="ins_people_more">on days you’re in touch with more people</string>
+    <string name="ins_people_less">on days you’re in touch with fewer people</string>
+    <string name="ins_rainy">on rainy days</string>
+    <string name="ins_dry">on dry days</string>
+    <string name="ins_daylight_more">on days with more daylight</string>
+    <string name="ins_daylight_less">on days with less daylight</string>
+    <string name="ins_warmer">on warmer days</string>
+    <string name="ins_cooler">on cooler days</string>
+    <plurals name="people_count">
+        <item quantity="one">%d person</item>
+        <item quantity="other">%d people</item>
+    </plurals>
+    <plurals name="people_calls">
+        <item quantity="one">%d call</item>
+        <item quantity="other">%d calls</item>
+    </plurals>
+    <plurals name="people_messages">
+        <item quantity="one">%d message</item>
+        <item quantity="other">%d messages</item>
+    </plurals>
+    <string name="voice_write_again">Write it out again</string>
 </resources>

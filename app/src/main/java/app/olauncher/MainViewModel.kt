@@ -552,6 +552,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { Sleep.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Music.fillQuietDays(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Social.refresh(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { app.olauncher.helper.People.refresh(appContext) }.onFailure { it.printStackTrace() }
+                runCatching { app.olauncher.helper.WeatherHistory.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { PhoneHabits.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { Steps.refresh(appContext) }.onFailure { it.printStackTrace() }
                 runCatching { DeviceTime.refresh(appContext) }.onFailure { it.printStackTrace() }

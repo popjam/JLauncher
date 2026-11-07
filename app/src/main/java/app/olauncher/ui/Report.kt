@@ -172,7 +172,7 @@ object Report {
         // Every other stat: its average and which way it went
         // Stats rated on faces; ones counted (coffee, hours, money) don't average out of 5
         val others = stats.filter { !it.medicine && it.id != MoodStore.MOOD && it.id != MoodStore.USAGE &&
-            it.kind !in setOf(StatKind.MONEY, StatKind.SLEEP, StatKind.SOCIAL, StatKind.VIBECODING, StatKind.MUSIC, StatKind.WORK, StatKind.SCREEN) }
+            it.kind !in setOf(StatKind.MONEY, StatKind.SLEEP, StatKind.SOCIAL, StatKind.VIBECODING, StatKind.MUSIC, StatKind.WORK, StatKind.SCREEN, StatKind.WEATHER, StatKind.PEOPLE) }
             .mapNotNull { s -> average(s, dates)?.let { Triple(s, it, average(s, before)) } }
         if (others.isNotEmpty()) {
             heading(context.getString(R.string.report_stats))

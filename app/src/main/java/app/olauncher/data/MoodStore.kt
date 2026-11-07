@@ -206,6 +206,16 @@ class MoodStore(context: Context) {
         }
     }
 
+    /** Several days' faces for [statId] in one save, only where they've changed */
+    fun setFaces(statId: String, faces: Map<LocalDate, Int>) {
+        val days = load().days
+        val changed = faces.filter { (date, face) -> days[date.toString()]?.values?.get(statId) != face }
+        if (changed.isEmpty()) return
+        update { data ->
+            changed.forEach { (date, face) -> data.editDay(date.toString()) { day -> day.copy(values = day.values + (statId to face)) } }
+        }
+    }
+
     /** Cleaned with [sanitizeNote]; a blank note removes it. */
     fun setNote(date: LocalDate, note: String?) = update { data ->
         data.editDay(date.toString()) { it.copy(note = sanitizeNote(note)) }
