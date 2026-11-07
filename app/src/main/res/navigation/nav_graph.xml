@@ -164,6 +164,15 @@
         android:label="PauseFragment"
         tools:layout="@layout/fragment_pause" />
 
+    <!-- A stat held anywhere opens its page -->
+    <action
+        android:id="@+id/action_global_statFragment"
+        app:destination="@id/statFragment"
+        app:enterAnim="@anim/fade_enter"
+        app:exitAnim="@anim/fade_exit"
+        app:popEnterAnim="@anim/fade_enter"
+        app:popExitAnim="@anim/fade_exit" />
+
     <!-- A day held anywhere opens its page -->
     <action
         android:id="@+id/action_global_dayFragment"

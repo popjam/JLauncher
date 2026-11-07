@@ -781,7 +781,7 @@
     </plurals>
     <string name="day_note_hint">Anything about the day…</string>
     <string name="day_stats">Stats</string>
-    <string name="day_tap_to_change">tap one to change it</string>
+    <string name="day_tap_to_change">tap to change · hold to open</string>
     <string name="day_clear">Clear</string>
     <string name="day_top_app">mostly %1$s, %2$s</string>
     <string name="day_sleep">Sleep the night before</string>
@@ -797,4 +797,5 @@
         <item quantity="one">%d prompt</item>
         <item quantity="other">%d prompts</item>
     </plurals>
+    <string name="day_back_to_mood">‹ Mood</string>
 </resources>

@@ -181,6 +181,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     override fun onLongClick(view: View): Boolean {
         when (view.id) {
+            R.id.moodAvatar -> runCatching {
+                findNavController().navigate(R.id.action_mainFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to MoodStore.MOOD))
+            }
             R.id.homeApp1 -> showAppList(Constants.FLAG_SET_HOME_APP_1, prefs.appName1.isNotEmpty(), true)
             R.id.homeApp2 -> showAppList(Constants.FLAG_SET_HOME_APP_2, prefs.appName2.isNotEmpty(), true)
             R.id.homeApp3 -> showAppList(Constants.FLAG_SET_HOME_APP_3, prefs.appName3.isNotEmpty(), true)
@@ -302,6 +305,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.tvScreenTime.setOnClickListener(this)
         binding.tvScreenTime.setOnLongClickListener(this)
         binding.moodAvatar.setOnClickListener(this)
+        binding.moodAvatar.setOnLongClickListener(this)
         binding.moneyWidget.setOnClickListener(this)
         binding.weatherIcon.setOnClickListener(this)
         binding.tvWeather.setOnClickListener(this)

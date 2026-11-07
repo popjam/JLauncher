@@ -37,6 +37,16 @@ class StatHeatmapView @JvmOverloads constructor(
         private set
     var onPointSelected: ((point: Int?) -> Unit)? = null
 
+    /** Holding a row's name, on the left */
+    var onRowHeld: ((row: Int) -> Unit)? = null
+    private var heldRow: Int? = null
+    private val holdRow = Runnable {
+        val row = heldRow ?: return@Runnable
+        heldRow = null
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        onRowHeld?.invoke(row)
+    }
+
     /** Holding a point without moving off it */
     var onPointHeld: ((point: Int) -> Unit)? = null
     private var heldPoint: Int? = null
@@ -159,6 +169,19 @@ class StatHeatmapView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // The names on the left: only holding one does anything
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && event.x < left) {
+            heldRow = ((event.y - top) / rowHeight).toInt().takeIf { it in rows.indices }
+            if (heldRow != null && onRowHeld != null) postDelayed(holdRow, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+            return true
+        }
+        if (heldRow != null) {
+            if (event.actionMasked != MotionEvent.ACTION_MOVE || event.x >= left) {
+                removeCallbacks(holdRow)
+                heldRow = null
+            }
+            return true
+        }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
                 parent?.requestDisallowInterceptTouchEvent(true)

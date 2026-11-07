@@ -225,6 +225,7 @@ class StatsHomeFragment : CardPageFragment() {
                 topMargin = 16.dpToPx()
             })
         })
+        heatmap.onRowHeld = { row -> gridStats.getOrNull(row)?.let { openStat(it.id) } }
         heatmap.onPointHeld = { point ->
             saveNote()
             openDay(LocalDate.ofEpochDay(point.toLong()))
@@ -251,7 +252,7 @@ class StatsHomeFragment : CardPageFragment() {
                 draw(true)
             }
             heatmap.setData(
-                shown.map { stat ->
+                shown.also { gridStats = it }.map { stat ->
                     val cells = (0 until GRID_DAYS).mapNotNull { i ->
                         val date = start.plusDays(i.toLong())
                         val face = data.days[date.toString()]?.face(stat.id)?.takeIf { !stat.isBlank(it) } ?: return@mapNotNull null
@@ -485,6 +486,7 @@ class StatsHomeFragment : CardPageFragment() {
                 // Biggest rise first, down to the biggest fall; new ones (no last week) after
                 .sortedWith(compareBy<Triple<StatInfo, Float, Float?>> { it.third == null }.thenByDescending { (_, now, before) -> before?.let { now - it } ?: 0f })
             if (rows.isEmpty()) return card.showNote(getString(R.string.no_data))
+            card.statOf = { key -> rows.getOrNull(key as Int)?.first?.id }
             card.describe = { key ->
                 val (stat, now, before) = rows[key as Int]
                 listOf(stat.name, getString(R.string.stat_label, getString(R.string.this_week), decimal(now)),
@@ -547,6 +549,9 @@ class StatsHomeFragment : CardPageFragment() {
     )
 
     private var comparables: List<Measured> = emptyList()
+
+    /** The stats in the Daily grid's rows, top to bottom */
+    private var gridStats: List<StatInfo> = emptyList()
 
     private fun hoursText(v: Float) = String.format(Locale.getDefault(), "%.1fh", v)
 
@@ -729,6 +734,10 @@ class StatsHomeFragment : CardPageFragment() {
                     LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 14.dpToPx() })
                 addView(card.textView(14f, 235).apply { text = insight.text },
                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                setOnLongClickListener {
+                    stats.firstOrNull { it.id == insight.x.key.substringBefore(':') }?.let { openStat(it.id) }
+                    true
+                }
                 setOnClickListener {
                     compareX = insight.x.key
                     compareY = insight.y.key
@@ -784,6 +793,10 @@ class StatsHomeFragment : CardPageFragment() {
                 setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(c.icon, c.color, 14.dpToPx()), null, null, null)
                 compoundDrawablePadding = 8.dpToPx()
                 setOnClickListener { onTap() }
+                setOnLongClickListener {
+                    stats.firstOrNull { it.id == c.key.substringBefore(':') }?.let { openStat(it.id) }
+                    true
+                }
             }
             pickers.addView(chip(x) { pick { compareX = it; draw() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             pickers.addView(card.textView(13f, 150).apply {

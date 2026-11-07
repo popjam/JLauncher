@@ -42,6 +42,11 @@ abstract class CardPageFragment : Fragment() {
         runCatching { findNavController().navigate(R.id.action_global_dayFragment, DayFragment.args(date)) }
     }
 
+    /** A stat's page, from wherever it was held */
+    internal fun openStat(id: String) {
+        runCatching { findNavController().navigate(R.id.action_global_statFragment, androidx.core.os.bundleOf(StatFragment.STAT_ID to id)) }
+    }
+
     internal val ink by lazy { requireContext().getColorFromAttr(R.attr.primaryColor) }
     internal fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
 
@@ -94,6 +99,9 @@ abstract class CardPageFragment : Fragment() {
         /** What the tapped point's details say: a title, then " · " or new lines between parts, "Name: value" for a row */
         var describe: (Any) -> String = { "" }
 
+        /** The stat a held target stands for, if any, to open its page */
+        var statOf: (Any) -> String? = { null }
+
         init {
             root.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -115,7 +123,7 @@ abstract class CardPageFragment : Fragment() {
                 topMargin = 12.dpToPx()
             })
             scene.onPicked = { picked -> showDetails(picked?.let(describe)) }
-            scene.onHeld = { key -> (key as? LocalDate)?.let { openDay(it) } }
+            scene.onHeld = { key -> if (key is LocalDate) openDay(key) else statOf(key)?.let { openStat(it) } }
             val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 0)
             }

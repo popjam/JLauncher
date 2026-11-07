@@ -1,428 +1,59 @@
 package app.olauncher.ui
 
-import android.graphics.RectF
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.text.InputType
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
-import androidx.core.graphics.ColorUtils
 import androidx.core.os.bundleOf
-import androidx.core.view.updatePadding
+import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
 import app.olauncher.R
 import app.olauncher.data.MoodStore
-import app.olauncher.helper.DeviceTime
-import app.olauncher.helper.Music
-import app.olauncher.helper.Sleep
-import app.olauncher.helper.Social
-import app.olauncher.helper.Spending
-import app.olauncher.helper.StatInfo
-import app.olauncher.helper.StatKind
-import app.olauncher.helper.Steps
-import app.olauncher.helper.Vibecoding
-import app.olauncher.helper.allStats
-import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
-import app.olauncher.helper.hideKeyboard
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.time.temporal.ChronoUnit
 
 /**
- * Everything about one day together, and a way to change it: the mood, the note and each stat's face
- * (tap one to pick another), then what was filled in by itself (screen time on each device, sleep,
- * where the day went, purchases, music, steps and vibecoding). ‹ and › step a day either way.
+ * The day pages ([DayPageFragment]), side by side from the first day with anything in it up to today:
+ * swiping goes a day either way, pulling down closes them.
  */
-class DayFragment : CardPageFragment() {
-
-    private lateinit var cardList: LinearLayout
-    override val cards: LinearLayout get() = cardList
-    private lateinit var title: TextView
-    private lateinit var store: MoodStore
-    private lateinit var date: LocalDate
-    private var noteInput: EditText? = null
-    private var noteShown: String? = null
+class DayFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val context = requireContext()
-        store = MoodStore(context)
-        date = arguments?.getString(DATE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
-        cardList = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            updatePadding(top = 4.dpToPx(), bottom = 64.dpToPx())
-        }
-        val ink = context.getColorFromAttr(R.attr.primaryColor)
-        fun arrow(symbol: String, by: Long) = TextView(context, null, 0, R.style.TextLarge).apply {
-            text = symbol
-            textSize = 26f
-            setTextColor(ink)
-            setPadding(14.dpToPx(), 0, 14.dpToPx(), 0)
-            setOnClickListener { step(by) }
-        }
-        title = TextView(context, null, 0, R.style.TextLarge).apply {
-            textSize = 24f
-            setTextColor(ink)
-        }
-        val header = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(12.dpToPx(), 0, 12.dpToPx(), 12.dpToPx())
-            addView(TextView(context, null, 0, R.style.TextLarge).apply {
-                text = "×"
-                textSize = 26f
-                setTextColor(ink)
-                alpha = 0.8f
-                setPadding(8.dpToPx(), 0, 12.dpToPx(), 0)
-                contentDescription = getString(R.string.close)
-                setOnClickListener { findNavController().popBackStack() }
-            })
-            addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(arrow("‹", -1))
-            addView(arrow("›", 1))
-        }
-        val page = FrameLayout(context).apply {
+        val today = LocalDate.now()
+        val opened = arguments?.getString(DATE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.coerceAtMost(today) ?: today
+        val earliest = MoodStore(context).load().days.keys.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }.minOrNull()
+        val first = minOf(earliest ?: opened, opened, today.minusDays(MIN_DAYS_BACK))
+        val count = ChronoUnit.DAYS.between(first, today).toInt() + 1
+        val pager = ViewPager2(context).apply {
             setBackgroundColor(context.getColorFromAttr(R.attr.primaryShadeDarkColor))
-            isClickable = true
-            addView(ScrollView(context).apply {
-                overScrollMode = View.OVER_SCROLL_NEVER
-                isVerticalScrollBarEnabled = false
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    updatePadding(top = 40.dpToPx())
-                    addView(header)
-                    addView(cardList)
-                })
+            offscreenPageLimit = 1
+            adapter = object : FragmentStateAdapter(this@DayFragment) {
+                override fun getItemCount() = count
+                override fun createFragment(position: Int) = DayPageFragment().apply {
+                    arguments = bundleOf(DATE to first.plusDays(position.toLong()).toString())
+                }
+            }
+            setCurrentItem(ChronoUnit.DAYS.between(first, opened).toInt(), false)
+            // Remembered, so coming back (from a stat's page, say) returns to the day swiped to
+            registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageSelected(position: Int) {
+                    arguments?.putString(DATE, first.plusDays(position.toLong()).toString())
+                }
             })
         }
         return PullDismissLayout(context).apply {
-            addView(page)
+            addView(pager)
             onDismiss = { if (isAdded) findNavController().popBackStack() }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        render()
-    }
-
-    override fun onPause() {
-        saveNote()
-        super.onPause()
-    }
-
-    override fun onDestroyView() {
-        noteInput?.hideKeyboard()
-        noteInput = null
-        super.onDestroyView()
-    }
-
-    private fun step(by: Long) {
-        val next = date.plusDays(by)
-        if (next > LocalDate.now()) return
-        saveNote()
-        noteInput?.hideKeyboard()
-        date = next
-        render()
-    }
-
-    private fun saveNote() {
-        val text = noteInput?.text?.toString() ?: return
-        if (text.trim() == noteShown?.trim().orEmpty()) return
-        store.setNote(date, text)
-        noteShown = text
-    }
-
-    private fun render() {
-        val data = store.load()
-        val stats = requireContext().allStats(data)
-        val day = data.days[date.toString()]
-        val today = LocalDate.now()
-        title.text = when (date) {
-            today -> getString(R.string.today)
-            today.minusDays(1) -> getString(R.string.yesterday)
-            else -> date.format(DateTimeFormatter.ofPattern(if (date.year == today.year) "EEEE d MMMM" else "EEE d MMM yyyy", Locale.getDefault()))
-        }
-        cardList.removeAllViews()
-        moodCard(stats, day)
-        statsCard(stats, day)
-        screenCard(day)
-        sleepCard()
-        placesCard()
-        moneyCard()
-        musicCard()
-        moreCard()
-    }
-
-    // --- What was written down, and can be changed ---
-
-    /** The mood's faces to pick from, and the note under them */
-    private fun moodCard(stats: List<StatInfo>, day: MoodStore.Day?) {
-        val context = requireContext()
-        val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
-        val card = Card(mood.name, icon = StatIcons.forStat(mood), iconColor = mood.color)
-        card.scene.visibility = View.GONE
-        val chosen = day?.mood
-        val faces = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            mood.faces.forEach { face ->
-                addView(PixelFaceView(context).apply {
-                    this.mood = face
-                    alpha = if (chosen == null || chosen == face) 1f else 0.3f
-                    contentDescription = faceName(mood, face)
-                    setOnClickListener {
-                        store.setFace(date, MoodStore.MOOD, if (chosen == face) null else face)
-                        saveNote()
-                        render()
-                    }
-                }, LinearLayout.LayoutParams(0, 44.dpToPx(), 1f))
-            }
-        }
-        card.addBody(faces)
-        val note = day?.note.orEmpty()
-        noteShown = note
-        noteInput = EditText(context).apply {
-            setText(note)
-            hint = getString(R.string.day_note_hint)
-            textSize = 15f
-            setTextColor(ink)
-            setHintTextColor(faint(110))
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            minLines = 2
-            gravity = Gravity.TOP
-            background = GradientDrawable().apply {
-                cornerRadius = 16.dpToPx().toFloat()
-                setColor(faint(18))
-            }
-            setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
-            setOnFocusChangeListener { _, focused -> if (!focused) saveNote() }
-        }
-        card.root.addView(noteInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 14.dpToPx()
-        })
-    }
-
-    /** Every other stat with its face that day; tapping one picks another, or clears it */
-    private fun statsCard(stats: List<StatInfo>, day: MoodStore.Day?) {
-        val context = requireContext()
-        val card = Card(getString(R.string.day_stats))
-        card.subtitle(getString(R.string.day_tap_to_change))
-        card.scene.visibility = View.GONE
-        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        stats.filter { it.id != MoodStore.MOOD }.forEach { stat ->
-            val face = day?.face(stat.id)
-            // Screen time is counted, not picked
-            val editable = stat.id != MoodStore.USAGE
-            val value = when {
-                stat.id == MoodStore.USAGE -> day?.totalUsageMs?.let { duration(it) }
-                face == null -> null
-                else -> faceName(stat, face)
-            }
-            list.addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 9.dpToPx(), 0, 9.dpToPx())
-                if (editable) setBackgroundResource(android.R.drawable.list_selector_background)
-                addView(View(context).apply { background = StatIcons.drawable(StatIcons.forStat(stat), stat.color, 16.dpToPx()) },
-                    LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(card.textView(15f, 235).apply { text = stat.name }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                if (face != null && stat.id != MoodStore.USAGE && !stat.isBlank(face)) addView(View(context).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(stat.faceColor(context, face))
-                    }
-                }, LinearLayout.LayoutParams(9.dpToPx(), 9.dpToPx()).apply { marginEnd = 8.dpToPx() })
-                addView(card.textView(14f, if (value == null) 90 else 190).apply { text = value ?: "–" })
-                if (editable) setOnClickListener { pickFace(stat, face) }
-            })
-        }
-        card.root.addView(list, card.root.indexOfChild(card.scene))
-    }
-
-    private fun pickFace(stat: StatInfo, current: Int?) {
-        val names = stat.faces.map { faceName(stat, it) }
-        val options = names + getString(R.string.day_clear)
-        AlertDialog.Builder(requireContext())
-            .setTitle(stat.name)
-            .setSingleChoiceItems(options.toTypedArray(), current?.let { stat.faces.indexOf(it) } ?: -1) { dialog, which ->
-                dialog.dismiss()
-                store.setFace(date, stat.id, stat.faces.getOrNull(which))
-                saveNote()
-                if (view != null) render()
-            }
-            .setNegativeButton(R.string.close, null)
-            .show()
-    }
-
-    private fun faceName(stat: StatInfo, face: Int): String {
-        val place = stat.faces.indexOf(face)
-        stat.labels.getOrNull(place)?.takeIf { it.isNotEmpty() }?.let { return it }
-        return when {
-            stat.id == MoodStore.MOOD -> resources.getStringArray(R.array.mood_names)[face]
-            stat.id == MoodStore.USAGE -> resources.getStringArray(R.array.usage_faces)[face]
-            stat.isBlank(face) -> getString(R.string.none_taken)
-            else -> resources.getStringArray(R.array.mood_names)[face]
-        }
-    }
-
-    // --- What filled itself in ---
-
-    /** Screen time on each device, and the phone's top app */
-    private fun screenCard(day: MoodStore.Day?) {
-        val total = day?.totalUsageMs ?: return
-        val card = Card(getString(R.string.screen_time), icon = StatIcons.SCREEN, iconColor = faint(200))
-        card.headline(duration(total), day.topApp?.let { app -> getString(R.string.day_top_app, app, duration(day.topAppMs ?: 0)) } ?: "")
-        val rows = listOfNotNull(
-            day.usageMs?.let { Triple(StatIcons.PHONE, getString(R.string.device_phone), it) },
-            day.deviceMs["mac"]?.takeIf { it > 0 }?.let { Triple(StatIcons.LAPTOP, getString(R.string.device_mac), it) },
-            day.deviceMs["tv"]?.takeIf { it > 0 }?.let { Triple(StatIcons.TV, getString(R.string.device_tv), it) },
-        )
-        rows(card, rows.map { (icon, name, ms) -> Triple(icon, name, duration(ms)) })
-    }
-
-    /** The night that ended this morning */
-    private fun sleepCard() {
-        val night = Sleep.nights(requireContext())[date] ?: return
-        val card = Card(getString(R.string.day_sleep), icon = StatIcons.SLEEP, iconColor = faint(200))
-        card.headline(duration(night.asleepMs), getString(R.string.sleep_span, clock(night.bedtime.toLocalTime()), clock(night.wake.toLocalTime())))
-        card.scene.visibility = View.GONE
-    }
-
-    /** Where the day went: a bar from midnight to midnight in each place's colour, and the time at each */
-    private fun placesCard() {
-        val context = requireContext()
-        val day = Social.days(context)[date] ?: return
-        val homes = Social.homes(context)
-        val work = Social.work(context)
-        fun name(place: Int) = when (place) {
-            Social.OUT -> getString(R.string.social_out_place)
-            Social.UNKNOWN -> getString(R.string.social_unknown_place)
-            Social.WORK -> work?.name ?: getString(R.string.work)
-            else -> homes.getOrNull(place)?.name ?: getString(R.string.social_home_n, place + 1)
-        }
-        fun color(place: Int) = when (place) {
-            Social.OUT -> 0xFF4FC3F7.toInt()
-            Social.UNKNOWN -> faint(50)
-            Social.WORK -> 0xFF7986CB.toInt()
-            1 -> 0xFFFFB74D.toInt()
-            else -> 0xFF81C784.toInt()
-        }
-        val card = Card(getString(R.string.day_places), icon = StatIcons.SOCIAL, iconColor = faint(200))
-        val zone = ZoneId.systemDefault()
-        val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
-        val length = 24 * 3_600_000f
-        val stretches = day.stretches
-        card.describe = { key ->
-            val s = stretches[key as Int]
-            listOf(name(s.place), clock(s.startTime.toLocalTime()) + " – " + clock(s.endTime.toLocalTime()), duration(s.ms)).joinToString("\n")
-        }
-        card.draw { sc ->
-            val h = sc.dp(22f)
-            sc.rect(0f, 0f, sc.width, h, faint(18), sc.dp(6f))
-            stretches.forEachIndexed { i, s ->
-                val x1 = (s.start - start) / length * sc.width
-                val x2 = (s.end - start) / length * sc.width
-                sc.rect(x1, 0f, maxOf(x2, x1 + sc.dp(2f)), h, color(s.place), sc.dp(4f))
-                sc.target(i, RectF(x1, 0f, maxOf(x2, x1 + sc.dp(8f)), h + sc.dp(6f)))
-            }
-            listOf(0 to "12am", 6 to "6am", 12 to "12pm", 18 to "6pm").forEach { (hour, label) ->
-                sc.text(label, hour / 24f * sc.width + sc.dp(2f), h + sc.dp(16f), faint(140), sc.sp(11f), android.graphics.Paint.Align.LEFT)
-            }
-            sc.height = h + sc.dp(22f)
-        }
-        val totals = stretches.groupBy { it.place }.mapValues { (_, list) -> list.sumOf { it.ms } }.entries.sortedByDescending { it.value }
-        totals.forEach { (place, ms) -> card.keyItem(color(place), "${name(place)} · ${duration(ms)}") }
-    }
-
-    /** What was bought, with what counts towards Money spent */
-    private fun moneyCard() {
-        val purchases = Spending.purchases(requireContext()).filter { it.date == date }
-        if (purchases.isEmpty()) return
-        val card = Card(getString(R.string.day_money), icon = StatIcons.MONEY, iconColor = faint(200))
-        val spent = purchases.filter { !it.essential }.sumOf { it.cents }
-        val essentials = purchases.filter { it.essential }.sumOf { it.cents }
-        card.headline(money(spent), listOfNotNull(getString(R.string.spent).lowercase(Locale.getDefault()),
-            essentials.takeIf { it > 0 }?.let { getString(R.string.plus_essentials, money(it)) }).joinToString(" · "))
-        rows(card, purchases.sortedBy { it.time }.map { p ->
-            val time = clock(Instant.ofEpochMilli(p.time).atZone(ZoneId.systemDefault()).toLocalTime())
-            Triple(null, p.merchant + (if (p.essential) " · " + getString(R.string.essential) else ""), money(p.cents) + "  " + time)
-        })
-    }
-
-    /** How long, and who */
-    private fun musicCard() {
-        val day = Music.days(requireContext())[date] ?: return
-        val card = Card(getString(R.string.day_music), icon = StatIcons.MUSIC, iconColor = faint(200))
-        card.headline(duration(day.ms), day.artists.maxByOrNull { it.value }?.key?.let { getString(R.string.day_mostly, it) } ?: "")
-        val tracks = day.plays.entries.sortedByDescending { it.value }.take(3).map { (key, n) ->
-            val (title, artist) = Music.splitTrack(key)
-            Triple(null, listOf(title, artist).filter { it.isNotEmpty() }.joinToString(" · "), resources.getQuantityString(R.plurals.music_plays, n, n))
-        }
-        val artists = day.artists.entries.sortedByDescending { it.value }.take(3).map { (a, ms) -> Triple(null, a, duration(ms)) }
-        rows(card, tracks.ifEmpty { artists })
-    }
-
-    /** Steps, the Mac's and TV's first and last use, and vibecoding */
-    private fun moreCard() {
-        val context = requireContext()
-        val rows = listOfNotNull(
-            Steps.days(context)[date]?.let { Triple(StatIcons.STEPS, getString(R.string.steps_title), String.format(Locale.getDefault(), "%,d", it)) },
-            Vibecoding.days(context)[date]?.takeIf { it.minutes > 0 }?.let { v ->
-                Triple(StatIcons.CODE, getString(R.string.day_vibecoding), duration(v.minutes * 60_000L) + " · " + resources.getQuantityString(R.plurals.day_prompts, v.prompts, v.prompts))
-            },
-            DeviceTime.days(context, DeviceTime.Device.MAC)[date]?.takeIf { it.first != null }?.let { d ->
-                Triple(StatIcons.LAPTOP, getString(R.string.day_mac_from), listOfNotNull(d.first, d.last).joinToString(" – "))
-            },
-        )
-        if (rows.isEmpty()) return
-        val card = Card(getString(R.string.day_more))
-        rows(card, rows)
-    }
-
-    /** Rows of an icon (or none), a name and a value on the right, in place of a drawing */
-    private fun rows(card: Card, rows: List<Triple<String?, String, String>>) {
-        if (rows.isEmpty()) {
-            card.scene.visibility = View.GONE
-            return
-        }
-        val context = requireContext()
-        card.scene.visibility = View.GONE
-        val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        rows.forEach { (icon, name, value) ->
-            list.addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
-                if (icon != null) addView(View(context).apply { background = StatIcons.drawable(icon, faint(190), 15.dpToPx()) },
-                    LinearLayout.LayoutParams(15.dpToPx(), 15.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(card.textView(14f, 230).apply {
-                    text = name
-                    isSingleLine = true
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(card.textView(13f, 160).apply {
-                    text = value
-                    updatePadding(left = 10.dpToPx())
-                })
-            })
-        }
-        card.root.addView(list, card.root.indexOfChild(card.scene))
-    }
-
     companion object {
         const val DATE = "date"
+        private const val MIN_DAYS_BACK = 30L
 
         fun args(date: LocalDate) = bundleOf(DATE to date.toString())
     }
