@@ -14,6 +14,7 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.formattedTimeSpent
@@ -35,6 +36,11 @@ abstract class CardPageFragment : Fragment() {
     /** Colours for the dots before details rows whose label is a stat's name, and the stat's icon to use instead */
     internal open fun colorOfLabel(label: String): Int? = null
     internal open fun iconOfLabel(label: String): String? = null
+
+    /** The day page for [date], from wherever a day was held */
+    internal open fun openDay(date: LocalDate) {
+        runCatching { findNavController().navigate(R.id.action_global_dayFragment, DayFragment.args(date)) }
+    }
 
     internal val ink by lazy { requireContext().getColorFromAttr(R.attr.primaryColor) }
     internal fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
@@ -109,6 +115,7 @@ abstract class CardPageFragment : Fragment() {
                 topMargin = 12.dpToPx()
             })
             scene.onPicked = { picked -> showDetails(picked?.let(describe)) }
+            scene.onHeld = { key -> (key as? LocalDate)?.let { openDay(it) } }
             val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 0)
             }

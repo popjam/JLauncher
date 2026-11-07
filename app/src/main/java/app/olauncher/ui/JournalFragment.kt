@@ -202,7 +202,7 @@ class JournalFragment : Fragment() {
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 // The whole day, where the note can be changed too
-                setOnClickListener { findNavController().navigate(R.id.action_journalFragment_to_dayFragment, DayFragment.args(date)) }
+                setOnClickListener { findNavController().navigate(R.id.action_global_dayFragment, DayFragment.args(date)) }
             })
         }
     }

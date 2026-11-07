@@ -37,6 +37,17 @@ class StatHeatmapView @JvmOverloads constructor(
         private set
     var onPointSelected: ((point: Int?) -> Unit)? = null
 
+    /** Holding a point without moving off it */
+    var onPointHeld: ((point: Int) -> Unit)? = null
+    private var heldPoint: Int? = null
+    private val hold = Runnable {
+        val point = heldPoint ?: return@Runnable
+        heldPoint = null
+        tapClears = false
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        onPointHeld?.invoke(point)
+    }
+
     /** Whether lifting the finger lets go of the picked point, having touched down on it */
     private var tapClears = false
 
@@ -153,7 +164,14 @@ class StatHeatmapView @JvmOverloads constructor(
                 parent?.requestDisallowInterceptTouchEvent(true)
                 val point = (first + ((event.x - left) / columnWidth).toInt()).coerceIn(first, last)
                 // Touching the picked point again lets go of it, unless the finger moves on to another
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) tapClears = point == selected
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    tapClears = point == selected
+                    heldPoint = point
+                    if (onPointHeld != null) postDelayed(hold, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                } else if (point != heldPoint) {
+                    heldPoint = null
+                    removeCallbacks(hold)
+                }
                 if (point != selected) {
                     tapClears = false
                     selected = point
@@ -163,6 +181,8 @@ class StatHeatmapView @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(hold)
+                heldPoint = null
                 parent?.requestDisallowInterceptTouchEvent(false)
                 if (tapClears) {
                     tapClears = false
@@ -173,6 +193,8 @@ class StatHeatmapView @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(hold)
+                heldPoint = null
                 parent?.requestDisallowInterceptTouchEvent(false)
                 tapClears = false
                 return true

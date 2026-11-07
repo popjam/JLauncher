@@ -180,6 +180,18 @@ class StatSceneView @JvmOverloads constructor(
         private set
     var onPicked: ((key: Any?) -> Unit)? = null
 
+    /** Holding a target: its key (a day's [java.time.LocalDate] opens that day) */
+    var onHeld: ((key: Any) -> Unit)? = null
+    private var held = false
+    private val hold = Runnable {
+        val x = downX - paddingLeft
+        val y = downY - paddingTop
+        val key = scene?.let { s -> s.hit?.invoke(x, y) ?: s.targets.firstOrNull { it.area.contains(x, y) }?.key } ?: return@Runnable
+        held = true
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        onHeld?.invoke(key)
+    }
+
     private val ink = context.getColorFromAttr(R.attr.primaryColor)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val pickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -240,8 +252,14 @@ class StatSceneView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
                 downY = event.y
+                held = false
+                if (onHeld != null) postDelayed(hold, ViewConfiguration.getLongPressTimeout().toLong())
             }
+            MotionEvent.ACTION_MOVE -> if (hypot(event.x - downX, event.y - downY) > touchSlop) removeCallbacks(hold)
+            MotionEvent.ACTION_CANCEL -> removeCallbacks(hold)
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(hold)
+                if (held) return true
                 if (hypot(event.x - downX, event.y - downY) > touchSlop) return true
                 val x = event.x - paddingLeft
                 val y = event.y - paddingTop

@@ -225,6 +225,10 @@ class StatsHomeFragment : CardPageFragment() {
                 topMargin = 16.dpToPx()
             })
         })
+        heatmap.onPointHeld = { point ->
+            saveNote()
+            openDay(LocalDate.ofEpochDay(point.toLong()))
+        }
         heatmap.onPointSelected = { point ->
             point?.let {
                 saveNote()
@@ -282,18 +286,6 @@ class StatsHomeFragment : CardPageFragment() {
                 setTextColor(ink)
                 setTypeface(null, Typeface.BOLD)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            // Everything about the day, on its own page
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = getString(R.string.day_open)
-                textSize = 13f
-                setTextColor(ink)
-                setBackgroundResource(R.drawable.bg_stat_chip)
-                setPadding(12.dpToPx(), 5.dpToPx(), 12.dpToPx(), 5.dpToPx())
-                setOnClickListener {
-                    saveNote()
-                    findNavController().navigate(R.id.action_statsHomeFragment_to_dayFragment, DayFragment.args(selectedDate))
-                }
-            })
             if (selectedDate != today) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = getString(R.string.today)
                 textSize = 13f
@@ -305,7 +297,7 @@ class StatsHomeFragment : CardPageFragment() {
                     selectedDate = today
                     renderDay(container)
                 }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 8.dpToPx() })
+            })
         })
         val chosen = day?.face(MoodStore.MOOD)
         container.addView(LinearLayout(context).apply {
