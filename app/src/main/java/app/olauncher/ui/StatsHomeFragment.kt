@@ -23,7 +23,11 @@ import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.MoodStore
+import app.olauncher.helper.DeviceTime
+import app.olauncher.helper.Sleep
+import app.olauncher.helper.Social
 import app.olauncher.helper.StatInfo
+import app.olauncher.helper.StatKind
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
@@ -31,6 +35,7 @@ import app.olauncher.helper.hideKeyboard
 import app.olauncher.helper.setStatDot
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.Month
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -563,6 +568,15 @@ class StatsHomeFragment : CardPageFragment() {
 
         /** Whether it comes before its day (last night's sleep), so it's only set against that same day */
         var before = false
+
+        /** Worked out from the night's sleep, so never set against how long it was */
+        var fromSleep = false
+
+        /** Its high side ([Boolean] true) or low side as words, in place of the usual ones */
+        var says: ((Boolean) -> String)? = null
+
+        /** The stat page an insight about it opens, when it isn't one of Compare's */
+        var opens: String? = null
     }
 
     private var comparables: List<Measured> = emptyList()
@@ -778,99 +792,408 @@ class StatsHomeFragment : CardPageFragment() {
 
     private fun kindOf(m: Measured) = stats.firstOrNull { it.id == m.key.substringBefore(':') }?.kind
 
-    private class Insight(val x: Measured, val y: Measured, val lag: Int, val strength: Float, val text: String, val detail: String)
+    /**
+     * One takeaway: its line and the numbers under it. Only the strongest of each [group] is shown, and
+     * [headline]s (the last two weeks, a record) go first.
+     */
+    private class Insight(
+        val icon: String,
+        val color: Int,
+        val strength: Float,
+        val text: String,
+        val detail: String,
+        val group: String,
+        val headline: Boolean = false,
+        val onTap: () -> Unit,
+        val onHold: () -> Unit = onTap,
+    )
 
     /** What an insight can be about: how you rate things (mood, energy, anxiety…) and how long you sleep */
-    private fun isOutcome(m: Measured) = m.kind == ValueKind.SCORE || (m.kind == ValueKind.AMOUNT && kindOf(m) == app.olauncher.helper.StatKind.SLEEP)
+    private fun isOutcome(m: Measured) = m.kind == ValueKind.SCORE || (m.kind == ValueKind.AMOUNT && kindOf(m) == StatKind.SLEEP)
+
+    private fun baseOf(m: Measured) = m.key.substringBefore(':')
 
     /** A stat's name as it reads mid-sentence: medicines as they are, the rest in lower case */
     private fun inSentence(m: Measured): String {
-        val stat = stats.firstOrNull { it.id == m.key.substringBefore(':') }
+        val stat = stats.firstOrNull { it.id == baseOf(m) }
         return if (stat?.isMedicine == true) m.name else m.name.lowercase(Locale.getDefault())
     }
 
-    /** "You're in a better mood", "You feel calmer"…: the better side of [y], as words */
-    private fun better(y: Measured): String {
+    /** "you're in a better mood", "you feel more anxious"…: [y] on its good side or its bad one */
+    private fun feel(y: Measured, good: Boolean): String {
         val name = inSentence(y)
         return when {
-            y.key == MoodStore.MOOD -> getString(R.string.ins_mood)
-            kindOf(y) == app.olauncher.helper.StatKind.SLEEP -> getString(R.string.ins_sleep)
-            "energy" in name -> getString(R.string.ins_energy)
-            "anxi" in name || "stress" in name -> getString(R.string.ins_anxiety)
-            else -> getString(R.string.ins_score, name)
+            y.key == MoodStore.MOOD -> getString(if (good) R.string.ins_mood else R.string.ins_mood_worse)
+            kindOf(y) == StatKind.SLEEP -> getString(if (good) R.string.ins_sleep else R.string.ins_sleep_worse)
+            "energy" in name -> getString(if (good) R.string.ins_energy else R.string.ins_energy_worse)
+            "anxi" in name || "stress" in name -> getString(if (good) R.string.ins_anxiety else R.string.ins_anxiety_worse)
+            else -> getString(if (good) R.string.ins_score else R.string.ins_score_worse, name)
+        }
+    }
+
+    /** The same, for a stretch gone by: "you've been in a better mood", "you've slept less" */
+    private fun feelPast(y: Measured, good: Boolean): String {
+        val name = inSentence(y)
+        return when {
+            y.key == MoodStore.MOOD -> getString(if (good) R.string.ins_past_mood else R.string.ins_past_mood_worse)
+            kindOf(y) == StatKind.SLEEP -> getString(if (good) R.string.ins_past_sleep else R.string.ins_past_sleep_worse)
+            "energy" in name -> getString(if (good) R.string.ins_past_energy else R.string.ins_past_energy_worse)
+            "anxi" in name || "stress" in name -> getString(if (good) R.string.ins_past_anxiety else R.string.ins_past_anxiety_worse)
+            else -> getString(if (good) R.string.ins_past_score else R.string.ins_past_score_worse, name)
         }
     }
 
     /** When [x] is on its high side ([high]) or low side, as words: "on work days", "on days with less screen time" */
     private fun whenX(x: Measured, high: Boolean): String {
+        x.says?.let { return it(high) }
         val name = inSentence(x)
-        val stat = stats.firstOrNull { it.id == x.key.substringBefore(':') }
+        val stat = stats.firstOrNull { it.id == baseOf(x) }
         return when (x.kind) {
             ValueKind.YES_NO -> getString(R.string.ins_on, x.cond(if (high) x.yesNo.second else x.yesNo.first, false))
             ValueKind.SCORE -> getString(if (high) R.string.ins_when_better else R.string.ins_when_worse, name)
             ValueKind.AMOUNT -> when {
                 x.key == STEPS_KEY -> getString(if (high) R.string.ins_steps_more else R.string.ins_steps_less)
                 else -> when (stat?.kind) {
-                    app.olauncher.helper.StatKind.SCREEN -> getString(if (high) R.string.ins_screen_more else R.string.ins_screen_less)
-                    app.olauncher.helper.StatKind.SLEEP -> getString(if (high) R.string.ins_sleep_more else R.string.ins_sleep_less)
-                    app.olauncher.helper.StatKind.MUSIC -> getString(if (high) R.string.ins_music_more else R.string.ins_music_less)
-                    app.olauncher.helper.StatKind.VIBECODING -> getString(if (high) R.string.ins_vibe_more else R.string.ins_vibe_less)
-                    app.olauncher.helper.StatKind.MONEY -> getString(if (high) R.string.ins_money_more else R.string.ins_money_less)
-                    app.olauncher.helper.StatKind.SOCIAL -> getString(if (high) R.string.ins_social_more else R.string.ins_social_less)
+                    StatKind.SCREEN -> getString(if (high) R.string.ins_screen_more else R.string.ins_screen_less)
+                    StatKind.SLEEP -> getString(if (high) R.string.ins_sleep_more else R.string.ins_sleep_less)
+                    StatKind.MUSIC -> getString(if (high) R.string.ins_music_more else R.string.ins_music_less)
+                    StatKind.VIBECODING -> getString(if (high) R.string.ins_vibe_more else R.string.ins_vibe_less)
+                    StatKind.MONEY -> getString(if (high) R.string.ins_money_more else R.string.ins_money_less)
+                    StatKind.SOCIAL -> getString(if (high) R.string.ins_social_more else R.string.ins_social_less)
                     else -> getString(if (high) R.string.ins_count_more else R.string.ins_count_less, name)
                 }
             }
         }
     }
 
-    /**
-     * Plain takeaways: for each thing you rate (and sleep), what goes with it being better, in one short
-     * line, with its numbers under it. Only the same day (sleep is the night before it), and only clear
-     * differences with [INSIGHT_DAYS] days on each side; a medicine's dose isn't one of the causes. One
-     * per pair of stats, the strongest first.
-     */
-    private fun findInsights(comparables: List<Measured>): List<Insight> {
-        val found = mutableListOf<Insight>()
-        fun base(m: Measured) = m.key.substringBefore(':')
-        for (y in comparables) {
-            if (!isOutcome(y)) continue
-            for (x in comparables) {
-                if (base(x) == base(y) || setOf(kindOf(x), kindOf(y)) in MADE_FROM) continue
-                if (x.key.endsWith(":dose") && kindOf(x) == app.olauncher.helper.StatKind.MEDICINE) continue
-                // Sleep is the night after a day (kept against the morning it ends), so it's set against the day before
-                val lag = if (kindOf(y) == app.olauncher.helper.StatKind.SLEEP && !x.before) 1 else 0
-                val groups = groups(x, y, lag)
-                val valid = groups.filter { it.values.size >= INSIGHT_DAYS }
-                if (valid.size < 2) continue
-                val all = groups.flatMap { it.values }
-                val mean = all.average().toFloat()
-                val spread = Math.sqrt(all.sumOf { ((it - mean) * (it - mean)).toDouble() } / all.size).toFloat()
-                if (spread <= 0f) continue
-                val low = valid.first()
-                val high = valid.last()
-                val diff = high.values.average().toFloat() - low.values.average().toFloat()
-                val strength = abs(diff) / spread
-                if (strength < INSIGHT_STRENGTH) continue
-                // Said from the better side: what goes with y being better
-                val highBetter = diff > 0
-                val (best, other) = if (highBetter) high to low else low to high
-                val text = if (x.kind == ValueKind.SCORE && y.kind == ValueKind.SCORE) {
-                    if (highBetter) getString(R.string.ins_together, inSentence(y), inSentence(x))
-                    else getString(R.string.ins_opposite, inSentence(x), inSentence(y))
-                } else getString(R.string.ins_sentence, better(y), whenX(x, highBetter).let { w ->
-                    // "on days off" → "after days off" for the night after
-                    if (lag == 1 && w.startsWith(getString(R.string.ins_on_word) + " ")) getString(R.string.ins_after_word) + w.substring(getString(R.string.ins_on_word).length) else w
-                })
-                val detail = getString(R.string.ins_detail, y.name, y.format(best.values.average().toFloat()), y.format(other.values.average().toFloat()),
-                    best.values.size, other.values.size)
-                found += Insight(x, y, lag, strength, text.replaceFirstChar { it.uppercase() }, detail)
-            }
-        }
-        return found.groupBy { setOf(base(it.x), base(it.y)) }.values.map { same -> same.maxBy { it.strength } }
-            .sortedByDescending { it.strength }.take(INSIGHTS_SHOWN)
+    private fun average(values: List<Float>) = values.average().toFloat()
+
+    /** How far apart two sets of days are, in how much the values usually vary */
+    private fun strengthOf(a: List<Float>, b: List<Float>, spreadFrom: List<Float> = a + b): Float {
+        if (a.isEmpty() || b.isEmpty() || spreadFrom.size < 2) return 0f
+        val mean = average(spreadFrom)
+        val spread = Math.sqrt(spreadFrom.sumOf { ((it - mean) * (it - mean)).toDouble() } / spreadFrom.size).toFloat()
+        return if (spread <= 0f) 0f else abs(average(a) - average(b)) / spread
     }
 
-    /** The clearest links in the data, in plain words; tapping one opens it in Compare */
+    private fun capital(text: String) = text.replaceFirstChar { it.uppercase() }
+
+    private fun openIfStat(id: String?) {
+        stats.firstOrNull { it.id == id }?.let { openStat(it.id) }
+    }
+
+    private fun showInCompare(x: String, y: String, lag: Int) {
+        compareX = x
+        compareY = y
+        compareLag = lag
+        compareRedraw?.invoke()
+        compareRoot?.let { root -> scrollView.post { scrollView.smoothScrollTo(0, root.top - 16.dpToPx()) } }
+    }
+
+    /**
+     * Plain takeaways, each one short line with its numbers under it: what goes with your mood, sleep
+     * and ratings being better (bedtimes, which home, and the rest), what changed with a new dose, what
+     * the day after a missed dose is like, what you do more of on low days, your best and worst weekdays,
+     * the last two weeks against the two before, and last week if it was a record. Only clear differences
+     * with [INSIGHT_DAYS] days on each side.
+     */
+    private fun findInsights(all: List<Measured>): List<Insight> {
+        val context = requireContext()
+        // Only days that are over, so they stay the same all day and move on each morning
+        val comparables = all.map { finished(it) }
+        val outcomes = comparables.filter { isOutcome(it) }
+        val found = mutableListOf<Insight>()
+        fun safely(block: () -> List<Insight>) { found += runCatching(block).getOrDefault(emptyList()) }
+        safely { pairInsights(comparables, outcomes, extraMeasures(context).map { finished(it) }) }
+        safely { doseChangeInsights(outcomes) }
+        safely { missedDoseInsights(comparables, outcomes) }
+        safely { lowDayInsights(context, comparables) }
+        safely { weekdayInsights(outcomes) }
+        safely { stretchInsights(outcomes) }
+        safely { recordInsights(outcomes) }
+        val best = found.groupBy { it.group }.values.map { same -> same.maxBy { it.strength } }
+        val headlines = best.filter { it.headline }.sortedBy { it.group != STRETCH }
+        return headlines + best.filter { !it.headline }.sortedByDescending { it.strength }.take(INSIGHTS_SHOWN - headlines.size)
+    }
+
+    /** The last day insights go up to: yesterday, the last one that's over */
+    private fun lastDay() = LocalDate.now().minusDays(1)
+
+    /** [m] without today, which isn't over yet */
+    private fun finished(m: Measured): Measured {
+        val last = lastDay()
+        return Measured(m.key, m.name, m.color, m.icon, m.kind, m.values.filterKeys { it <= last }, m.format, m.yesNo, m.scoreLabel).also {
+            it.cond = m.cond
+            it.outcome = m.outcome
+            it.before = m.before
+            it.fromSleep = m.fromSleep
+            it.says = m.says
+            it.opens = m.opens
+        }
+    }
+
+    /** For each thing you rate (and sleep), what goes with it being better, on the same day (sleep is the night after) */
+    private fun pairInsights(comparables: List<Measured>, outcomes: List<Measured>, extras: List<Measured>): List<Insight> {
+        val found = mutableListOf<Insight>()
+        for (y in outcomes) for (x in comparables + extras) {
+            if (baseOf(x) == baseOf(y) || setOf(kindOf(x), kindOf(y)) in MADE_FROM) continue
+            if (x.key.endsWith(":dose") && kindOf(x) == StatKind.MEDICINE) continue
+            if (x.fromSleep && kindOf(y) == StatKind.SLEEP) continue
+            // Sleep is the night after a day (kept against the morning it ends), so it's set against the day before
+            val lag = if (kindOf(y) == StatKind.SLEEP && !x.before) 1 else 0
+            val groups = groups(x, y, lag)
+            val valid = groups.filter { it.values.size >= INSIGHT_DAYS }
+            if (valid.size < 2) continue
+            val low = valid.first()
+            val high = valid.last()
+            val strength = strengthOf(high.values, low.values, groups.flatMap { it.values })
+            if (strength < INSIGHT_STRENGTH) continue
+            // Said from the better side: what goes with y being better
+            val highBetter = average(high.values) > average(low.values)
+            val (best, other) = if (highBetter) high to low else low to high
+            val text = if (x.kind == ValueKind.SCORE && y.kind == ValueKind.SCORE) {
+                if (highBetter) getString(R.string.ins_together, inSentence(y), inSentence(x))
+                else getString(R.string.ins_opposite, inSentence(x), inSentence(y))
+            } else getString(R.string.ins_sentence, feel(y, true), whenX(x, highBetter).let { w ->
+                // "on days off" → "after days off" for the night after
+                if (lag == 1 && w.startsWith(getString(R.string.ins_on_word) + " ")) getString(R.string.ins_after_word) + w.substring(getString(R.string.ins_on_word).length) else w
+            })
+            val detail = getString(R.string.ins_detail, y.name, y.format(average(best.values)), y.format(average(other.values)), best.values.size, other.values.size)
+            val opens = x.opens
+            val xKey = x.key
+            val yKey = y.key
+            found += Insight(x.icon, x.color, strength, capital(text), detail, "pair:" + listOf(baseOf(x), baseOf(y)).sorted().joinToString(),
+                onTap = { if (opens != null) openIfStat(opens) else showInCompare(xKey, yKey, lag) },
+                onHold = { openIfStat(opens ?: xKey.substringBefore(':')) })
+        }
+        return found
+    }
+
+    /**
+     * More things to set against your days, only for insights: bedtime (against your usual one), checking
+     * the phone in the night, phone time before bed, and which home you were at.
+     */
+    private fun extraMeasures(context: android.content.Context): List<Measured> {
+        val list = mutableListOf<Measured>()
+        val sleep = stats.firstOrNull { it.kind == StatKind.SLEEP }
+        val nights = Sleep.nights(context)
+        if (sleep != null && nights.size >= 2 * INSIGHT_DAYS) {
+            val icon = StatIcons.forStat(sleep)
+            fun night(key: String, values: Map<LocalDate, Float>, says: (Boolean) -> String) =
+                list.add(Measured("night:$key", sleep.name, sleep.color, icon, ValueKind.YES_NO, values, ::percentText).also {
+                    it.before = true
+                    it.fromSleep = true
+                    it.opens = sleep.id
+                    it.says = says
+                })
+            // Asleep by about your usual time, to the half hour
+            fun minutes(n: Sleep.Night) = n.bedtime.let { ((it.hour + 24 - BEDTIME_FROM) % 24) * 60 + it.minute }
+            val usual = nights.values.map { minutes(it) }.sorted().let { it[it.size / 2] }
+            val by = (usual + 15) / 30 * 30
+            val clock = LocalTime.of(BEDTIME_FROM, 0).plusMinutes(by.toLong())
+            val time = if (clock == LocalTime.MIDNIGHT) getString(R.string.ins_midnight)
+            else clock.format(DateTimeFormatter.ofPattern(if (clock.minute == 0) "h a" else "h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
+            night("bed", nights.mapValues { if (minutes(it.value) <= by) 1f else 0f }) { early ->
+                getString(if (early) R.string.ins_asleep_by else R.string.ins_asleep_after, time)
+            }
+            // Checking the phone in the night: not at all, or less than usual
+            val checks = nights.values.map { it.checks }.sorted()
+            val none = checks.count { it == 0 } >= INSIGHT_DAYS && checks.count { it > 0 } >= INSIGHT_DAYS
+            val most = if (none) 0 else checks[checks.size / 2]
+            night("checks", nights.mapValues { if (it.value.checks <= most) 1f else 0f }) { few ->
+                getString(when {
+                    none && few -> R.string.ins_no_checks
+                    none -> R.string.ins_checks
+                    few -> R.string.ins_fewer_checks
+                    else -> R.string.ins_more_checks
+                })
+            }
+            // Phone time in the evening before bed
+            val late = nights.values.map { it.lateMs }.sorted().let { it[it.size / 2] }
+            night("late", nights.mapValues { if (it.value.lateMs <= late) 1f else 0f }) { little ->
+                getString(if (little) R.string.ins_late_less else R.string.ins_late_more)
+            }
+        }
+        // Which home: the one stayed at most that day
+        val social = stats.firstOrNull { it.kind == StatKind.SOCIAL }
+        val homes = Social.homes(context)
+        val first = homes.getOrNull(0)
+        val second = homes.getOrNull(1)
+        if (social != null && first != null && second != null) {
+            val days = Social.days(context).mapNotNull { (date, day) -> day.mainHome?.let { date to it.toFloat() } }.toMap()
+            list.add(Measured("home", social.name, social.color, StatIcons.forStat(social), ValueKind.YES_NO, days, ::percentText).also {
+                it.opens = social.id
+                it.says = { atSecond -> getString(R.string.ins_at_home, if (atSecond) second.name else first.name) }
+            })
+        }
+        return list
+    }
+
+    /** A medicine's last change of dose that's stuck: how you've been since, against before */
+    private fun doseChangeInsights(outcomes: List<Measured>): List<Insight> {
+        val found = mutableListOf<Insight>()
+        val today = lastDay()
+        val dateFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+        stats.filter { it.isMedicine && it.faces.size > 2 }.forEach { med ->
+            val taken = data.days.entries.mapNotNull { (key, day) ->
+                val face = day.face(med.id)?.takeIf { !med.isBlank(it) } ?: return@mapNotNull null
+                runCatching { LocalDate.parse(key) }.getOrNull()?.takeIf { it <= today }?.let { it to face }
+            }.sortedBy { it.first }
+            if (taken.isEmpty()) return@forEach
+            class Run(val face: Int, val from: LocalDate, var to: LocalDate)
+            val runs = mutableListOf<Run>()
+            taken.forEach { (date, face) ->
+                val last = runs.lastOrNull()
+                if (last != null && last.face == face) last.to = date else runs += Run(face, date, date)
+            }
+            // Only stretches of a week or more count, so a day or two on another dose doesn't
+            val settled = mutableListOf<Run>()
+            runs.filter { ChronoUnit.DAYS.between(it.from, it.to) >= DOSE_SETTLED - 1 }.forEach { run ->
+                val last = settled.lastOrNull()
+                if (last != null && last.face == run.face) last.to = run.to else settled += Run(run.face, run.from, run.to)
+            }
+            if (settled.size < 2) return@forEach
+            val before = settled[settled.size - 2]
+            val after = settled.last()
+            val end = minOf(if (runs.last().face == after.face) today else after.to, after.from.plusDays(DOSE_WINDOW - 1))
+            val start = maxOf(before.from, after.from.minusDays(DOSE_WINDOW))
+            fun amount(face: Int) = med.labels.getOrNull(med.faces.indexOf(face))?.let { Regex("""\d+(\.\d+)?""").find(it)?.value?.toFloatOrNull() }
+                ?: med.faces.indexOf(face).toFloat()
+            val dose = med.labels.getOrNull(med.faces.indexOf(after.face)).orEmpty()
+            val up = amount(after.face) > amount(before.face)
+            val icon = StatIcons.forStat(med)
+            outcomes.forEach { y ->
+                val was = y.values.filterKeys { it >= start && it < after.from }.values.toList()
+                val now = y.values.filterKeys { it >= after.from && it <= end }.values.toList()
+                if (was.size < INSIGHT_DAYS || now.size < INSIGHT_DAYS) return@forEach
+                val strength = strengthOf(now, was)
+                if (strength < INSIGHT_STRENGTH) return@forEach
+                val how = feel(y, average(now) > average(was))
+                val date = after.from.format(dateFormat)
+                val text = if (dose.isBlank()) getString(R.string.ins_dose_changed, med.name, date, how)
+                else getString(if (up) R.string.ins_dose_up else R.string.ins_dose_down, dose, med.name, date, how)
+                val detail = getString(R.string.ins_detail_before, y.name, y.format(average(now)), y.format(average(was)), now.size, was.size)
+                found += Insight(icon, med.color, strength, text, detail, "dose:" + med.id, onTap = { openIfStat(med.id) })
+            }
+        }
+        return found
+    }
+
+    /** The day after a missed dose, when it's worse than usual */
+    private fun missedDoseInsights(comparables: List<Measured>, outcomes: List<Measured>): List<Insight> {
+        val found = mutableListOf<Insight>()
+        comparables.filter { x -> x.kind == ValueKind.YES_NO && stats.firstOrNull { it.id == x.key }?.isMedicine == true }.forEach { x ->
+            val med = stats.first { it.id == x.key }
+            outcomes.filter { kindOf(it) != StatKind.SLEEP && baseOf(it) != x.key }.forEach { y ->
+                val groups = groups(x, y, 1)
+                val skipped = groups[0].values
+                val taken = groups[1].values
+                if (skipped.size < MISSED_DAYS || taken.size < INSIGHT_DAYS || average(skipped) >= average(taken)) return@forEach
+                val strength = strengthOf(skipped, taken)
+                if (strength < INSIGHT_STRENGTH) return@forEach
+                val text = getString(R.string.ins_after_skip, med.name, feel(y, false))
+                val detail = getString(R.string.ins_detail_skip, y.name, y.format(average(skipped)), y.format(average(taken)), skipped.size, taken.size)
+                val xKey = x.key
+                val yKey = y.key
+                found += Insight(x.icon, x.color, strength, text, detail, "skip:" + x.key,
+                    onTap = { showInCompare(xKey, yKey, 1) }, onHold = { openIfStat(xKey) })
+            }
+        }
+        return found
+    }
+
+    /** What you do more of on low days, or good ones: spending, and porn from the Mac */
+    private fun lowDayInsights(context: android.content.Context, comparables: List<Measured>): List<Insight> {
+        val mood = comparables.firstOrNull { it.key == MoodStore.MOOD } ?: return emptyList()
+        val things = mutableListOf<Pair<Measured, Int>>()
+        comparables.firstOrNull { it.kind == ValueKind.AMOUNT && kindOf(it) == StatKind.MONEY }?.let { things += it to R.string.ins_spend_on }
+        val libido = stats.firstOrNull { it.kind == StatKind.LIBIDO }
+        val mac = DeviceTime.days(context, DeviceTime.Device.MAC)
+        if (libido != null && mac.isNotEmpty()) {
+            val minutes = mac.filterKeys { it <= lastDay() }
+                .mapValues { (_, day) -> day.apps.entries.filter { it.key.contains("VLC", ignoreCase = true) }.sumOf { it.value }.toFloat() }
+            things += Measured(PORN_KEY, getString(R.string.ins_porn_name), libido.color, StatIcons.forStat(libido), ValueKind.AMOUNT, minutes,
+                { getString(R.string.ins_minutes, Math.round(it)) }).also { it.opens = libido.id } to R.string.ins_porn_on
+        }
+        return things.mapNotNull { (y, line) ->
+            val valid = groups(mood, y, 0).filter { it.values.size >= INSIGHT_DAYS }
+            if (valid.size < 2) return@mapNotNull null
+            val low = valid.first().values
+            val good = valid.last().values
+            val strength = strengthOf(low, good)
+            if (strength < INSIGHT_STRENGTH) return@mapNotNull null
+            val onLow = average(low) > average(good)
+            val (more, less) = if (onLow) low to good else good to low
+            val text = getString(line, getString(if (onLow) R.string.ins_low_days else R.string.ins_good_days))
+            val detail = getString(R.string.ins_detail, y.name, y.format(average(more)), y.format(average(less)), more.size, less.size)
+            val opens = y.opens
+            val yKey = y.key
+            Insight(y.icon, y.color, strength, text, detail, "low:" + y.key,
+                onTap = { if (opens != null) openIfStat(opens) else showInCompare(MoodStore.MOOD, yKey, 0) },
+                onHold = { openIfStat(opens ?: yKey) })
+        }
+    }
+
+    /** Your mood's best and hardest day of the week, when they stand out */
+    private fun weekdayInsights(outcomes: List<Measured>): List<Insight> {
+        val mood = outcomes.firstOrNull { it.key == MoodStore.MOOD } ?: return emptyList()
+        val byDay = mood.values.entries.groupBy({ it.key.dayOfWeek }, { it.value }).filterValues { it.size >= INSIGHT_DAYS }
+        if (byDay.size < 7) return emptyList()
+        val averages = byDay.mapValues { average(it.value) }
+        return listOf(averages.minBy { it.value }.key to false, averages.maxBy { it.value }.key to true).mapNotNull { (day, best) ->
+            val these = byDay.getValue(day)
+            val rest = mood.values.filterKeys { it.dayOfWeek != day }.values.toList()
+            val strength = strengthOf(these, rest)
+            if (strength < INSIGHT_STRENGTH) return@mapNotNull null
+            val name = day.getDisplayName(TextStyle.FULL, Locale.getDefault())
+            val text = getString(if (best) R.string.ins_best_weekday else R.string.ins_low_weekday, name)
+            val detail = getString(R.string.ins_detail_others, mood.name, mood.format(average(these)), mood.format(average(rest)), these.size, rest.size)
+            Insight(mood.icon, mood.color, strength, text, detail, "weekday:$best", onTap = { openIfStat(MoodStore.MOOD) })
+        }
+    }
+
+    /** The last two weeks against the two before, for whichever's changed most */
+    private fun stretchInsights(outcomes: List<Measured>): List<Insight> {
+        val today = lastDay()
+        return outcomes.mapNotNull { y ->
+            val recent = y.values.filterKeys { it > today.minusDays(14) && it <= today }.values.toList()
+            val before = y.values.filterKeys { it > today.minusDays(28) && it <= today.minusDays(14) }.values.toList()
+            if (recent.size < STRETCH_DAYS || before.size < STRETCH_DAYS) return@mapNotNull null
+            val strength = strengthOf(recent, before, y.values.values.toList())
+            if (strength < INSIGHT_STRENGTH) return@mapNotNull null
+            val text = getString(R.string.ins_stretch, capital(feelPast(y, average(recent) > average(before))))
+            val detail = getString(R.string.ins_detail_before, y.name, y.format(average(recent)), y.format(average(before)), recent.size, before.size)
+            val id = baseOf(y)
+            Insight(y.icon, y.color, strength, text, detail, STRETCH, headline = true, onTap = { openIfStat(id) })
+        }
+    }
+
+    /** Last week, when it was your best for something in a good while */
+    private fun recordInsights(outcomes: List<Measured>): List<Insight> {
+        val today = LocalDate.now()
+        val lastWeek = today.with(DayOfWeek.MONDAY).minusWeeks(1)
+        return outcomes.mapNotNull { y ->
+            val weeks = y.values.entries.groupBy({ it.key.with(DayOfWeek.MONDAY) }, { it.value })
+                .filterValues { it.size >= RECORD_WEEK_DAYS }.mapValues { average(it.value) }
+            val last = weeks[lastWeek] ?: return@mapNotNull null
+            val earlier = weeks.filterKeys { it < lastWeek }
+            if (earlier.size < RECORD_WEEKS) return@mapNotNull null
+            val beaten = earlier.filterValues { it >= last }.keys.maxOrNull()
+            val gap = beaten?.let { ChronoUnit.WEEKS.between(it, lastWeek) } ?: 1000L
+            if (gap <= RECORD_WEEKS) return@mapNotNull null
+            val name = inSentence(y)
+            val text = if (beaten == null) getString(R.string.ins_record_yet, name) else {
+                val month = beaten.plusDays(3)
+                val words = month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + if (month.year != today.year) " " + month.year else ""
+                getString(R.string.ins_record_since, name, words)
+            }
+            val detail = getString(R.string.ins_detail_record, y.name, y.format(last), y.format(average(earlier.values.toList())))
+            val id = baseOf(y)
+            Insight(y.icon, y.color, gap.toFloat(), text, detail, RECORD, headline = true, onTap = { openIfStat(id) })
+        }
+    }
+
+    /** The clearest takeaways, in plain words; tapping one opens it in Compare or its stat */
     private fun fillInsights(card: Card, insights: List<Insight>) {
         if (insights.isEmpty()) return card.showNote(getString(R.string.insights_none))
         card.note.isVisible = false
@@ -883,7 +1206,7 @@ class StatsHomeFragment : CardPageFragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 9.dpToPx(), 0, 9.dpToPx())
                 setBackgroundResource(android.R.drawable.list_selector_background)
-                addView(View(context).apply { background = StatIcons.drawable(insight.x.icon, insight.x.color, 18.dpToPx()) },
+                addView(View(context).apply { background = StatIcons.drawable(insight.icon, insight.color, 18.dpToPx()) },
                     LinearLayout.LayoutParams(18.dpToPx(), 18.dpToPx()).apply { marginEnd = 14.dpToPx() })
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
@@ -894,16 +1217,10 @@ class StatsHomeFragment : CardPageFragment() {
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 setOnLongClickListener {
-                    stats.firstOrNull { it.id == insight.x.key.substringBefore(':') }?.let { openStat(it.id) }
+                    insight.onHold()
                     true
                 }
-                setOnClickListener {
-                    compareX = insight.x.key
-                    compareY = insight.y.key
-                    compareLag = insight.lag
-                    compareRedraw?.invoke()
-                    compareRoot?.let { root -> scrollView.post { scrollView.smoothScrollTo(0, root.top - 16.dpToPx()) } }
-                }
+                setOnClickListener { insight.onTap() }
             })
         }
         card.root.addView(list, card.root.indexOfChild(card.scene))
@@ -1182,7 +1499,23 @@ class StatsHomeFragment : CardPageFragment() {
         /** Pairs where one is counted from the other (time at work is time out), so a link is no news */
         private val MADE_FROM = setOf(setOf(app.olauncher.helper.StatKind.WORK, app.olauncher.helper.StatKind.SOCIAL))
         private const val INSIGHT_STRENGTH = 0.45f
-        private const val INSIGHTS_SHOWN = 5
+        private const val INSIGHTS_SHOWN = 7
+
+        /** Missed doses are fewer, so fewer days of them are enough */
+        private const val MISSED_DAYS = 3
+
+        /** A dose counts as changed once it's been kept this many days; before and after are looked at this far */
+        private const val DOSE_SETTLED = 7
+        private const val DOSE_WINDOW = 42L
+
+        /** Days logged in each fortnight, and in a week for it to count towards a record, and weeks to beat */
+        private const val STRETCH_DAYS = 7
+        private const val RECORD_WEEK_DAYS = 4
+        private const val RECORD_WEEKS = 6
+        private const val BEDTIME_FROM = 18
+        private const val STRETCH = "stretch"
+        private const val RECORD = "record"
+        private const val PORN_KEY = "porn"
         private const val STEPS_KEY = "steps"
         private const val REMEMBER_AFTER_DAYS = 7L
         private const val MIN_LINK_DAYS = 4
