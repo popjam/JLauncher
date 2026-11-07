@@ -9,3 +9,8 @@ Google Drive (My Drive), replacing the old one. I install builds on my phone fro
   with PowerShell.
 - Make sure the APK was built after the last source edit.
 - Say in your reply that the new build is on Drive.
+
+## Tests
+Unit tests for the logic that doesn't need a phone (reading purchases, the weekly limit's
+carry-over, work days, Compare's grouping) live in . Run them with
+ before releasing a build.

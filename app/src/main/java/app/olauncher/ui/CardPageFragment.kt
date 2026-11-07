@@ -30,26 +30,26 @@ import java.util.Locale
 abstract class CardPageFragment : Fragment() {
 
     /** Where cards go, in order */
-    protected abstract val cards: LinearLayout
+    internal abstract val cards: LinearLayout
 
     /** Colours for the dots before details rows whose label is a stat's name, and the stat's icon to use instead */
-    protected open fun colorOfLabel(label: String): Int? = null
-    protected open fun iconOfLabel(label: String): String? = null
+    internal open fun colorOfLabel(label: String): Int? = null
+    internal open fun iconOfLabel(label: String): String? = null
 
-    protected val ink by lazy { requireContext().getColorFromAttr(R.attr.primaryColor) }
-    protected fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
+    internal val ink by lazy { requireContext().getColorFromAttr(R.attr.primaryColor) }
+    internal fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
 
-    protected fun dateText(date: LocalDate) = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
-    protected fun clock(time: java.time.LocalTime) = time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
-    protected fun duration(ms: Long) = requireContext().formattedTimeSpent(ms)
-    protected fun decimal(value: Float) = String.format(Locale.getDefault(), "%.1f", value)
-    protected fun money(cents: Long) = String.format(Locale.getDefault(), "$%,d.%02d", cents / 100, cents % 100)
+    internal fun dateText(date: LocalDate) = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+    internal fun clock(time: java.time.LocalTime) = time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
+    internal fun duration(ms: Long) = requireContext().formattedTimeSpent(ms)
+    internal fun decimal(value: Float) = String.format(Locale.getDefault(), "%.1f", value)
+    internal fun money(cents: Long) = String.format(Locale.getDefault(), "$%,d.%02d", cents / 100, cents % 100)
 
     /** Whole dollars when it's at least $100, else dollars and cents */
-    protected fun moneyShort(cents: Long) = if (cents >= 10_000) String.format(Locale.getDefault(), "$%,d", (cents + 50) / 100) else money(cents)
+    internal fun moneyShort(cents: Long) = if (cents >= 10_000) String.format(Locale.getDefault(), "$%,d", (cents + 50) / 100) else money(cents)
 
     /** A card with its title, anything on the right of it, its drawing, a key, and the tapped point's details. */
-    protected inner class Card(title: String, at: Int = -1, icon: String? = null, iconColor: Int? = null) {
+    internal inner class Card(title: String, at: Int = -1, icon: String? = null, iconColor: Int? = null) {
         val context = requireContext()
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -284,7 +284,7 @@ abstract class CardPageFragment : Fragment() {
     }
 
     /** Three (or so) figures side by side under [caption] */
-    protected fun tiles(card: Card, caption: String?, tiles: List<Pair<String, String>>) {
+    internal fun tiles(card: Card, caption: String?, tiles: List<Pair<String, String>>) {
         card.draw { s ->
             var top = 0f
             if (caption != null) {
@@ -304,7 +304,7 @@ abstract class CardPageFragment : Fragment() {
     }
 
     /** A bar per row, as long as its count, with the count after it; [icons] go before the names. */
-    protected fun horizontalBars(card: Card, rows: List<Triple<String, Int, Int>>, icons: List<String?>? = null, countText: (Int) -> String) {
+    internal fun horizontalBars(card: Card, rows: List<Triple<String, Int, Int>>, icons: List<String?>? = null, countText: (Int) -> String) {
         val most = rows.maxOfOrNull { it.second } ?: 0
         if (most == 0) return card.showNote(getString(R.string.no_data))
         card.draw { s ->
@@ -330,7 +330,7 @@ abstract class CardPageFragment : Fragment() {
     }
 
     /** Every [step]th of [count] points, and the last, dropping one that would crowd it. */
-    protected fun labelIndices(count: Int, step: Int): List<Int> {
+    internal fun labelIndices(count: Int, step: Int): List<Int> {
         if (count <= 0) return emptyList()
         val indices = (0 until count step step).toMutableList()
         if (indices.last() != count - 1) {

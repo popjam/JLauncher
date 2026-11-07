@@ -214,7 +214,7 @@ object Spending {
     }
 
     /** The dollar amount, if [text] reads like money going out. */
-    private fun purchaseCents(source: String, text: String): Long? {
+    internal fun purchaseCents(source: String, text: String): Long? {
         val lower = text.lowercase()
         if (SKIP.any { it in lower }) return null
         if (source == COMMBANK && SPEND.none { it in lower }) return null
@@ -263,11 +263,18 @@ object Spending {
      * left unspent, or less what it went over by.
      */
     fun allowanceCents(context: Context, monday: LocalDate, daily: Map<LocalDate, Long> = dailyCents(context)): Long {
-        val limit = weekLimitCents(context)
-        if (!carryOver(context)) return limit
-        val since = prefs(context).getString(CARRY_SINCE, null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return limit
+        val since = if (carryOver(context)) prefs(context).getString(CARRY_SINCE, null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } else null
+        return allowanceCents(weekLimitCents(context), since, monday, daily)
+    }
+
+    /**
+     * The week from [monday]'s allowance: [limit], and when carrying over since the week of [carrySince],
+     * plus each week's leftover before it (or less what it went over by).
+     */
+    fun allowanceCents(limit: Long, carrySince: LocalDate?, monday: LocalDate, daily: Map<LocalDate, Long>): Long {
+        if (carrySince == null) return limit
         var allowance = limit
-        var week = since
+        var week: LocalDate = carrySince
         while (week < monday) {
             allowance = limit + allowance - weekSpentCents(daily, week)
             week = week.plusWeeks(1)

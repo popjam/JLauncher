@@ -289,10 +289,22 @@ object Social {
         val faces = MoodStore.facesFor(stat.scale).let { if (stat.inverted) it.reversed() else it }
         val today = LocalDate.now()
         days(context).filterKeys { it > today.minusDays(WORK_DAYS_BACK) && it >= since }.forEach { (date, day) ->
-            val worked = day.workMs >= MIN_WORK_MS
-            if (worked) store.setFace(date, id, faces.last())
-            else if (date < today && day.trackedMs >= MIN_TRACKED_MS) store.setFace(date, id, faces.first())
+            when (workedOn(day, date == today)) {
+                true -> store.setFace(date, id, faces.last())
+                false -> store.setFace(date, id, faces.first())
+                null -> {}
+            }
         }
+    }
+
+    /**
+     * Whether [day] was worked: an hour or more at work. Off once it's over (not [isToday]) and mostly
+     * tracked without that; null while it can't be told.
+     */
+    fun workedOn(day: Day, isToday: Boolean): Boolean? = when {
+        day.workMs >= MIN_WORK_MS -> true
+        !isToday && day.trackedMs >= MIN_TRACKED_MS -> false
+        else -> null
     }
 
     /** Under an hour out is the saddest face, then 1–2, 2–4, 4–6 and 6 hours or more. */

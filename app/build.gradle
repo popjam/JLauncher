@@ -4,6 +4,11 @@ apply plugin: 'kotlin-android'
 android {
     compileSdk 35
 
+    // Android's own classes do nothing in unit tests, rather than throwing
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -66,5 +71,7 @@ dependencies {
 
     //Material dependency
     implementation libs.material
+
+    testImplementation 'junit:junit:4.13.2'
 
 }

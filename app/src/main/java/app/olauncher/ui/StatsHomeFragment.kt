@@ -680,22 +680,14 @@ class StatsHomeFragment : CardPageFragment() {
             ValueKind.SCORE -> x.values.values.map { Math.round(it) }.distinct().sorted().map { score ->
                 Group(x.scoreLabel(score), pairs.filter { Math.round(it.first) == score }.map { it.second })
             }
-            ValueKind.AMOUNT -> {
-                val distinct = pairs.map { it.first }.distinct().sorted()
-                if (distinct.size <= 5) distinct.map { v -> Group(x.format(v), pairs.filter { it.first == v }.map { it.second }) }
-                else {
-                    val sorted = pairs.map { it.first }.sorted()
-                    val low = sorted[sorted.size / 3]
-                    val high = sorted[sorted.size * 2 / 3]
-                    if (high <= low) listOf(
-                        Group(getString(R.string.compare_up_to, x.format(low)), pairs.filter { it.first <= low }.map { it.second }),
-                        Group(getString(R.string.compare_over, x.format(low)), pairs.filter { it.first > low }.map { it.second }),
-                    ) else listOf(
-                        Group(getString(R.string.compare_up_to, x.format(low)), pairs.filter { it.first <= low }.map { it.second }),
-                        Group(x.format(low) + "–" + x.format(high), pairs.filter { it.first > low && it.first <= high }.map { it.second }),
-                        Group(getString(R.string.compare_over, x.format(high)), pairs.filter { it.first > high }.map { it.second }),
-                    )
+            ValueKind.AMOUNT -> CompareGroups.amountBuckets(pairs.map { it.first }).map { bucket ->
+                val label = when {
+                    bucket.exact != null -> x.format(bucket.exact)
+                    bucket.from == null -> getString(R.string.compare_up_to, x.format(bucket.to!!))
+                    bucket.to == null -> getString(R.string.compare_over, x.format(bucket.from))
+                    else -> x.format(bucket.from) + "–" + x.format(bucket.to)
                 }
+                Group(label, pairs.filter { bucket.contains(it.first) }.map { it.second })
             }
         }
     }
