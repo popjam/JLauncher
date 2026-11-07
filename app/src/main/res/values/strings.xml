@@ -309,8 +309,6 @@
     <string name="delete_stat_message">Delete %1$s and all its history?</string>
     <string name="graph_year_title">%1$d</string>
     <string name="graph_grid">Daily</string>
-    <string name="graph_weekly">Weekly</string>
-    <string name="graph_monthly">Monthly</string>
     <string name="graph_so_far">%1$s · so far</string>
     <string name="graph_month_range">%1$s – %2$s</string>
     <string name="previous_year">Previous year</string>
@@ -603,10 +601,6 @@
     <string name="difference">Difference</string>
     <string name="compare_two">Compare</string>
     <string name="compare_against">against</string>
-    <string name="logging">Logging</string>
-    <string name="days_in_a_row">days in a row</string>
-    <string name="best_run">best run</string>
-    <string name="notes_written">notes</string>
     <string name="bubble_default">Default</string>
     <string name="bubble_all">All</string>
     <string name="bubble_none">None</string>
@@ -1016,4 +1010,8 @@
     <string name="ins_late_less">after evenings with less phone time before bed</string>
     <string name="ins_late_more">after evenings with more phone time before bed</string>
     <string name="ins_at_home">on days at %1$s</string>
+    <string name="graph_trends">Trends</string>
+    <string name="graph_weeks">Week</string>
+    <string name="graph_months">Month</string>
+    <string name="graph_years">Year</string>
 </resources>

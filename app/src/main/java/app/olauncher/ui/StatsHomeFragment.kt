@@ -73,6 +73,9 @@ class StatsHomeFragment : CardPageFragment() {
     private var stretchesBack = 0
     private var weeklyYear = LocalDate.now().get(WEEKS.weekBasedYear())
     private var monthlyYear = LocalDate.now().year
+
+    /** The trend card's view: [TREND_WEEKS], [TREND_MONTHS] or [TREND_YEARS] */
+    private var trendMode = TREND_WEEKS
     private var compareX: String? = null
     private var compareY: String = MoodStore.MOOD
     /** 0 compares the same day, 1 the second stat the day after */
@@ -186,8 +189,7 @@ class StatsHomeFragment : CardPageFragment() {
         redraws.clear()
         header()
         dailyCard()
-        lineCard(weekly = true)
-        lineCard(weekly = false)
+        trendCard()
         rememberCard()
         // Insights and Compare need every stat side by side, worked out off the main thread
         val insights = Card(getString(R.string.insights)).apply {
@@ -196,7 +198,6 @@ class StatsHomeFragment : CardPageFragment() {
         }
         thisWeekCard()
         val compare = Card(getString(R.string.compare_two)).apply { showNote(getString(R.string.insights_working)) }
-        streaksCard()
         renderBubble()
         val generation = ++renderGeneration
         Thread {
@@ -395,29 +396,65 @@ class StatsHomeFragment : CardPageFragment() {
 
     // --- Weekly and monthly lines ---
 
-    private fun lineCard(weekly: Boolean) {
+    /**
+     * Each picked stat's average by week, month or year, chosen at the top; weeks and months a year at a
+     * time, stepped under the chart when there's more than one.
+     */
+    private fun trendCard() {
         val context = requireContext()
-        val card = Card(getString(if (weekly) R.string.graph_weekly else R.string.graph_monthly))
+        val card = Card(getString(R.string.graph_trends))
         val chart = StatChartView(context)
         card.addBody(chart)
-        fun pointOf(date: LocalDate, year: Int): Int? =
-            if (weekly) date.get(WEEKS.weekOfWeekBasedYear()).takeIf { date.get(WEEKS.weekBasedYear()) == year }
-            else date.monthValue.takeIf { date.year == year }
-        fun values(year: Int): Map<String, Map<Int, Float>> = shown.associate { stat ->
-            stat.id to scores[stat.id].orEmpty().entries.mapNotNull { (date, score) -> pointOf(date, year)?.let { it to score } }
-                .groupBy({ it.first }, { it.second }).mapValues { (_, list) -> list.average().toFloat() }
+        val years = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
         }
+        card.addBody(years)
         fun draw(clear: Boolean) {
+            val mode = trendMode
+            val weekly = mode == TREND_WEEKS
             val today = LocalDate.now()
+            card.segment(listOf(R.string.graph_weeks, R.string.graph_months, R.string.graph_years), mode) {
+                trendMode = it
+                draw(true)
+            }
+            fun pointOf(date: LocalDate, year: Int): Int? = when (mode) {
+                TREND_WEEKS -> date.get(WEEKS.weekOfWeekBasedYear()).takeIf { date.get(WEEKS.weekBasedYear()) == year }
+                TREND_MONTHS -> date.monthValue.takeIf { date.year == year }
+                else -> date.year
+            }
             val thisYear = if (weekly) today.get(WEEKS.weekBasedYear()) else today.year
             val firstDate = dates().firstOrNull() ?: today
             val firstYear = minOf(if (weekly) firstDate.get(WEEKS.weekBasedYear()) else firstDate.year, thisYear)
             val year = (if (weekly) weeklyYear else monthlyYear).coerceIn(firstYear, thisYear)
-            card.stepper(year.toString(), (year > firstYear), (year < thisYear), 1) { by ->
-                if (weekly) weeklyYear = year + by else monthlyYear = year + by
-                draw(true)
+            // ‹ 2026 › under the chart, for weeks and months, once there's more than one year
+            years.removeAllViews()
+            years.isVisible = mode != TREND_YEARS && firstYear < thisYear
+            if (years.isVisible) {
+                fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
+                    text = symbol
+                    textSize = 18f
+                    setTextColor(card.titleView.currentTextColor)
+                    alpha = if (enabled) 0.8f else 0.2f
+                    isEnabled = enabled
+                    contentDescription = getString(description, 365)
+                    setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 0)
+                    setOnClickListener {
+                        if (weekly) weeklyYear = year + by else monthlyYear = year + by
+                        draw(true)
+                    }
+                }
+                years.addView(arrow("‹", year > firstYear, -1, R.string.previous_days))
+                years.addView(card.textView(13f, 150).apply {
+                    text = year.toString()
+                    updatePadding(top = 6.dpToPx())
+                })
+                years.addView(arrow("›", year < thisYear, 1, R.string.next_days))
             }
-            val all = values(year)
+            val all = shown.associate { stat ->
+                stat.id to scores[stat.id].orEmpty().entries.mapNotNull { (date, score) -> pointOf(date, year)?.let { it to score } }
+                    .groupBy({ it.first }, { it.second }).mapValues { (_, list) -> list.average().toFloat() }
+            }
             val points = all.values.flatMap { it.keys }
             val first = points.minOrNull()
             val last = pointOf(today, year) ?: points.maxOrNull()
@@ -432,13 +469,20 @@ class StatsHomeFragment : CardPageFragment() {
                 shown.map { StatChartView.Series(it.color, all[it.id].orEmpty(), true) },
                 first, maxOf(first, last), min = 1, max = 5,
                 partial = pointOf(today, year),
-                label = if (weekly) { w -> getString(R.string.week_short, w) } else { m -> Month.of(m).getDisplayName(TextStyle.SHORT, Locale.getDefault()) },
+                label = when (mode) {
+                    TREND_WEEKS -> { w -> getString(R.string.week_short, w) }
+                    TREND_MONTHS -> { m -> Month.of(m).getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
+                    else -> { y -> y.toString() }
+                },
                 clearSelection = clear,
             )
             chart.onPointSelected = { point ->
                 card.showDetails(point?.let { p ->
-                    val title = if (weekly) getString(R.string.week_number, p)
-                    else YearMonth.of(year, p).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+                    val title = when (mode) {
+                        TREND_WEEKS -> getString(R.string.week_number, p)
+                        TREND_MONTHS -> YearMonth.of(year, p).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+                        else -> p.toString()
+                    }
                     (listOf(if (p == pointOf(today, year)) getString(R.string.graph_so_far, title) else title) +
                         shown.mapNotNull { s -> all[s.id]?.get(p)?.let { getString(R.string.stat_label, s.name, decimal(it)) } }).joinToString("\n")
                 })
@@ -1334,34 +1378,6 @@ class StatsHomeFragment : CardPageFragment() {
         draw()
     }
 
-    /** Days in a row with Mood logged, the best run, and the notes written */
-    private fun streaksCard() {
-        val mood = scores[MoodStore.MOOD].orEmpty().keys
-        if (mood.isEmpty()) return
-        val today = LocalDate.now()
-        var current = 0
-        var date = if (today in mood) today else today.minusDays(1)
-        while (date in mood) {
-            current++
-            date = date.minusDays(1)
-        }
-        var best = 0
-        var run = 0
-        var previous: LocalDate? = null
-        mood.sorted().forEach { d ->
-            run = if (previous?.plusDays(1) == d) run + 1 else 1
-            best = maxOf(best, run)
-            previous = d
-        }
-        val notes = data.days.values.count { it.note != null }
-        val card = Card(getString(R.string.logging))
-        tiles(card, null, listOf(
-            current.toString() to getString(R.string.days_in_a_row),
-            best.toString() to getString(R.string.best_run),
-            notes.toString() to getString(R.string.notes_written),
-        ))
-    }
-
     // --- The floating bubble picking which stats show ---
 
     private fun renderBubble() {
@@ -1500,6 +1516,9 @@ class StatsHomeFragment : CardPageFragment() {
         private val MADE_FROM = setOf(setOf(app.olauncher.helper.StatKind.WORK, app.olauncher.helper.StatKind.SOCIAL))
         private const val INSIGHT_STRENGTH = 0.45f
         private const val INSIGHTS_SHOWN = 7
+        private const val TREND_WEEKS = 0
+        private const val TREND_MONTHS = 1
+        private const val TREND_YEARS = 2
 
         /** Missed doses are fewer, so fewer days of them are enough */
         private const val MISSED_DAYS = 3
