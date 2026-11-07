@@ -478,7 +478,7 @@ fun Context.copyToClipboard(text: String) {
     val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clipData = ClipData.newPlainText(getString(R.string.app_name), text)
     clipboardManager.setPrimaryClip(clipData)
-    showToast("")
+    showToast(getString(R.string.copied))
 }
 
 fun Context.openUrl(url: String) {

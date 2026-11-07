@@ -18,6 +18,17 @@ import java.time.LocalDate
  */
 object DeviceTime {
 
+    /**
+     * Whether the Mac's time in VLC counts as porn time (Libido's card, and an insight). Only ever on
+     * where the Mac's time comes in at all, and then until turned off.
+     */
+    fun pornOn(context: Context): Boolean = context.getSharedPreferences("personal", Context.MODE_PRIVATE)
+        .getBoolean("pornFromMac", true) && updated(context, Device.MAC) > 0
+
+    fun setPornOn(context: Context, on: Boolean) =
+        context.getSharedPreferences("personal", Context.MODE_PRIVATE).edit().putBoolean("pornFromMac", on).apply()
+
+
     /** [key] is the device's in [MoodStore.Day.deviceMs] */
     enum class Device(val file: String, val key: String, val label: Int, val color: Int, val updatedKey: String) {
         MAC("JLauncher Mac screen time.json", "mac", R.string.device_mac, 0xFF90A4AE.toInt(), "updated"),

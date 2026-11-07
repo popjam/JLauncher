@@ -229,7 +229,7 @@ class DayPageFragment : CardPageFragment() {
 
     /** A voice note's words, added to the end of the note and saved */
     private fun addToNote(text: String) {
-        val now = store.load().days[date.toString()]?.note.orEmpty().trim()
+        val now = (noteInput?.text?.toString() ?: store.load().days[date.toString()]?.note).orEmpty().trim()
         val note = if (now.isEmpty()) text else now + "\n" + text
         store.setNote(date, note)
         noteShown = note
@@ -356,7 +356,7 @@ class DayPageFragment : CardPageFragment() {
                 sc.rect(x1, 0f, maxOf(x2, x1 + sc.dp(2f)), h, color(s.place), sc.dp(4f))
                 sc.target(i, RectF(x1, 0f, maxOf(x2, x1 + sc.dp(8f)), h + sc.dp(6f)))
             }
-            listOf(0 to "12am", 6 to "6am", 12 to "12pm", 18 to "6pm").forEach { (hour, label) ->
+            listOf(0, 6, 12, 18).map { h -> h to clock(java.time.LocalTime.of(h, 0)).replace(":00", "") }.forEach { (hour, label) ->
                 sc.text(label, hour / 24f * sc.width + sc.dp(2f), h + sc.dp(16f), faint(140), sc.sp(11f), android.graphics.Paint.Align.LEFT)
             }
             sc.height = h + sc.dp(22f)

@@ -158,10 +158,13 @@ class MoodStore(context: Context) {
     }
 
     /** Like [load], but null when there's a file that can't be read and no good copy, so nothing is saved over it */
-    private fun loadForWrite(): Data? {
-        if (file.exists()) read(file)?.let { return it }
-        if (previous.exists()) read(previous)?.let { return it }
-        return if (file.exists()) null else Data()
+    private fun loadForWrite(): Data? = loadChecked().first
+
+    /** [loadForWrite], and whether it came from the file itself (so the file reads, and can be kept as the good copy) */
+    private fun loadChecked(): Pair<Data?, Boolean> {
+        if (file.exists()) read(file)?.let { return it to true }
+        if (previous.exists()) read(previous)?.let { return it to false }
+        return (if (file.exists()) null else Data()) to false
     }
 
     /**
@@ -171,7 +174,8 @@ class MoodStore(context: Context) {
      */
     fun update(sync: Boolean = true, force: Boolean = false, block: (Data) -> Unit) {
         synchronized(LOCK) {
-            val data = loadForWrite() ?: if (force) {
+            val (loaded, fileReads) = loadChecked()
+            val data = loaded ?: if (force) {
                 // Restoring a backup over a file that can't be read: the file is kept aside, just in case
                 runCatching { file.copyTo(File(file.parentFile, "$FILE_NAME.unreadable"), overwrite = true) }
                 Data()
@@ -182,10 +186,14 @@ class MoodStore(context: Context) {
             block(data)
             file.parentFile?.mkdirs()
             // The file as it was goes aside first, if it reads
-            if (file.exists() && read(file) != null) runCatching { file.copyTo(previous, overwrite = true) }
+            if (fileReads) runCatching { file.copyTo(previous, overwrite = true) }
             val tmp = File(file.parentFile, "$FILE_NAME.tmp")
-            tmp.writeText(toJson(data).toString(2))
+            tmp.writeText(toJson(data).toString())
             tmp.renameTo(file)
+            // What was just written is what the next load would read
+            cached = data
+            cachedStamp = file.lastModified() to file.length()
+            cachedPath = file.path
         }
         if (sync) BackupManager.requestSync(appContext)
     }

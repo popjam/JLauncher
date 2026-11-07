@@ -398,6 +398,9 @@ class PlaceWatcher(private val context: Context) {
 
     private val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
 
+    /** Readings are handled here, off the main thread */
+    private val thread = android.os.HandlerThread("places").apply { start() }
+
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             runCatching { Places.record(context, location) }
@@ -426,8 +429,8 @@ class PlaceWatcher(private val context: Context) {
         runCatching {
             if (!Places.enabled(context) || !Social.hasLocation(context)) return
             val manager = manager ?: return
-            Places.provider(manager)?.let { manager.requestLocationUpdates(it, Places.CHECK_MS, 0f, listener, Looper.getMainLooper()) }
-            manager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 5 * 60_000L, 0f, listener, Looper.getMainLooper())
+            Places.provider(manager)?.let { manager.requestLocationUpdates(it, Places.CHECK_MS, 0f, listener, thread.looper) }
+            manager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 5 * 60_000L, 0f, listener, thread.looper)
         }
     }
 
@@ -438,5 +441,6 @@ class PlaceWatcher(private val context: Context) {
     fun stop() {
         runCatching { Places.prefs(context).unregisterOnSharedPreferenceChangeListener(switched) }
         stopUpdates()
+        thread.quitSafely()
     }
 }

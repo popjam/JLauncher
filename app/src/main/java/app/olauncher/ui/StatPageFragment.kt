@@ -238,7 +238,7 @@ class StatPageFragment : CardPageFragment() {
                 dailyCard()
             }
             StatKind.LIBIDO -> {
-                pornCard()
+                if (app.olauncher.helper.DeviceTime.pornOn(context)) pornCard()
                 dailyCard()
             }
             StatKind.MEDICINE -> takenCard()
@@ -685,7 +685,7 @@ class StatPageFragment : CardPageFragment() {
                 val point = key as Int
                 val periodStart = periodStart(period, point)
                 val title = when (period) {
-                    Period.WEEKS -> getString(R.string.week_number, periodStart.get(WeekFields.ISO.weekOfWeekBasedYear()))
+                    Period.WEEKS -> getString(R.string.week_number, periodStart.get(app.olauncher.helper.Week.fields.weekOfWeekBasedYear()))
                     Period.MONTHS -> periodStart.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
                     Period.YEARS -> point.toString()
                 }
@@ -1015,7 +1015,7 @@ class StatPageFragment : CardPageFragment() {
 
     // --- Periods ---
 
-    /** Weeks count from 1970's first Monday-starting week, months from year 0, and years are years. */
+    /** Weeks count from 1970 in weeks starting on [app.olauncher.helper.Week.first], months from year 0, and years are years. */
     internal fun periodOf(period: Period, date: LocalDate): Int = when (period) {
         Period.WEEKS -> (app.olauncher.helper.Week.start(date).toEpochDay() / 7).toInt()
         Period.MONTHS -> date.year * 12 + date.monthValue - 1
@@ -1023,14 +1023,14 @@ class StatPageFragment : CardPageFragment() {
     }
 
     internal fun periodStart(period: Period, point: Int): LocalDate = when (period) {
-        // Mondays' epoch days are 4 more than a multiple of 7
-        Period.WEEKS -> LocalDate.ofEpochDay(point * 7L + 4)
+        // A week's start falls the same number of days past a multiple of 7 each time
+        Period.WEEKS -> LocalDate.ofEpochDay(point * 7L + Math.floorMod(app.olauncher.helper.Week.start(LocalDate.ofEpochDay(0)).toEpochDay(), 7L))
         Period.MONTHS -> LocalDate.of(point / 12, point % 12 + 1, 1)
         Period.YEARS -> LocalDate.of(point, 1, 1)
     }
 
     internal fun periodLabel(period: Period, point: Int): String = when (period) {
-        Period.WEEKS -> getString(R.string.week_short, periodStart(period, point).get(WeekFields.ISO.weekOfWeekBasedYear()))
+        Period.WEEKS -> getString(R.string.week_short, periodStart(period, point).get(app.olauncher.helper.Week.fields.weekOfWeekBasedYear()))
         Period.MONTHS -> Month.of(point % 12 + 1).getDisplayName(TextStyle.SHORT, Locale.getDefault())
         Period.YEARS -> point.toString()
     }

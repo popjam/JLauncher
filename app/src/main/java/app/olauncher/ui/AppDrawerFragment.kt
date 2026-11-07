@@ -77,7 +77,7 @@ class AppDrawerFragment : Fragment() {
         if (flag == Constants.FLAG_HIDDEN_APPS)
             binding.search.queryHint = getString(R.string.hidden_apps)
         else if (flag in Constants.FLAG_SET_HOME_APP_1..Constants.FLAG_SET_CALENDAR_APP)
-            binding.search.queryHint = "Please select an app"
+            binding.search.queryHint = getString(R.string.pick_an_app)
         try {
             val searchTextView = binding.search.findViewById<TextView>(R.id.search_src_text)
             if (searchTextView != null) searchTextView.gravity = prefs.appLabelAlignment
@@ -158,7 +158,7 @@ class AppDrawerFragment : Fragment() {
             },
             appHideListener = { appModel, position ->
                 if (appModel is AppModel.PinnedShortcut) {
-                    requireContext().showToast("Hiding pinned shortcuts is not supported")
+                    requireContext().showToast(getString(R.string.cant_hide_shortcut))
                     return@AppDrawerAdapter
                 }
                 adapter.appFilteredList.removeAt(position)
@@ -323,7 +323,12 @@ class AppDrawerFragment : Fragment() {
         }
     }
 
+    /** Set once it's closing, so an overscroll doesn't close it again */
+    private var leaving = false
+
     private fun checkMessageAndExit() {
+        if (leaving) return
+        leaving = true
         findNavController().popBackStack()
         if (flag == Constants.FLAG_LAUNCH_APP)
             viewModel.checkForMessages.call()

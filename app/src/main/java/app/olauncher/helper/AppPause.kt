@@ -67,6 +67,13 @@ object AppPause {
     fun useForActive(prefs: Prefs) = prefs.useForOn && MyAccessibilityService.isRunning
 
     /** Whether opening [packageName] should show the wellness screen. May add a newly installed addictive app. */
+    /** The choices of how long to use an app for, in minutes */
+    val USE_FOR_SETS = listOf(listOf(2, 5, 10, 30), listOf(5, 15, 30, 60), listOf(1, 3, 5, 10))
+
+    fun useForLengths(context: Context) = USE_FOR_SETS.getOrElse(context.getSharedPreferences("pause", Context.MODE_PRIVATE).getInt("useForSet", 0)) { USE_FOR_SETS[0] }
+
+    fun setUseForSet(context: Context, set: Int) = context.getSharedPreferences("pause", Context.MODE_PRIVATE).edit().putInt("useForSet", set).apply()
+
     fun needsGate(prefs: Prefs, packageName: String): Boolean {
         if (!prefs.pauseAppsOn && !useForActive(prefs)) return false
         if (hasPass(packageName)) return false

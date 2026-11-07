@@ -17,9 +17,15 @@ object Week {
     }
 
     fun set(context: Context, day: DayOfWeek) {
+        if (day == first) return
         prefs(context).edit().putString(KEY, day.name).apply()
         first = day
+        // The spending limit's carry-over counts whole weeks: it starts again from this one
+        Spending.restartCarry(context)
     }
+
+    /** Week numbers for weeks starting on [first] */
+    val fields: java.time.temporal.WeekFields get() = java.time.temporal.WeekFields.of(first, 4)
 
     /** The first day of [date]'s week */
     fun start(date: LocalDate): LocalDate = date.with(TemporalAdjusters.previousOrSame(first))

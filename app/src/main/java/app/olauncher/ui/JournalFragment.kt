@@ -46,6 +46,9 @@ class JournalFragment : Fragment() {
     private lateinit var count: TextView
     private lateinit var search: EditText
     private var notes: List<Pair<LocalDate, MoodStore.Day>> = emptyList()
+
+    /** Days with a voice note */
+    private var voiced: Set<LocalDate> = emptySet()
     private val handler = Handler(Looper.getMainLooper())
     private val ink get() = requireContext().getColorFromAttr(R.attr.primaryColor)
 
@@ -123,10 +126,16 @@ class JournalFragment : Fragment() {
     }
 
     private fun load() {
-        notes = store.load().days.mapNotNull { (key, day) ->
+        voiced = app.olauncher.helper.VoiceNotes.dates(requireContext())
+        val days = store.load().days
+        val written = days.mapNotNull { (key, day) ->
             if (day.note.isNullOrBlank()) return@mapNotNull null
             runCatching { LocalDate.parse(key) }.getOrNull()?.let { it to day }
-        }.sortedByDescending { it.first }
+        }
+        // Days with only a recording (not written out) are listed too
+        val spoken = voiced.filter { date -> written.none { it.first == date } }
+            .map { it to (days[it.toString()] ?: MoodStore.Day(mood = null, usageMs = null)) }
+        notes = (written + spoken).sortedByDescending { it.first }
     }
 
     /** The notes matching the search (every word of it, anywhere in the note or its date), newest first */
@@ -144,7 +153,6 @@ class JournalFragment : Fragment() {
             else -> resources.getQuantityString(R.plurals.journal_found, shown.size, shown.size)
         }
         list.removeAllViews()
-        val voiced = app.olauncher.helper.VoiceNotes.dates(context)
         val ink = ink
         val highlight = ColorUtils.setAlphaComponent(0xFFFFD54F.toInt(), 110)
         var lastMonth: String? = null
@@ -179,7 +187,7 @@ class JournalFragment : Fragment() {
                         alpha = 0.6f
                     })
                     addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                        text = marked(day.note.orEmpty(), words, highlight, ink)
+                        text = day.note?.takeIf { it.isNotBlank() }?.let { marked(it, words, highlight, ink) } ?: getString(R.string.voice_note_only)
                         textSize = 15f
                         setTextColor(ink)
                         setPadding(0, 3.dpToPx(), 0, 0)
@@ -196,13 +204,12 @@ class JournalFragment : Fragment() {
     private fun marked(text: String, words: List<String>, color: Int, ink: Int): CharSequence {
         if (words.isEmpty()) return text
         val spannable = SpannableString(text)
-        val lower = text.lowercase(Locale.getDefault())
         words.forEach { word ->
-            var at = lower.indexOf(word)
-            while (at >= 0) {
+            var at = text.indexOf(word, ignoreCase = true)
+            while (at >= 0 && at + word.length <= text.length) {
                 spannable.setSpan(BackgroundColorSpan(color), at, at + word.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 spannable.setSpan(ForegroundColorSpan(ink), at, at + word.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                at = lower.indexOf(word, at + word.length)
+                at = text.indexOf(word, at + word.length, ignoreCase = true)
             }
         }
         return spannable

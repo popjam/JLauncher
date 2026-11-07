@@ -1217,7 +1217,7 @@ class StatsHomeFragment : CardPageFragment() {
         comparables.firstOrNull { it.kind == ValueKind.AMOUNT && kindOf(it) == StatKind.MONEY }?.let { things += it to R.string.ins_spend_on }
         val libido = stats.firstOrNull { it.kind == StatKind.LIBIDO }
         val mac = DeviceTime.days(context, DeviceTime.Device.MAC)
-        if (libido != null && mac.isNotEmpty()) {
+        if (libido != null && mac.isNotEmpty() && DeviceTime.pornOn(context)) {
             val minutes = mac.filterKeys { it <= lastDay() }
                 .mapValues { (_, day) -> day.apps.entries.filter { it.key.contains("VLC", ignoreCase = true) }.sumOf { it.value }.toFloat() }
             things += Measured(PORN_KEY, getString(R.string.ins_porn_name), libido.color, StatIcons.forStat(libido), ValueKind.AMOUNT, minutes,
@@ -1570,7 +1570,7 @@ class StatsHomeFragment : CardPageFragment() {
     }
 
     companion object {
-        private val WEEKS = WeekFields.ISO
+        private val WEEKS get() = app.olauncher.helper.Week.fields
         private const val GRID_DAYS = 18
         private val DEFAULT_NAMES = setOf("energy", "libido", "anxiety")
         private const val MIN_GROUP = 3

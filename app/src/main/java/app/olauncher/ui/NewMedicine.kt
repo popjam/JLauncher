@@ -49,7 +49,7 @@ object NewMedicine {
                 setPadding(4.dpToPx(), 6.dpToPx(), 4.dpToPx(), 0)
             })
         }
-        AlertDialog.Builder(context)
+        val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.new_kind_medicine)
             .setView(box)
             .setNegativeButton(R.string.cancel, null)
@@ -62,6 +62,14 @@ object NewMedicine {
                 onDone()
             }
             .show()
+        // Add only once there's a name
+        val add = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        add.isEnabled = false
+        name.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) { add.isEnabled = !s.isNullOrBlank() }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
     }
 
     /**
@@ -84,6 +92,7 @@ object NewMedicine {
                 when {
                     i == 0 -> context.getString(R.string.medicine_phrase_skipped, name)
                     doses.isEmpty() -> context.getString(R.string.medicine_phrase_taken, name)
+                    labels[i] == context.getString(R.string.medicine_more) -> context.getString(R.string.medicine_phrase_more, name)
                     else -> context.getString(R.string.medicine_phrase, labels[i], name)
                 }
             },

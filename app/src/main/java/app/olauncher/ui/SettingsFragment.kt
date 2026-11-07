@@ -426,13 +426,6 @@ class SettingsFragment : CardPageFragment() {
                 Arrangement.save(context, Arrangement.HOME, order, Arrangement.hidden(context, Arrangement.HOME))
                 render()
             } else null,
-            row(card, getString(R.string.money_left), onOff(Spending.showOnHome(context)), R.string.info_money_left) {
-                if (Spending.weekLimitCents(context) <= 0) askWeekLimit { if (isAdded) render() }
-                else {
-                    Spending.setShowOnHome(context, !Spending.showOnHome(context))
-                    render()
-                }
-            },
         )
     }
 
@@ -599,6 +592,11 @@ class SettingsFragment : CardPageFragment() {
                     if (!serviceOn) askAccessibility()
                 }
             },
+            if (prefs.useForOn) row(card, getString(R.string.use_for_lengths), AppPause.useForLengths(context).joinToString(", "), R.string.info_use_for_lengths, level = 1) {
+                val sets = AppPause.USE_FOR_SETS
+                choose(R.string.use_for_lengths, sets.map { set -> set.joinToString(", ") { getString(R.string.minutes_short, it) } },
+                    sets.indexOf(AppPause.useForLengths(context))) { AppPause.setUseForSet(context, it) }
+            } else null,
             if (slowing) row(card, getString(R.string.paused_apps), prefs.pausedApps.count { context.isPackageInstalled(it) }.toString(), R.string.info_paused_apps, level = 1) {
                 loosen { findNavController().navigate(R.id.pausedAppsFragment) }
             } else null,
@@ -799,6 +797,10 @@ class SettingsFragment : CardPageFragment() {
             row(card, getString(R.string.week_limit), if (limit <= 0) getString(R.string.off) else moneyShort(limit), R.string.info_week_limit) {
                 askWeekLimit { if (isAdded) render() }
             },
+            if (limit > 0) row(card, getString(R.string.money_left_on_home), onOff(Spending.showOnHome(context)), R.string.info_money_left, level = 1) {
+                Spending.setShowOnHome(context, !Spending.showOnHome(context))
+                render()
+            } else null,
             if (limit > 0) row(card, getString(R.string.settings_carry_over), onOff(Spending.carryOver(context)), R.string.info_carry_over, level = 1) {
                 Spending.setCarryOver(context, !Spending.carryOver(context))
                 render()
@@ -845,6 +847,13 @@ class SettingsFragment : CardPageFragment() {
                 choose(R.string.week_starts, days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) },
                     days.indexOf(app.olauncher.helper.Week.first)) { app.olauncher.helper.Week.set(context, days[it]) }
             },
+            if (app.olauncher.helper.Steps.hasSensor(context)) row(card, getString(R.string.step_goal),
+                String.format(Locale.getDefault(), "%,d", app.olauncher.helper.Steps.goal(context)), R.string.info_step_goal) {
+                val goals = listOf(5_000, 6_000, 8_000, 10_000, 12_000, 15_000)
+                choose(R.string.step_goal, goals.map { String.format(Locale.getDefault(), "%,d", it) }, goals.indexOf(app.olauncher.helper.Steps.goal(context))) {
+                    app.olauncher.helper.Steps.setGoal(context, goals[it])
+                }
+            } else null,
             row(card, getString(R.string.settings_new_on_home), onOff(newOnHome), R.string.info_new_on_home) {
                 StatsHomeFragment.setShowsNewStats(context, !newOnHome)
                 render()
@@ -863,6 +872,11 @@ class SettingsFragment : CardPageFragment() {
                 }
             },
             row(card, getString(R.string.report_make), null, R.string.info_report) { askReport() },
+            if (app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.MAC) > 0)
+                row(card, getString(R.string.porn_from_mac), onOff(app.olauncher.helper.DeviceTime.pornOn(context)), R.string.info_porn_from_mac) {
+                    app.olauncher.helper.DeviceTime.setPornOn(context, !app.olauncher.helper.DeviceTime.pornOn(context))
+                    render()
+                } else null,
         )
     }
 

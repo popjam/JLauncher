@@ -97,8 +97,8 @@ internal fun StatPageFragment.stepsCard() {
         card.showNote(getString(R.string.steps_none))
         return
     }
-    card.keyItem(faint(110), getString(R.string.steps_goal, format.format(Steps.GOAL)))
-    dayBars(card, days.mapValues { it.value.toFloat() }, stat.themeColor, Steps.GOAL.toFloat()) { _, value ->
+    card.keyItem(faint(110), getString(R.string.steps_goal, format.format(Steps.goal(requireContext()))))
+    dayBars(card, days.mapValues { it.value.toFloat() }, stat.themeColor, Steps.goal(requireContext()).toFloat()) { _, value ->
         getString(R.string.steps_count, format.format(value.toInt()))
     }
     if (past.size >= 2) {
@@ -106,7 +106,7 @@ internal fun StatPageFragment.stepsCard() {
         tiles(tilesCard, getString(R.string.social_usual, past.size), listOf(
             format.format(past.average().roundToInt()) to getString(R.string.steps_tile_average),
             format.format(past.max()) to getString(R.string.steps_tile_best),
-            past.count { it >= Steps.GOAL }.toString() to getString(R.string.steps_tile_goal),
+            past.count { it >= Steps.goal(requireContext()) }.toString() to getString(R.string.steps_tile_goal),
         ))
     }
 }

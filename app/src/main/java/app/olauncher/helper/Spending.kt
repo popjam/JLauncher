@@ -255,7 +255,7 @@ object Spending {
         prefs(context).edit().putString(KEY, array.toString()).commit()
     }
 
-    /** The most to spend a week (Monday to Sunday, leaving out essentials), or 0 for none */
+    /** The most to spend a week (from the day weeks start on, leaving out essentials), or 0 for none */
     fun weekLimitCents(context: Context) = prefs(context).getLong(WEEK_LIMIT, 0L)
 
     fun setWeekLimitCents(context: Context, cents: Long) = prefs(context).edit().putLong(WEEK_LIMIT, cents.coerceAtLeast(0)).apply()
@@ -268,6 +268,11 @@ object Spending {
         if (on == carryOver(context)) return
         prefs(context).edit().putBoolean(CARRY, on)
             .putString(CARRY_SINCE, app.olauncher.helper.Week.start(LocalDate.now()).toString()).apply()
+    }
+
+    /** Counts the carry-over from this week, after the week's start day has changed */
+    fun restartCarry(context: Context) {
+        if (carryOver(context)) prefs(context).edit().putString(CARRY_SINCE, Week.start(LocalDate.now()).toString()).apply()
     }
 
     /** Whether what's left this week shows on the home screen, under the mood */

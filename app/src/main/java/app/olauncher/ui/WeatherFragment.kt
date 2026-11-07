@@ -180,9 +180,9 @@ class WeatherFragment : Fragment() {
                 addView(smallText(getString(R.string.uv_index, day.uv), 13f, 0.7f).apply {
                     gravity = Gravity.END
                 }, LinearLayout.LayoutParams(56.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-                addView(smallText("${day.max}°", 15f).apply {
+                addView(smallText("${day.max}° / ${day.min}°", 15f).apply {
                     gravity = Gravity.END
-                }, LinearLayout.LayoutParams(52.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+                }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             })
         }
     }
@@ -191,6 +191,7 @@ class WeatherFragment : Fragment() {
         val forecast = forecast
         binding.status.text = when {
             viewModel.weatherLoading.value == true -> getString(R.string.weather_loading)
+            forecast == null && !app.olauncher.helper.Weather.hasLocationPermission(requireContext()) -> getString(R.string.weather_location_denied)
             forecast == null -> getString(R.string.weather_failed)
             else -> getString(R.string.weather_updated, DateFormat.getTimeFormat(requireContext()).format(Date(forecast.fetchedAt)))
         }

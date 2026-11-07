@@ -122,7 +122,8 @@ object MoodPrompt {
         prev.setOnClickListener { index = (index - 1 + stats.size) % stats.size; render() }
         next.setOnClickListener { index = (index + 1) % stats.size; render() }
 
-        note.setText("")
+        // The day's note so far, so answering keeps it rather than replacing it
+        note.setText(today?.note.orEmpty())
         confirm.setOnClickListener { if (stats.all { it.id in answers }) finish(answers.toMap(), note.text?.toString()) }
         root.findViewById<View>(R.id.moodPromptClose).setOnClickListener { finish(null, null) }
         render()

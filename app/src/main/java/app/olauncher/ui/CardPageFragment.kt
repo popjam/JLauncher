@@ -51,7 +51,10 @@ abstract class CardPageFragment : Fragment() {
     internal fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
 
     internal fun dateText(date: LocalDate) = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
-    internal fun clock(time: java.time.LocalTime) = time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
+    /** A time in the phone's own style, 24-hour or not */
+    internal fun clock(time: java.time.LocalTime): String =
+        if (android.text.format.DateFormat.is24HourFormat(requireContext())) time.format(DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()))
+        else time.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
     internal fun duration(ms: Long) = requireContext().formattedTimeSpent(ms)
     internal fun decimal(value: Float) = String.format(Locale.getDefault(), "%.1f", value)
     internal fun money(cents: Long) = String.format(Locale.getDefault(), "$%,d.%02d", cents / 100, cents % 100)

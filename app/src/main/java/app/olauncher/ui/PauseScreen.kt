@@ -52,12 +52,8 @@ class PauseScreen(
     init {
         binding.pauseCancel.setOnClickListener { onCancel() }
         binding.pauseOpen.setOnClickListener { onOpen(null) }
-        listOf(
-            binding.useFor2 to 2,
-            binding.useFor5 to 5,
-            binding.useFor10 to 10,
-            binding.useFor30 to 30,
-        ).forEach { (box, minutes) ->
+        listOf(binding.useFor2, binding.useFor5, binding.useFor10, binding.useFor30)
+            .zip(app.olauncher.helper.AppPause.useForLengths(context)).forEach { (box, minutes) ->
             box.text = context.getString(R.string.minutes_short, minutes)
             box.setOnClickListener { onOpen(minutes) }
         }

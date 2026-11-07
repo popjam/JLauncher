@@ -115,6 +115,13 @@ object Steps {
 
     const val NAME = "Steps"
     const val GOAL = 10_000
+
+    /** The day's goal, 10,000 unless changed */
+    fun goal(context: Context) = prefs(context).getInt(GOAL_KEY, GOAL)
+
+    fun setGoal(context: Context, steps: Int) = prefs(context).edit().putInt(GOAL_KEY, steps).apply()
+
+    private const val GOAL_KEY = "goal"
     private val COLOR = 0xFFAED581.toInt()
     private val LABELS = listOf("Under 2k", "2–5k", "5–8k", "8–10k", "10k+")
 
