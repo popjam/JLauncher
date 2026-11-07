@@ -104,10 +104,20 @@ class DayPageFragment : CardPageFragment() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
+    /** Drawn as soon as it's made, so a day swiped to (built beside the one showing) is already there */
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         render()
     }
+
+    /** Drawn again on coming back only if the stats changed meanwhile (on a stat's page, say) */
+    override fun onResume() {
+        super.onResume()
+        if (store.lastSaved() != renderedAt) render()
+    }
+
+    /** When the stats it was drawn from were saved */
+    private var renderedAt = -1L
 
     override fun onPause() {
         saveNote()
@@ -128,6 +138,7 @@ class DayPageFragment : CardPageFragment() {
     }
 
     private fun render() {
+        renderedAt = store.lastSaved()
         val data = store.load()
         val stats = requireContext().allStats(data)
         val day = data.days[date.toString()]

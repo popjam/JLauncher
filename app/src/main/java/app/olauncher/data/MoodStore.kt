@@ -129,6 +129,9 @@ class MoodStore(context: Context) {
         }
     }
 
+    /** When the stats were last saved, to tell whether something drawn from them is out of date */
+    fun lastSaved(): Long = file.lastModified()
+
     /** The last good copy, kept beside the file each time it's replaced */
     private val previous get() = File(file.parentFile, "$FILE_NAME.bak")
 
