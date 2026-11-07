@@ -92,7 +92,9 @@ object Weather {
     }
 
     /** What the home screen shows under the icon: today's high and the UV index now. */
-    fun homeText(day: Day, uv: Int) = "${day.max}° / $uv"
+    fun homeText(day: Day, uv: Int) = if (uv >= HIGH_UV) "${day.max}° · UV $uv" else "${day.max}°"
+
+    private const val HIGH_UV = 6
 
     /** Colours from cold to hot, at temperatures in °C */
     private val TEMP_COLORS = listOf(

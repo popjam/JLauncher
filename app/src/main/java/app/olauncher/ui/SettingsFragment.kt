@@ -40,6 +40,7 @@ import app.olauncher.data.Constants
 import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
+import app.olauncher.helper.Arrangement
 import app.olauncher.helper.AutoStats
 import app.olauncher.helper.PasswordHelper
 import app.olauncher.helper.People
@@ -316,6 +317,7 @@ class SettingsFragment : CardPageFragment() {
         val themes = listOf(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.MODE_NIGHT_NO, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         val themeNames = listOf(R.string.dark, R.string.light, R.string.system_default).map { getString(it) }
         val screenTime = context.appUsagePermissionGranted()
+        val screenTimeShown = screenTime && Arrangement.SCREEN_TIME !in Arrangement.hidden(context, Arrangement.HOME)
         card.body(
             row(card, getString(R.string.apps_on_home_screen), prefs.homeAppsNum.toString(), R.string.info_home_apps) {
                 choose(R.string.apps_on_home_screen, (0..8).map { it.toString() }, prefs.homeAppsNum) {
@@ -367,10 +369,21 @@ class SettingsFragment : CardPageFragment() {
                 showStatusBar(prefs.showStatusBar)
                 render()
             },
-            row(card, getString(R.string.screen_time), onOff(screenTime), R.string.info_screen_time) {
-                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            row(card, getString(R.string.screen_time), onOff(screenTimeShown), R.string.info_screen_time) {
+                if (!screenTime) return@row startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                val hidden = Arrangement.hidden(context, Arrangement.HOME)
+                Arrangement.save(context, Arrangement.HOME, Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS),
+                    if (screenTimeShown) hidden + Arrangement.SCREEN_TIME else hidden - Arrangement.SCREEN_TIME)
+                render()
             },
             row(card, getString(R.string.weather), onOff(Weather.isEnabled(context)), R.string.info_weather) { toggleWeather() },
+            if (screenTimeShown && Weather.isEnabled(context)) row(card, getString(R.string.first_beside_clock), getString(
+                if (Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS).first() == Arrangement.WEATHER) R.string.weather else R.string.screen_time),
+                R.string.info_beside_clock, level = 1) {
+                val order = Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS).reversed()
+                Arrangement.save(context, Arrangement.HOME, order, Arrangement.hidden(context, Arrangement.HOME))
+                render()
+            } else null,
             row(card, getString(R.string.money_left), onOff(Spending.showOnHome(context)), R.string.info_money_left) {
                 if (Spending.weekLimitCents(context) <= 0) askWeekLimit { if (isAdded) render() }
                 else {
@@ -570,6 +583,8 @@ class SettingsFragment : CardPageFragment() {
             if (data.promptEnabled) row(card, getString(R.string.prompt_time), time(data.promptMinutes), R.string.info_check_in_time, level = 1) {
                 pickTime(data.promptMinutes) { moodStore.setPromptTimes(promptMinutes = it) }
             } else null,
+            if (data.promptEnabled) row(card, getString(R.string.check_in_asks), resources.getQuantityString(R.plurals.stat_count, data.dailyStats.size + 1, data.dailyStats.size + 1),
+                R.string.info_check_in_asks, level = 1) { pickCheckInStats() } else null,
             if (data.promptEnabled) row(card, getString(R.string.ask_missed_day), onOff(data.catchUpEnabled), R.string.info_missed_day, level = 1) {
                 moodStore.setPromptTimes(catchUpEnabled = !data.catchUpEnabled)
                 render()
@@ -578,6 +593,71 @@ class SettingsFragment : CardPageFragment() {
                 pickTime(data.catchUpMinutes) { moodStore.setPromptTimes(catchUpMinutes = it) }
             } else null,
         )
+    }
+
+    /** The stats the check-in asks after the mood */
+    private fun pickCheckInStats() {
+        val stats = moodStore.load().stats.filter { it.id != MoodStore.USAGE }
+        val asked = stats.map { it.daily }.toBooleanArray()
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.check_in_asks)
+            .setMultiChoiceItems(stats.map { it.name }.toTypedArray(), asked) { _, i, on -> asked[i] = on }
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ ->
+                moodStore.setDaily(stats.filterIndexed { i, _ -> asked[i] }.map { it.id }.toSet())
+                render()
+            }
+            .show()
+    }
+
+    /**
+     * Which of [keys] show, and in what order: a tick for each, and arrows to move it. Saved for
+     * [name] in [Arrangement].
+     */
+    private fun arrange(title: Int, name: String, keys: List<String>, label: (String) -> String) {
+        val context = requireContext()
+        val order = Arrangement.order(context, name, keys).toMutableList()
+        val hidden = Arrangement.hidden(context, name).toMutableSet()
+        val list = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dpToPx(), 8.dpToPx(), 12.dpToPx(), 0)
+        }
+        fun draw() {
+            list.removeAllViews()
+            order.forEachIndexed { i, key ->
+                list.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(android.widget.CheckBox(context).apply {
+                        text = label(key)
+                        isChecked = key !in hidden
+                        setOnCheckedChangeListener { _, on -> if (on) hidden -= key else hidden += key }
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    fun arrow(symbol: String, enabled: Boolean, by: Int) = TextView(context).apply {
+                        text = symbol
+                        textSize = 20f
+                        alpha = if (enabled) 0.85f else 0.2f
+                        setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
+                        if (enabled) setOnClickListener {
+                            order.add(i + by, order.removeAt(i))
+                            draw()
+                        }
+                    }
+                    addView(arrow("↑", i > 0, -1))
+                    addView(arrow("↓", i < order.lastIndex, 1))
+                })
+            }
+        }
+        draw()
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(ScrollView(context).apply { addView(list) })
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ ->
+                Arrangement.save(context, name, order, hidden)
+                render()
+            }
+            .show()
     }
 
     private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
@@ -709,6 +789,19 @@ class SettingsFragment : CardPageFragment() {
             row(card, getString(R.string.settings_new_on_home), onOff(newOnHome), R.string.info_new_on_home) {
                 StatsHomeFragment.setShowsNewStats(context, !newOnHome)
                 render()
+            },
+            row(card, getString(R.string.stats_home_cards), Arrangement.shown(context, Arrangement.STATS_HOME, Arrangement.STATS_HOME_CARDS).size.toString(),
+                R.string.info_stats_home_cards) {
+                arrange(R.string.stats_home_cards, Arrangement.STATS_HOME, Arrangement.STATS_HOME_CARDS) { key ->
+                    getString(when (key) {
+                        Arrangement.DAILY -> R.string.stat_daily
+                        Arrangement.TRENDS -> R.string.graph_trends
+                        Arrangement.REMEMBER -> R.string.remember
+                        Arrangement.INSIGHTS -> R.string.insights
+                        Arrangement.THIS_WEEK -> R.string.this_week
+                        else -> R.string.compare_two
+                    })
+                }
             },
             row(card, getString(R.string.report_make), null, R.string.info_report) { askReport() },
         )

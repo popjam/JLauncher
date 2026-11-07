@@ -206,6 +206,11 @@ class MoodStore(context: Context) {
         }
     }
 
+    /** The check-in asks these stats (after the mood) and no others */
+    fun setDaily(ids: Set<String>) = update { data ->
+        data.stats.indices.forEach { i -> data.stats[i] = data.stats[i].copy(daily = data.stats[i].id in ids) }
+    }
+
     /** Several days' faces for [statId] in one save, only where they've changed */
     fun setFaces(statId: String, faces: Map<LocalDate, Int>) {
         val days = load().days

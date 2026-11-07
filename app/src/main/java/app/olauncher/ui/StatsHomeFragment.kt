@@ -188,26 +188,34 @@ class StatsHomeFragment : CardPageFragment() {
         cardList.removeAllViews()
         redraws.clear()
         header()
-        dailyCard()
-        trendCard()
-        rememberCard()
-        // Insights and Compare need every stat side by side, worked out off the main thread
-        val insights = Card(getString(R.string.insights)).apply {
-            subtitle(getString(R.string.insights_note))
-            showNote(getString(R.string.insights_working))
+        var insights: Card? = null
+        var compare: Card? = null
+        val arrangement = app.olauncher.helper.Arrangement
+        arrangement.shown(requireContext(), arrangement.STATS_HOME, arrangement.STATS_HOME_CARDS).forEach { key ->
+            when (key) {
+                arrangement.DAILY -> dailyCard()
+                arrangement.TRENDS -> trendCard()
+                arrangement.REMEMBER -> rememberCard()
+                // Insights and Compare need every stat side by side, worked out off the main thread
+                arrangement.INSIGHTS -> insights = Card(getString(R.string.insights)).apply {
+                    subtitle(getString(R.string.insights_note))
+                    showNote(getString(R.string.insights_working))
+                }
+                arrangement.THIS_WEEK -> thisWeekCard()
+                arrangement.COMPARE -> compare = Card(getString(R.string.compare_two)).apply { showNote(getString(R.string.insights_working)) }
+            }
         }
-        thisWeekCard()
-        val compare = Card(getString(R.string.compare_two)).apply { showNote(getString(R.string.insights_working)) }
         renderBubble()
         val generation = ++renderGeneration
+        if (insights == null && compare == null) return
         Thread {
             val built = runCatching { buildComparables() }.getOrDefault(emptyList())
-            val found = runCatching { findInsights(built) }.getOrDefault(emptyList())
+            val found = if (insights == null) emptyList() else runCatching { findInsights(built) }.getOrDefault(emptyList())
             view?.post {
                 if (generation != renderGeneration || view == null) return@post
                 comparables = built
-                fillInsights(insights, found)
-                fillCompare(compare)
+                insights?.let { fillInsights(it, found) }
+                compare?.let { fillCompare(it) }
             }
         }.start()
     }

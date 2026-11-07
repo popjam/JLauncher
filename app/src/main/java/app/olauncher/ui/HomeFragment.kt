@@ -345,8 +345,17 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     /** Beside the clock: today's weather, then the mood avatar and screen time. */
     private fun populateScreenTime() {
-        val showScreenTime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requireContext().appUsagePermissionGranted()
-        val showWeather = Weather.isEnabled(requireContext())
+        val context = requireContext()
+        val showScreenTime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && context.appUsagePermissionGranted() &&
+            app.olauncher.helper.Arrangement.SCREEN_TIME !in app.olauncher.helper.Arrangement.hidden(context, app.olauncher.helper.Arrangement.HOME)
+        val showWeather = Weather.isEnabled(context)
+        // Whichever comes first beside the clock
+        val weatherFirst = app.olauncher.helper.Arrangement.order(context, app.olauncher.helper.Arrangement.HOME,
+            app.olauncher.helper.Arrangement.HOME_ITEMS).first() == app.olauncher.helper.Arrangement.WEATHER
+        if ((binding.screenTimeLayout.getChildAt(0) == binding.weatherColumn) != weatherFirst) {
+            binding.screenTimeLayout.removeView(binding.weatherColumn)
+            binding.screenTimeLayout.addView(binding.weatherColumn, if (weatherFirst) 0 else 1)
+        }
         binding.screenTimeColumn.isVisible = showScreenTime
         // Holds the avatar's place beside the weather icon until there's a screen time, so the texts line up
         binding.moodAvatar.visibility = when {

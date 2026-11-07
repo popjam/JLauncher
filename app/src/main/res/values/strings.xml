@@ -1003,4 +1003,14 @@
     <string name="stat_total">%1$s %2$s</string>
     <string name="stat_label">%1$s: %2$s</string>
     <string name="show">Show</string>
+    <string name="first_beside_clock">First beside the clock</string>
+    <string name="info_beside_clock">Which comes first next to the clock: the weather or screen time.</string>
+    <string name="check_in_asks">Asks about</string>
+    <string name="info_check_in_asks">Which stats the check-in asks about, after mood.</string>
+    <string name="stats_home_cards">Stats Home cards</string>
+    <string name="info_stats_home_cards">Which cards Stats Home shows, and in what order.</string>
+    <plurals name="stat_count">
+        <item quantity="one">%d stat</item>
+        <item quantity="other">%d stats</item>
+    </plurals>
 </resources>
