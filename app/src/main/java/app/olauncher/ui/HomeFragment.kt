@@ -91,6 +91,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         underRow = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
         binding.mainLayout.addView(underRow, binding.mainLayout.indexOfChild(binding.moneyWidget),
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.LEFT))
+        // The money widget lives in the rows by the clock from the start, never moved out of the
+        // animating main layout once it shows (see detach)
+        detach(binding.moneyWidget)
+        underRow.addView(binding.moneyWidget)
         appsPadding = binding.homeAppsLayout.paddingTop to binding.homeAppsLayout.paddingBottom
         clockMarginTop = (binding.dateTimeLayout.layoutParams as FrameLayout.LayoutParams).topMargin
         initObservers()
@@ -339,6 +343,18 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         else -> Arrangement.MONEY
     }
 
+    /**
+     * Takes [view] off its parent with the parent's layout animation off. A view taken off an animating
+     * layout and put in another is detached again by the old one when its fade-out ends, which crashes.
+     */
+    private fun detach(view: View) {
+        val parent = view.parent as? ViewGroup ?: return
+        val transition = parent.layoutTransition
+        parent.layoutTransition = null
+        parent.removeView(view)
+        parent.layoutTransition = transition
+    }
+
     /** Puts the weather, screen time and money in their rows, in their order */
     private fun arrangeWidgets() {
         val context = requireContext()
@@ -348,7 +364,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             keys.forEachIndexed { i, key ->
                 val piece = pieceOf(key)
                 if (piece.parent == row && row.indexOfChild(piece) == i) return@forEachIndexed
-                (piece.parent as? ViewGroup)?.removeView(piece)
+                detach(piece)
                 row.addView(piece, minOf(i, row.childCount), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             }
         }
