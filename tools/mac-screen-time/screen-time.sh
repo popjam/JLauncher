@@ -34,7 +34,8 @@ fi
 cutoff=$(/bin/date -v-${DAYS}d +%Y-%m-%d)
 /usr/bin/awk -F'\t' -v cutoff="$cutoff" 'substr($1, 1, 10) >= cutoff' "$LOG" > "$LOG.tmp" && /bin/mv "$LOG.tmp" "$LOG"
 
-# Per day: minutes used, first and last minute, and minutes per app. A minute logged twice counts once.
+# Per day: minutes used, first and last minute, minutes per app, and when it was in use ("spans": minutes
+# from midnight as start-end, the end not included). A minute logged twice counts once.
 /usr/bin/awk -F'\t' -v updated="$(/bin/date +%s)000" '
 function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
 !seen[$1]++ {
@@ -43,12 +44,19 @@ function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
     if (!(d in first) || t < first[d]) first[d] = t
     if (t > last[d]) last[d] = t
     apps[d SUBSEP $2]++
+    mm = substr(t, 1, 2) * 60 + substr(t, 4, 2)
+    if ((d in se) && se[d] == mm) se[d] = mm + 1
+    else {
+        if (d in se) spans[d] = spans[d] (spans[d] == "" ? "" : ",") ss[d] "-" se[d]
+        ss[d] = mm; se[d] = mm + 1
+    }
 }
 END {
     printf "{\"device\":\"Mac\",\"updated\":%s,\"days\":{", updated
     n = 0
     for (d in minutes) {
-        printf "%s\"%s\":{\"minutes\":%d,\"first\":\"%s\",\"last\":\"%s\",\"apps\":{", (n++ ? "," : ""), d, minutes[d], first[d], last[d]
+        all = spans[d] (spans[d] == "" ? "" : ",") ss[d] "-" se[d]
+        printf "%s\"%s\":{\"minutes\":%d,\"first\":\"%s\",\"last\":\"%s\",\"spans\":\"%s\",\"apps\":{", (n++ ? "," : ""), d, minutes[d], first[d], last[d], all
         m = 0
         for (k in apps) {
             split(k, parts, SUBSEP)

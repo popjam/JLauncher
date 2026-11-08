@@ -504,7 +504,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val data = moodStore.load()
         val date = next.date
         moodPromptDate = date
-        MoodPrompt.bind(binding.moodPrompt.root, data, data.days[date.toString()], yesterday = date < now.toLocalDate()) { faces, note ->
+        MoodPrompt.bind(binding.moodPrompt.root, data, data.days[date.toString()], yesterday = date < now.toLocalDate(),
+            onVoice = { addText -> recordVoiceNote(date, onText = { text -> if (_binding != null) addText(text) }) }) { faces, note ->
             moodStore.answerPrompt(date, faces, note)
             binding.moodPrompt.root.visibility = View.GONE
             moodPromptDate = null

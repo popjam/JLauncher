@@ -360,6 +360,24 @@ class StatPageFragment : CardPageFragment() {
         null -> 5f
     }
 
+    /**
+     * The top of the Trend's axis for real amounts, just above [highest]: whole hours (even past 4), or
+     * four steps of a round amount of money.
+     */
+    internal fun trendMax(highest: Float?): Float {
+        val top = (highest ?: 0f) * 1.08f
+        return when (unit) {
+            Measure.HOURS -> if (top <= 4f) maxOf(1f, ceil(top)) else ceil(top / 2) * 2
+            Measure.DOLLARS -> {
+                val step = maxOf(top / 4, 1f)
+                val power = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(step.toDouble()))).toFloat()
+                val nice = (if (power < 10f) listOf(1f, 2f, 5f, 10f) else listOf(1f, 2f, 2.5f, 5f, 10f)).first { it * power >= step - 0.001f } * power
+                nice * 4
+            }
+            null -> 5f
+        }
+    }
+
     /** Lines across an axis up to [max], each with its label */
     internal fun axisTicks(max: Float): List<Pair<Float, String>> = when (unit) {
         Measure.HOURS -> (0..max.toInt() step if (max <= 4f) 1 else 2).map { it.toFloat() to getString(R.string.hours_short, it) }
@@ -672,7 +690,8 @@ class StatPageFragment : CardPageFragment() {
                 else -> averages(stat, keyOf)
             }
             val taken = if (stat.medicine) takenCounts(keyOf) else emptyMap()
-            val max = if (unit != null) axisMax(values.values.maxOrNull()) else 5f
+            // Real amounts fit the highest point, so the line uses the card's height however small they are
+            val max = if (unit != null) trendMax(values.values.maxOrNull()) else 5f
             val low = if (unit != null) 0f else 1f
             fun fraction(value: Float) = (value - low) / (max - low)
             val ticks: List<Pair<Float, String>> = when {
@@ -920,7 +939,7 @@ class StatPageFragment : CardPageFragment() {
         // From the day weeks start on
         val order = (0 until 7).map { app.olauncher.helper.Week.first.plus(it.toLong()) }
         val averages = order.map { day -> byDay.getValue(day).takeIf { it.isNotEmpty() }?.average()?.toFloat() }
-        val max = axisMax(averages.filterNotNull().maxOrNull())
+        val max = if (unit != null) trendMax(averages.filterNotNull().maxOrNull()) else axisMax(null)
         card.draw { s ->
             val column = s.width / 7
             val top = s.dp(18f)
@@ -931,7 +950,8 @@ class StatPageFragment : CardPageFragment() {
                 if (average == null) s.rect(x, bottom - s.dp(2f), x + barWidth, bottom, faint(45), s.dp(1f))
                 else {
                     val barTop = bottom - minOf(average, max) / max * (bottom - top)
-                    s.rect(x, barTop, x + barWidth, bottom, colorFor(stat, average) ?: faint(70), s.dp(6f))
+                    // Real amounts in the stat's own colour: their categories are only for Over time
+                    s.rect(x, barTop, x + barWidth, bottom, (if (unit != null) stat.themeColor else colorFor(stat, average)) ?: faint(70), s.dp(6f))
                     val label = when (unit) {
                         Measure.DOLLARS -> "$" + average.roundToInt()
                         Measure.HOURS -> String.format(Locale.getDefault(), "%.1fh", average)
@@ -1113,5 +1133,6 @@ class StatPageFragment : CardPageFragment() {
         internal var appsSpan = 0
         internal var trendPeriod = 0
         internal var overTimeSpan = 1
+        internal var vibeProjectsSpan = 0
     }
 }

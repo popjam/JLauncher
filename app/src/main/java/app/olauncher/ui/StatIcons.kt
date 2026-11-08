@@ -508,6 +508,19 @@ object StatIcons {
         ".XX........",
         "...........",
     )
+    val MIC = icon(
+        "....XXX....",
+        "...XXXXX...",
+        "...XXXXX...",
+        "...XXXXX...",
+        ".X.XXXXX.X.",
+        ".X.XXXXX.X.",
+        ".X..XXX..X.",
+        "..X.....X..",
+        "...XXXXX...",
+        ".....X.....",
+        "...XXXXX...",
+    )
     val DIAMOND = icon(
         "...........",
         "...........",

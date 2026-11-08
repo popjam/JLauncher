@@ -16,7 +16,8 @@ import java.time.ZoneId
  */
 object PhoneHabits {
 
-    class Day(val pickups: Int, val doomMs: Long, val doomSessions: Int, val doomApp: String?)
+    /** [spans]: when the screen was on, in minutes from midnight ([ScreenSpans]) */
+    class Day(val pickups: Int, val doomMs: Long, val doomSessions: Int, val doomApp: String?, val spans: List<IntRange> = emptyList())
 
     fun days(context: Context): Map<LocalDate, Day> = synchronized(LOCK) {
         val json = prefs(context).getString(KEY, null) ?: return emptyMap()
@@ -24,7 +25,8 @@ object PhoneHabits {
         return days.keys().asSequence().mapNotNull { key ->
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@mapNotNull null
             val day = days.getJSONObject(key)
-            date to Day(day.getInt("pickups"), day.getLong("doomMs"), day.optInt("doomSessions"), day.optString("doomApp").ifEmpty { null })
+            date to Day(day.getInt("pickups"), day.getLong("doomMs"), day.optInt("doomSessions"), day.optString("doomApp").ifEmpty { null },
+                ScreenSpans.decode(day.optString("spans")))
         }.toMap()
     }
 
@@ -60,6 +62,10 @@ object PhoneHabits {
         var pickups = 0
         var screenOns = 0
         var sawAny = false
+        // When the screen was on: since when (or -1 while off), and the stretches so far
+        var onSince = -1L
+        var sawScreen = false
+        val onTimes = mutableListOf<Pair<Long, Long>>()
         // The feed app in front and since when, and the last stretch so a quick switch away carries on
         var app: String? = null
         var since = 0L
@@ -88,7 +94,11 @@ object PhoneHabits {
             sawAny = true
             when (event.eventType) {
                 UsageEvents.Event.KEYGUARD_HIDDEN -> pickups++
-                UsageEvents.Event.SCREEN_INTERACTIVE -> screenOns++
+                UsageEvents.Event.SCREEN_INTERACTIVE -> {
+                    screenOns++
+                    if (onSince < 0) onSince = event.timeStamp
+                    sawScreen = true
+                }
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
                     if (event.packageName != app) {
                         close(event.timeStamp)
@@ -99,15 +109,23 @@ object PhoneHabits {
                     }
                 }
                 UsageEvents.Event.ACTIVITY_PAUSED -> if (event.packageName == app) close(event.timeStamp)
-                UsageEvents.Event.SCREEN_NON_INTERACTIVE -> close(event.timeStamp)
+                UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
+                    close(event.timeStamp)
+                    // On since before the day began
+                    if (onSince < 0 && !sawScreen) onSince = start
+                    if (onSince >= 0) onTimes.add(onSince - start to event.timeStamp - start)
+                    onSince = -1L
+                    sawScreen = true
+                }
             }
         }
         if (!sawAny) return null
         close(end)
+        if (onSince >= 0) onTimes.add(onSince - start to end - start)
         val doom = stretches.filter { it.third - it.second >= DOOM_MS }
         val doomApp = doom.groupBy { it.first }.maxByOrNull { (_, s) -> s.sumOf { it.third - it.second } }?.key?.let { label(context, it) }
         // Without a lock screen there are no unlocks, so the screen coming on counts instead
-        return Day(if (pickups > 0) pickups else screenOns, doom.sumOf { it.third - it.second }, doom.size, doomApp)
+        return Day(if (pickups > 0) pickups else screenOns, doom.sumOf { it.third - it.second }, doom.size, doomApp, ScreenSpans.fromMs(onTimes))
     }
 
     private fun isFeedApp(context: Context, pkg: String): Boolean {
@@ -126,7 +144,7 @@ object PhoneHabits {
         val json = JSONObject()
         days.forEach { (date, day) ->
             json.put(date.toString(), JSONObject().put("pickups", day.pickups).put("doomMs", day.doomMs)
-                .put("doomSessions", day.doomSessions).put("doomApp", day.doomApp ?: ""))
+                .put("doomSessions", day.doomSessions).put("doomApp", day.doomApp ?: "").put("spans", ScreenSpans.encode(day.spans)))
         }
         prefs(context).edit().putString(KEY, json.toString()).apply()
     }

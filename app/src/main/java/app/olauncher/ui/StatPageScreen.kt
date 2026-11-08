@@ -9,6 +9,7 @@ import app.olauncher.R
 import app.olauncher.helper.DeviceTime
 import app.olauncher.helper.PhoneApps
 import app.olauncher.helper.PhoneHabits
+import app.olauncher.helper.ScreenSpans
 import app.olauncher.helper.Steps
 import app.olauncher.ui.CardPageFragment.Card
 import app.olauncher.ui.StatPageFragment.Companion.APPS_SHOWN
@@ -130,56 +131,84 @@ internal fun StatPageFragment.sourceMs(date: LocalDate, key: String): Long =
 internal fun StatPageFragment.screenDayText(date: LocalDate) = (listOf(dateText(date), getString(R.string.stat_label, getString(R.string.total), duration(sources.sumOf { sourceMs(date, it.key) })))
     + sources.filter { sourceMs(date, it.key) > 0 }.map { getString(R.string.stat_label, it.name, duration(sourceMs(date, it.key))) }).joinToString("\n")
 
+/** When each screen was in use on [date], by source key, as far as it's known */
+internal fun StatPageFragment.screenSpans(date: LocalDate, phone: Map<LocalDate, PhoneHabits.Day>, others: Map<DeviceTime.Device, Map<LocalDate, DeviceTime.Day>>): Map<String, List<IntRange>> =
+    (listOf(PHONE to phone[date]?.spans.orEmpty()) + others.map { (device, days) -> device.key to days[date]?.spans.orEmpty() })
+        .filter { it.second.isNotEmpty() }.toMap()
+
+/** A tapped stretch on the screens timeline */
+internal data class ScreenStretch(val date: LocalDate, val segment: ScreenSpans.Segment)
+
 /**
- * A bar a day of all screen time, stacked phone, Mac and TV in shades of one colour, against an hours
- * axis. Tapping one gives the day's total and how it split.
+ * The last [HABIT_DAYS] days as a line each through the day, coloured where a screen was in use and
+ * darker where more than one was at once. Tapping a stretch says when and which screens; tapping
+ * the rest of a day gives its totals.
  */
 internal fun StatPageFragment.screenDailyCard() {
-    val card = Card(getString(R.string.stat_daily))
-    sources.forEach { card.keyItem(it.color, it.name, icon = it.icon) }
-    fun draw() {
-        val days = dailyDates(card, redraw = ::draw)
-        val totals = days.map { date -> sources.sumOf { sourceMs(date, it.key) } / HOUR_MS }
-        val max = axisMax(totals.maxOrNull())
-        card.describe = { key -> screenDayText(key as LocalDate) }
-        card.draw { s ->
-            // The hours in a column of their own on the right, clear of the bars
-            val labelSize = s.sp(11f)
-            val width = s.width - s.textWidth("88h", labelSize) - s.dp(8f)
-            val column = width / days.size
-            val top = s.dp(8f)
-            val bottom = top + s.dp(130f)
-            fun y(value: Float) = bottom - minOf(value, max) / max * (bottom - top)
-            axisTicks(max).drop(1).forEach { (v, label) ->
-                s.line(0f, y(v), width, y(v), faint(30), s.dp(1f))
-                s.text(label, s.width, y(v) + labelSize * 0.35f, faint(130), labelSize, Paint.Align.RIGHT)
-            }
-            val gap = minOf(s.dp(1.5f), column * 0.15f)
-            val corner = minOf(s.dp(4f), column / 4)
-            days.forEachIndexed { i, date ->
-                val x = i * column
-                var base = bottom
-                // Phone at the bottom; only the top piece gets the rounded corners
-                val pieces = sources.map { it to sourceMs(date, it.key) / HOUR_MS }.filter { it.second > 0f }
-                if (pieces.isEmpty()) s.rect(x + gap, bottom - s.dp(2f), x + column - gap, bottom, faint(45), s.dp(1f))
-                pieces.forEachIndexed { k, (source, hours) ->
-                    val h = minOf(hours, max) / max * (bottom - top)
-                    s.rect(x + gap, base - h, x + column - gap, base, source.color, if (k == pieces.lastIndex) corner else 0f)
-                    if (k < pieces.lastIndex) s.rect(x + gap, base - h, x + column - gap, base - h + corner, source.color)
-                    base -= h
-                }
-            }
-            labelIndices(days.size, 3).forEach { i ->
-                s.text(days[i].dayOfMonth.toString(), i * column + column / 2, bottom + s.dp(18f), faint(140), s.sp(12f))
-            }
-            s.height = bottom + s.dp(24f)
-            days.forEachIndexed { i, date ->
-                val x = i * column
-                s.target(date, RectF(x, 0f, x + column, s.height), RectF(x, 0f, x + column, bottom + s.dp(2f)), corner)
-            }
+    val context = requireContext()
+    val phone = PhoneHabits.days(context)
+    val others = DeviceTime.Device.values().associateWith { DeviceTime.days(context, it) }
+    val today = LocalDate.now()
+    val byDay = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
+        .associateWith { screenSpans(it, phone, others) }.filterValues { it.isNotEmpty() }
+    val card = Card(getString(R.string.screen_when_on))
+    if (byDay.isEmpty()) return card.showNote(getString(R.string.screen_when_on_none))
+    card.subtitle(getString(R.string.last_days, HABIT_DAYS))
+    val one = ColorUtils.setAlphaComponent(stat.color, 150)
+    val two = stat.color
+    val more = ColorUtils.blendARGB(stat.color, 0xFF000000.toInt(), 0.45f)
+    fun colorOf(segment: ScreenSpans.Segment) = when (segment.devices.size) {
+        1 -> one
+        2 -> two
+        else -> more
+    }
+    card.keyItem(one, getString(R.string.screen_one_screen))
+    card.keyItem(two, getString(R.string.screen_two_screens))
+    if (byDay.values.any { day -> ScreenSpans.segments(day).any { it.devices.size > 2 } }) card.keyItem(more, getString(R.string.screen_three_screens))
+    val names = sources.associate { it.key to it.name }
+    card.describe = { key ->
+        when (key) {
+            is ScreenStretch -> listOf(
+                dateText(key.date) + " · " + getString(R.string.sleep_span, offsetClock(key.segment.start), offsetClock(key.segment.end)),
+                getString(R.string.stat_label, getString(R.string.time), duration((key.segment.end - key.segment.start) * 60_000L)),
+            ).plus(sources.filter { it.key in key.segment.devices }.map { getString(R.string.stat_label, getString(R.string.device), it.name) })
+                .joinToString("\n")
+            else -> screenDayText(key as LocalDate)
         }
     }
-    draw()
+    card.statOf = { null }
+    card.draw { s ->
+        val labelSize = s.sp(12f)
+        val left = s.textWidth("Wed 30", labelSize) + s.dp(10f)
+        val row = s.dp(26f)
+        val bar = s.dp(12f)
+        var top = s.dp(16f)
+        fun x(minute: Int) = left + minute / ScreenSpans.DAY.toFloat() * (s.width - left)
+        listOf(0, 6, 12, 18, 24).forEach { h ->
+            s.text(if (h == 24) "" else offsetClock(h * 60).replace(":00", ""), x(h * 60), s.sp(11f), faint(130), s.sp(11f),
+                if (h == 0) Paint.Align.LEFT else Paint.Align.CENTER)
+        }
+        val dayTargets = mutableListOf<Pair<LocalDate, RectF>>()
+        byDay.keys.sortedDescending().forEach { date ->
+            val mid = top + row / 2
+            s.text(date.format(DateTimeFormatter.ofPattern("EEE d", Locale.getDefault())), 0f, mid + labelSize * 0.35f, faint(170), labelSize, Paint.Align.LEFT)
+            s.rect(left, mid - bar / 2, s.width, mid + bar / 2, faint(14), bar / 2)
+            ScreenSpans.segments(byDay.getValue(date)).forEach { segment ->
+                val x1 = x(segment.start)
+                val x2 = maxOf(x(segment.end), x1 + s.dp(2f))
+                s.rect(x1, mid - bar / 2, x2, mid + bar / 2, colorOf(segment), s.dp(2f))
+                // At least a finger's width to tap, centred on the stretch
+                val reach = maxOf(0f, s.dp(14f) - (x2 - x1)) / 2
+                s.target(ScreenStretch(date, segment), RectF(x1 - reach, top, x2 + reach, top + row),
+                    RectF(x1 - s.dp(2f), mid - bar / 2 - s.dp(3f), x2 + s.dp(2f), mid + bar / 2 + s.dp(3f)), s.dp(4f))
+            }
+            dayTargets.add(date to RectF(0f, top, s.width, top + row))
+            top += row
+        }
+        // After the stretches, so a stretch is found first
+        dayTargets.forEach { (date, area) -> s.target(date, area) }
+        s.height = top
+    }
 }
 
 /** Today's screen time in big text, and a ring split between the devices, each with its icon. */

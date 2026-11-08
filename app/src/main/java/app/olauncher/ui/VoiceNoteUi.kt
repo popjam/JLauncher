@@ -165,3 +165,26 @@ internal fun Fragment.voiceRows(card: CardPageFragment.Card, date: LocalDate, on
     }
     return list
 }
+
+/** A small "Voice note" button with a mic, for under a note box, doing [onTap] */
+internal fun Fragment.voiceButton(ink: Int, onTap: () -> Unit): TextView = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
+    setText(R.string.voice_note_button)
+    textSize = 13f
+    setTextColor(ink)
+    gravity = Gravity.CENTER_VERTICAL
+    setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.MIC, ink, 14.dpToPx()), null, null, null)
+    compoundDrawablePadding = 6.dpToPx()
+    background = android.graphics.drawable.GradientDrawable().apply {
+        cornerRadius = 14.dpToPx().toFloat()
+        setStroke(1.dpToPx(), androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 70))
+    }
+    setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+    setOnClickListener { onTap() }
+}
+
+/** [button] on the right, in its own row, for under a note box */
+internal fun Fragment.endRow(button: android.view.View): LinearLayout = LinearLayout(requireContext()).apply {
+    orientation = LinearLayout.HORIZONTAL
+    gravity = Gravity.END
+    addView(button)
+}

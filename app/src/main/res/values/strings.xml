@@ -711,7 +711,7 @@
         <item quantity="one">%d to name</item>
         <item quantity="other">%d to name</item>
     </plurals>
-    <string name="voice_allow_mic">Allow the microphone, then hold the note again</string>
+    <string name="voice_allow_mic">Allow the microphone, then try the voice note again</string>
     <string name="voice_cant_record">Couldn’t start recording</string>
     <string name="voice_recording">Recording</string>
     <string name="voice_done">Done</string>
@@ -1138,4 +1138,17 @@
     <string name="fortnightly">Fortnightly</string>
     <string name="monthly">Monthly</string>
     <string name="yearly">Yearly</string>
+
+    <!-- Screen time's timeline -->
+    <string name="screen_when_on">When you were on screens</string>
+    <string name="screen_when_on_none">Shows when your screens were on through each day, once there’s a day of it.</string>
+    <string name="screen_one_screen">One screen</string>
+    <string name="screen_two_screens">Two at once</string>
+    <string name="screen_three_screens">Three at once</string>
+
+    <!-- Settings search, and a voice note from the check-in -->
+    <string name="settings_search_hint">Search settings</string>
+    <string name="settings_search_none">No settings match “%1$s”</string>
+    <string name="voice_note_button">Voice note</string>
+    <string name="google_drive">Google Drive</string>
 </resources>

@@ -371,13 +371,7 @@ class StatsHomeFragment : CardPageFragment() {
             // Holding it while not typing records a voice note, written into the note
             setOnLongClickListener {
                 if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
-                val date = selectedDate
-                recordVoiceNote(date, onText = { text ->
-                    val now = store.load().days[date.toString()]?.note.orEmpty().trim()
-                    val note = if (now.isEmpty()) text else now + "\n" + text
-                    store.setNote(date, note)
-                    if (noteDate == date) noteInput?.setText(note)
-                })
+                recordInto(selectedDate)
                 true
             }
         }
@@ -385,6 +379,20 @@ class StatsHomeFragment : CardPageFragment() {
         noteDate = selectedDate
         container.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 10.dpToPx()
+        })
+        container.addView(endRow(voiceButton(ink) { recordInto(selectedDate) }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 8.dpToPx()
+        })
+    }
+
+    /** Records a voice note for [date], its words added to that day's note */
+    private fun recordInto(date: LocalDate) {
+        saveNote()
+        recordVoiceNote(date, onText = { text ->
+            val now = store.load().days[date.toString()]?.note.orEmpty().trim()
+            val note = if (now.isEmpty()) text else now + "\n" + text
+            store.setNote(date, note)
+            if (noteDate == date) noteInput?.setText(note)
         })
     }
 

@@ -194,13 +194,17 @@ class SettingsFragment : CardPageFragment() {
             orientation = LinearLayout.VERTICAL
             updatePadding(top = 48.dpToPx())
             addView(pageHeader(context, StatIcons.GEAR, getString(R.string.settings)) { findNavController().popBackStack() })
+            addView(searchBox(context), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(12.dpToPx(), 0, 12.dpToPx(), 10.dpToPx())
+            })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 setText(R.string.settings_hold_hint)
                 textSize = 13f
                 setTextColor(context.getColorFromAttr(R.attr.primaryColor))
                 alpha = 0.45f
-                setPadding(28.dpToPx(), 0, 28.dpToPx(), 12.dpToPx())
+                setPadding(28.dpToPx(), 0, 28.dpToPx(), 4.dpToPx())
             })
+            addView(noMatches)
             addView(cardList)
         }
         val page = FrameLayout(context).apply {
@@ -239,6 +243,7 @@ class SettingsFragment : CardPageFragment() {
 
     private fun render() {
         if (!isAdded) return
+        sections.clear()
         toTracking = toTracking || arguments?.getBoolean(TO_TRACKING) == true
         arguments?.remove(TO_TRACKING)
         cardList.removeAllViews()
@@ -251,6 +256,77 @@ class SettingsFragment : CardPageFragment() {
         lockdownSection()
         backupSection()
         aboutSection()
+        applySearch()
+    }
+
+    // --- Search ---
+
+    /** Each section's card, its title, and its rows with the words each is found by */
+    private class Section(val root: View, val title: String, val rows: List<Pair<View, String>>)
+    private val sections = mutableListOf<Section>()
+    private var query = ""
+    private val searchText = java.util.WeakHashMap<View, String>()
+    private val noMatches by lazy {
+        TextView(requireContext(), null, 0, R.style.TextSmall).apply {
+            textSize = 14f
+            setTextColor(ink)
+            alpha = 0.55f
+            gravity = Gravity.CENTER
+            setPadding(28.dpToPx(), 32.dpToPx(), 28.dpToPx(), 0)
+            visibility = View.GONE
+        }
+    }
+
+    private fun searchBox(context: Context) = EditText(context, null, 0, R.style.TextSmall).apply {
+        hint = getString(R.string.settings_search_hint)
+        textSize = 15f
+        setTextColor(ink)
+        setHintTextColor(faint(110))
+        isSingleLine = true
+        imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_FILTER
+        background = GradientDrawable().apply {
+            cornerRadius = 22.dpToPx().toFloat()
+            setColor(faint(18))
+        }
+        setPadding(18.dpToPx(), 11.dpToPx(), 18.dpToPx(), 11.dpToPx())
+        setText(query)
+        addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                query = s?.toString().orEmpty()
+                applySearch()
+            }
+        })
+        setOnEditorActionListener { view, _, _ ->
+            view.clearFocus()
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(view.windowToken, 0)
+            true
+        }
+    }
+
+    /**
+     * Shows only the settings matching the search: by their name, what holding them says, or their
+     * section's name (which shows the whole section). A match under another setting keeps its line.
+     */
+    private fun applySearch() {
+        val words = query.trim().lowercase(Locale.getDefault()).split(Regex("\\s+")).filter { it.isNotEmpty() }
+        fun matches(text: String) = text.lowercase(Locale.getDefault()).let { t -> words.all { it in t } }
+        var any = false
+        sections.forEach { section ->
+            val whole = words.isEmpty() || matches(section.title)
+            var shown = 0
+            section.rows.forEach { (view, text) ->
+                val show = whole || matches(text)
+                view.visibility = if (show) View.VISIBLE else View.GONE
+                if (show) shown++
+            }
+            section.root.visibility = if (shown > 0) View.VISIBLE else View.GONE
+            if (shown > 0) any = true
+        }
+        noMatches.visibility = if (any || words.isEmpty()) View.GONE else View.VISIBLE
+        if (!any && words.isNotEmpty()) noMatches.text = getString(R.string.settings_search_none, query.trim())
     }
 
     private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
@@ -264,26 +340,37 @@ class SettingsFragment : CardPageFragment() {
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding((4 + level * 20).dpToPx(), 11.dpToPx(), 4.dpToPx(), 11.dpToPx())
+            setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
             setBackgroundResource(android.R.drawable.list_selector_background)
             if (onTap != null) setOnClickListener { onTap() }
             setOnLongClickListener {
                 explain(this, title, getString(about))
                 true
             }
-            addView(card.textView(if (level == 0) 15.5f else 14.5f, if (level == 0) 245 else 215).apply {
+            // A line down the left for each level it's under, joining it to the setting it belongs to
+            for (l in 1..level) addView(View(context).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = 1.dpToPx().toFloat()
+                    setColor(faint(70))
+                }
+            }, LinearLayout.LayoutParams(2.dpToPx(), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                marginStart = if (l == 1) 6.dpToPx() else 12.dpToPx()
+                if (l == level) marginEnd = 12.dpToPx()
+            })
+            addView(card.textView(if (level == 0) 15.5f else 14.5f, if (level == 0) 245 else 200).apply {
                 text = title
-                if (level > 0) setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, null, null)
+                setPadding(0, 11.dpToPx(), 0, 11.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (value != null) addView(card.textView(14f, 150).apply {
                 text = value
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 gravity = Gravity.END
+                // Never so long it squeezes the setting's name
+                maxWidth = (resources.displayMetrics.widthPixels * 0.4f).toInt()
                 updatePadding(left = 12.dpToPx())
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                width = ViewGroup.LayoutParams.WRAP_CONTENT
-            })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            searchText[this] = title + "\n" + getString(about)
         }
     }
 
@@ -325,9 +412,24 @@ class SettingsFragment : CardPageFragment() {
 
     private fun Card.body(vararg rows: View?) {
         scene.visibility = View.GONE
+        // The section's name in small spaced capitals, so it reads as a heading over its settings rather than one of them
+        titleView.textSize = 12.5f
+        titleView.isAllCaps = true
+        titleView.letterSpacing = 0.12f
+        titleView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
+        titleView.setTextColor(faint(140))
         val list = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL }
-        rows.filterNotNull().forEach { list.addView(it) }
+        val shown = rows.filterNotNull()
+        shown.forEach { list.addView(it) }
         root.addView(list, root.indexOfChild(scene))
+        sections.add(Section(root, titleView.text.toString(), shown.map { it to (searchText[it] ?: rowText(it)) }))
+    }
+
+    /** The words in a row made some other way than [row], like Tracking's status lines */
+    private fun rowText(view: View): String = when (view) {
+        is TextView -> view.text.toString()
+        is ViewGroup -> (0 until view.childCount).joinToString(" ") { rowText(view.getChildAt(it)) }
+        else -> ""
     }
 
     private fun choose(title: Int, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
@@ -1144,9 +1246,37 @@ class SettingsFragment : CardPageFragment() {
         pickBackupFolder.launch(null)
     }
 
-    private fun folderName(treeUri: String): String = runCatching {
-        DocumentsContract.getTreeDocumentId(Uri.parse(treeUri)).substringAfter(':').substringAfterLast('/')
-    }.getOrNull()?.ifEmpty { null } ?: getString(R.string.on)
+    /**
+     * The backup folder's name as its app gives it, looked up once off the main thread and kept. Until
+     * then, or if it can't be, a guess from the link: Google Drive's ids are codes, not names.
+     */
+    private fun folderName(treeUri: String): String {
+        val context = requireContext()
+        val names = context.getSharedPreferences("settings_ui", Context.MODE_PRIVATE)
+        names.getString("folderName:" + treeUri, null)?.let { return it }
+        if (lookingUpFolder != treeUri) {
+            lookingUpFolder = treeUri
+            val app = context.applicationContext
+            Thread {
+                val name = runCatching {
+                    val uri = Uri.parse(treeUri)
+                    val doc = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
+                    app.contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+                        ?.use { if (it.moveToFirst()) it.getString(0) else null }
+                }.getOrNull()?.takeIf { it.isNotBlank() }
+                if (name != null) {
+                    names.edit().putString("folderName:" + treeUri, name).apply()
+                    main.post { if (isAdded) render() }
+                }
+            }.start()
+        }
+        val uri = Uri.parse(treeUri)
+        if (uri.authority.orEmpty().contains("google")) return getString(R.string.google_drive)
+        return runCatching { DocumentsContract.getTreeDocumentId(uri).substringAfter(':').substringAfterLast('/') }.getOrNull()
+            ?.takeIf { it.isNotEmpty() && '=' !in it && ';' !in it } ?: getString(R.string.on)
+    }
+
+    private var lookingUpFolder: String? = null
 
     /** Replaces everything with a backup. Needs the lockdown password, since it could loosen lockdown. */
     private fun restoreBackup(backup: JSONObject, afterRestore: () -> Unit = {}) {

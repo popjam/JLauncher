@@ -64,51 +64,67 @@ internal fun StatPageFragment.vibeTodayCard(days: Map<LocalDate, Vibecoding.Day>
     ))
 }
 
-/** Time and prompts per project over the last [VIBE_DAYS] days. */
+/** Time and prompts per project over the past week, month or year. */
 internal fun StatPageFragment.vibeProjectsCard(days: Map<LocalDate, Vibecoding.Day>) {
+    if (days.values.none { it.projects.isNotEmpty() }) return
     val context = requireContext()
     val today = LocalDate.now()
-    val recent = days.filterKeys { it > today.minusDays(VIBE_DAYS.toLong()) }.values
-    val projects = recent.flatMap { it.projects.entries }.groupBy({ it.key }, { it.value })
-        .mapValues { (_, p) -> Vibecoding.Project(p.sumOf { it.minutes }, p.sumOf { it.prompts }) }
-        .entries.sortedByDescending { it.value.minutes }.take(VIBE_PROJECTS)
-    if (projects.isEmpty()) return
     val card = Card(getString(R.string.vibe_projects))
-    card.subtitle(getString(R.string.last_days, VIBE_DAYS))
     card.scene.isVisible = false
-    val most = projects.first().value.minutes.coerceAtLeast(1).toFloat()
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    projects.forEach { (name, project) ->
-        list.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(card.textView(14f, 255).apply {
-                    text = name
-                    isSingleLine = true
-                    ellipsize = TextUtils.TruncateAt.END
-                })
-                addView(card.textView(12f, 140).apply {
-                    text = resources.getQuantityString(R.plurals.vibe_prompts, project.prompts, project.prompts)
-                })
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(View(context).apply {
-                background = GradientDrawable().apply {
-                    cornerRadius = 3.dpToPx().toFloat()
-                    setColor(stat.color)
-                }
-            }, LinearLayout.LayoutParams((80.dpToPx() * project.minutes / most).toInt().coerceAtLeast(3.dpToPx()), 6.dpToPx()).apply {
-                marginStart = 10.dpToPx()
-            })
-            addView(card.textView(13f, 150).apply {
-                text = duration(project.minutes * 60_000L)
-                gravity = Gravity.END
-            }, LinearLayout.LayoutParams(64.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-        })
-    }
     card.root.addView(list, card.root.indexOfChild(card.scene))
+    val spans = listOf(7L, 30L, 365L)
+    fun draw() {
+        card.segment(listOf(R.string.trend_weeks, R.string.trend_months, R.string.trend_years), StatPageFragment.vibeProjectsSpan) {
+            StatPageFragment.vibeProjectsSpan = it
+            draw()
+        }
+        list.removeAllViews()
+        val recent = days.filterKeys { it > today.minusDays(spans[StatPageFragment.vibeProjectsSpan]) }.values
+        val projects = recent.flatMap { it.projects.entries }.groupBy({ it.key }, { it.value })
+            .mapValues { (_, p) -> Vibecoding.Project(p.sumOf { it.minutes }, p.sumOf { it.prompts }) }
+            .entries.sortedByDescending { it.value.minutes }.take(VIBE_PROJECTS)
+        if (projects.isEmpty()) {
+            list.addView(card.textView(13f, 150).apply {
+                setText(R.string.no_data)
+                gravity = Gravity.CENTER
+                updatePadding(top = 16.dpToPx(), bottom = 16.dpToPx())
+            })
+            return
+        }
+        val most = projects.first().value.minutes.coerceAtLeast(1).toFloat()
+        projects.forEach { (name, project) ->
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(card.textView(14f, 255).apply {
+                        text = name
+                        isSingleLine = true
+                        ellipsize = TextUtils.TruncateAt.END
+                    })
+                    addView(card.textView(12f, 140).apply {
+                        text = resources.getQuantityString(R.plurals.vibe_prompts, project.prompts, project.prompts)
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(View(context).apply {
+                    background = GradientDrawable().apply {
+                        cornerRadius = 3.dpToPx().toFloat()
+                        setColor(stat.color)
+                    }
+                }, LinearLayout.LayoutParams((80.dpToPx() * project.minutes / most).toInt().coerceAtLeast(3.dpToPx()), 6.dpToPx()).apply {
+                    marginStart = 10.dpToPx()
+                })
+                addView(card.textView(13f, 150).apply {
+                    text = duration(project.minutes * 60_000L)
+                    gravity = Gravity.END
+                }, LinearLayout.LayoutParams(64.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
+            })
+        }
+    }
+    draw()
 }
 
 /** Time by hour of the day over the last [VIBE_DAYS] days, late at night standing out. */

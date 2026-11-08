@@ -220,6 +220,12 @@ class DayPageFragment : CardPageFragment() {
         card.root.addView(noteInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 14.dpToPx()
         })
+        card.root.addView(endRow(voiceButton(ink) {
+            saveNote()
+            recordVoiceNote(date, onText = { text -> addToNote(text) }, onSaved = { if (isAdded) render() })
+        }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 8.dpToPx()
+        })
         voiceRows(card, date, onText = { text -> addToNote(text) }) { if (isAdded) render() }?.let { rows ->
             card.root.addView(rows, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = 6.dpToPx()

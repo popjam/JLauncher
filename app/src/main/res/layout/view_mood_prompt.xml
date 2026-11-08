@@ -129,15 +129,40 @@
             android:orientation="horizontal"
             android:visibility="gone" />
 
-        <TextView
-            style="@style/TextSmall"
-            android:layout_width="wrap_content"
+        <!-- Thoughts, and a voice note to write them out instead -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:alpha="0.7"
-            android:text="@string/thoughts"
-            android:textColor="?attr/primaryColor"
-            android:textSize="14sp" />
+            android:layout_marginTop="14dp"
+            android:layout_marginEnd="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/TextSmall"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.7"
+                android:text="@string/thoughts"
+                android:textColor="?attr/primaryColor"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/moodPromptVoice"
+                style="@style/TextSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/rounded_box"
+                android:drawablePadding="6dp"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="6dp"
+                android:text="@string/voice_note_button"
+                android:textColor="?attr/primaryColor"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <EditText
             android:id="@+id/moodPromptNote"

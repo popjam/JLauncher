@@ -13,7 +13,8 @@ import java.time.LocalDate
  * Screen time from other devices, each written to Google Drive as a file of days (minutes, first and
  * last use, minutes by app): the MacBook's by tools/mac-screen-time (minutes with the keyboard, mouse
  * or trackpad in use) and the TV's by tools/tv-time on the PC (minutes with its screen on). Read from
- * a folder picked in Drive, or the backup folder if none was. Each day's minutes go into Screen time,
+ * a folder picked in Drive, or the backup folder if none was. Each day also says when it was in use
+ * ("spans", see [ScreenSpans]), for Screen time's timeline. Each day's minutes go into Screen time,
  * added to the phone's; the days by app are kept here for its page.
  */
 object DeviceTime {
@@ -35,7 +36,8 @@ object DeviceTime {
         TV("JLauncher TV time.json", "tv", R.string.device_tv, 0xFFFF8A65.toInt(), "updatedTv"),
     }
 
-    class Day(val minutes: Int, val first: String?, val last: String?, val apps: Map<String, Int>)
+    /** [spans]: when it was in use, in minutes from midnight ([ScreenSpans]); empty from files written before they were */
+    class Day(val minutes: Int, val first: String?, val last: String?, val apps: Map<String, Int>, val spans: List<IntRange> = emptyList())
 
     fun folder(context: Context): String =
         prefs(context).getString(FOLDER_KEY, null)?.takeIf { it.isNotEmpty() } ?: BackupManager.backupFolder(context)
@@ -90,7 +92,8 @@ object DeviceTime {
             val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@mapNotNull null
             val day = days.getJSONObject(key)
             val apps = day.optJSONObject("apps")?.let { a -> a.keys().asSequence().associateWith { a.getInt(it) } }.orEmpty()
-            date to Day(day.getInt("minutes"), day.optString("first").ifEmpty { null }, day.optString("last").ifEmpty { null }, apps)
+            date to Day(day.getInt("minutes"), day.optString("first").ifEmpty { null }, day.optString("last").ifEmpty { null }, apps,
+                ScreenSpans.decode(day.optString("spans")))
         }.toMap()
     }
 
@@ -114,7 +117,7 @@ object DeviceTime {
             val apps = JSONObject()
             day.apps.forEach { (app, minutes) -> apps.put(app, minutes) }
             json.put(date.toString(), JSONObject().put("minutes", day.minutes).put("first", day.first ?: "")
-                .put("last", day.last ?: "").put("apps", apps))
+                .put("last", day.last ?: "").put("apps", apps).put("spans", ScreenSpans.encode(day.spans)))
         }
         prefs(context).edit().putString(device.key, JSONObject().put("days", json).toString()).apply()
     }

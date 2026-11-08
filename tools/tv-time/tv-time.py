@@ -3,7 +3,8 @@
 JLauncher TV time: once a minute, asks the Android TV over the network (adb, with Network debugging on)
 whether its screen is on and what's in front, and logs the minute if it is. The screensaver or
 ambient mode doesn't count. Every 5 minutes the last DAYS days are summed up into the same JSON
-shape as Mac screen time (minutes, first, last, apps), for JLauncher on the phone.
+shape as Mac screen time (minutes, first, last, apps, and spans: when it was on, as minutes from
+midnight "start-end", the end not included), for JLauncher on the phone.
 
     tv-time.py --tv 192.168.4.20 --out FILE
 """
@@ -114,11 +115,19 @@ def summarise(out_path):
             continue
         seen.add(stamp)
         date, clock = stamp[:10], stamp[11:16]
-        day = days.setdefault(date, {"minutes": 0, "first": clock, "last": clock, "apps": {}})
+        day = days.setdefault(date, {"minutes": 0, "first": clock, "last": clock, "apps": {}, "_spans": []})
         day["minutes"] += 1
         day["first"] = min(day["first"], clock)
         day["last"] = max(day["last"], clock)
         day["apps"][app] = day["apps"].get(app, 0) + 1
+        minute = int(clock[:2]) * 60 + int(clock[3:5])
+        spans = day["_spans"]
+        if spans and spans[-1][1] == minute:
+            spans[-1][1] = minute + 1
+        else:
+            spans.append([minute, minute + 1])
+    for day in days.values():
+        day["spans"] = ",".join("%d-%d" % (a, b) for a, b in day.pop("_spans"))
     out = {"device": "TV", "updated": int(time.time() * 1000), "days": days}
     with open(out_path + ".tmp", "w", encoding="utf-8") as f:
         json.dump(out, f, separators=(",", ":"))
