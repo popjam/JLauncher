@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -16,6 +17,7 @@ import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
+import app.olauncher.helper.Arrangement
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getColorFromAttr
@@ -30,8 +32,134 @@ import java.util.Locale
  */
 abstract class CardPageFragment : Fragment() {
 
+    private companion object {
+        const val HIDE_CARD = "hideCard"
+    }
+
     /** Where cards go, in order */
     internal abstract val cards: LinearLayout
+
+    // --- Moving cards: holding a card's title and dragging it to another place, or to Hide ---
+
+    /** Where this page's card order is kept in [Arrangement]; null when its cards don't move */
+    internal open val arrangeName: String? = null
+
+    /** The key a new card titled [title] is kept by: its title, numbered if the page has two */
+    internal open fun keyForCard(title: String): String? {
+        val same = (0 until cards.childCount).count { cardKeys[cards.getChildAt(it)]?.substringBefore('#') == title }
+        return if (same == 0) title else "$title#${same + 1}"
+    }
+
+    /** What a hidden card is called, to bring it back */
+    internal open fun cardLabel(key: String): String = key.substringBefore('#')
+
+    /** Hides the card kept as [key]; by default it's just kept hidden in [Arrangement] and taken off */
+    internal open fun hideCard(key: String, root: View) {
+        val name = arrangeName ?: return
+        val context = requireContext()
+        Arrangement.save(context, name, savedOrder(name), Arrangement.hidden(context, name) + key)
+        root.isVisible = false
+        hiddenFooter()
+    }
+
+    /** Brings back the hidden cards in [keys] */
+    internal open fun unhideCards(keys: Set<String>) {
+        val name = arrangeName ?: return
+        val context = requireContext()
+        Arrangement.save(context, name, savedOrder(name), Arrangement.hidden(context, name) - keys)
+        (0 until cards.childCount).map { cards.getChildAt(it) }.forEach { if (cardKeys[it] in keys) it.isVisible = true }
+        hiddenFooter()
+    }
+
+    /** The hidden cards this page could bring back */
+    internal open fun hiddenKeys(): List<String> {
+        val name = arrangeName ?: return emptyList()
+        val hidden = Arrangement.hidden(requireContext(), name)
+        return (0 until cards.childCount).mapNotNull { cardKeys[cards.getChildAt(it)] }.filter { it in hidden }
+    }
+
+    internal val cardKeys = java.util.WeakHashMap<android.view.View, String>()
+
+    /** The cards with keys, in their order now */
+    private fun keyedCards() = (0 until cards.childCount).map { cards.getChildAt(it) }.filter { cardKeys[it] != null }
+
+    /** What's saved for [name], with the page's cards as they are now put in it */
+    private fun savedOrder(name: String): List<String> {
+        val context = requireContext()
+        val old = prefsOrder(name)
+        val now = keyedCards().map { cardKeys.getValue(it) }
+        // Cards not on the page now keep their place among the others
+        return Arrangement.merge(old + now.filter { it !in old }, now)
+    }
+
+    private fun prefsOrder(name: String): List<String> =
+        requireContext().getSharedPreferences(Arrangement.PREFS, android.content.Context.MODE_PRIVATE).getString("$name.order", null)
+            ?.split(',')?.filter { it.isNotEmpty() }.orEmpty()
+
+    /**
+     * Puts the page's cards in their kept order and hides the hidden ones; call once they're all
+     * there. New cards turn up where they'd naturally be.
+     */
+    internal fun arrangeCards() {
+        val name = arrangeName ?: return
+        val context = requireContext()
+        val keyed = keyedCards()
+        if (keyed.isEmpty()) return
+        val byKey = keyed.associateBy { cardKeys.getValue(it) }
+        val order = Arrangement.merge(keyed.map { cardKeys.getValue(it) }, prefsOrder(name))
+        val hidden = Arrangement.hidden(context, name)
+        val places = keyed.map { cards.indexOfChild(it) }.sorted()
+        if (order != keyed.map { cardKeys.getValue(it) }) {
+            keyed.forEach { cards.removeView(it) }
+            order.forEachIndexed { i, key -> cards.addView(byKey.getValue(key), places[i]) }
+        }
+        keyed.forEach { it.isVisible = cardKeys[it] !in hidden }
+        hiddenFooter()
+    }
+
+    private var footer: TextView? = null
+
+    /** At the bottom, while any cards are hidden: how many, and tapping brings them back */
+    internal fun hiddenFooter() {
+        footer?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        footer = null
+        val hidden = hiddenKeys()
+        if (hidden.isEmpty()) return
+        val context = requireContext()
+        footer = TextView(context, null, 0, R.style.TextSmall).apply {
+            text = resources.getQuantityString(R.plurals.hidden_cards, hidden.size, hidden.size)
+            textSize = 13f
+            setTextColor(faint(150))
+            gravity = Gravity.CENTER
+            setPadding(16.dpToPx(), 20.dpToPx(), 16.dpToPx(), 8.dpToPx())
+            setOnClickListener {
+                val picked = BooleanArray(hidden.size)
+                androidx.appcompat.app.AlertDialog.Builder(context)
+                    .setTitle(R.string.hidden_cards_title)
+                    .setMultiChoiceItems(hidden.map { cardLabel(it) }.toTypedArray(), picked) { _, i, on -> picked[i] = on }
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.show) { _, _ -> unhideCards(hidden.filterIndexed { i, _ -> picked[i] }.toSet()) }
+                    .show()
+            }
+        }
+        cards.addView(footer)
+    }
+
+    /** A card picked up by its title: moved among the others, or hidden */
+    private fun dragCard(root: android.view.View, x: Float, y: Float): DragSession? {
+        val name = arrangeName ?: return null
+        val key = cardKeys[root] ?: return null
+        var scroll: android.view.ViewParent? = cards.parent
+        while (scroll != null && scroll !is android.widget.ScrollView) scroll = scroll.parent
+        val list = ListDrag(cards, scroll as? android.widget.ScrollView) { cardKeys[it] != null }
+        list.start(root)
+        return DragSession(root, x, y, zones = listOf(DragSession.Zone(HIDE_CARD, getString(R.string.hide), Gravity.TOP or Gravity.CENTER_HORIZONTAL)),
+            onMove = { _, fingerY -> list.move(fingerY) }, onEnd = { list.stop() }) { drop ->
+            if (!isAdded) return@DragSession
+            if (drop == HIDE_CARD) hideCard(key, root)
+            else Arrangement.save(requireContext(), name, savedOrder(name), Arrangement.hidden(requireContext(), name))
+        }
+    }
 
     /** Colours for the dots before details rows whose label is a stat's name, and the stat's icon to use instead */
     internal open fun colorOfLabel(label: String): Int? = null
@@ -105,7 +233,14 @@ abstract class CardPageFragment : Fragment() {
         /** The stat a held target stands for, if any, to open its page */
         var statOf: (Any) -> String? = { null }
 
+        /** What the card's kept by when cards move, if they do */
+        val arrangeKey: String? = if (arrangeName != null) keyForCard(title) else null
+
         init {
+            if (arrangeKey != null) {
+                cardKeys[root] = arrangeKey
+                titleView.setOnTouchListener(HoldToDrag(onHold = {}) { _, x, y -> dragCard(root, x, y) })
+            }
             root.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -130,7 +265,9 @@ abstract class CardPageFragment : Fragment() {
             val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 0)
             }
-            if (at >= 0) cards.addView(root, at, params) else cards.addView(root, params)
+            // Before the hidden cards' line, if it's there
+            val end = footer?.let { cards.indexOfChild(it) }?.takeIf { it >= 0 }
+            if (at >= 0) cards.addView(root, at, params) else if (end != null) cards.addView(root, end, params) else cards.addView(root, params)
         }
 
         fun textView(size: Float, alpha: Int) = TextView(context, null, 0, R.style.TextSmall).apply {

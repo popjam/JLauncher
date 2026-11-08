@@ -76,6 +76,10 @@ class StatPageFragment : CardPageFragment() {
 
     override fun colorOfLabel(label: String): Int? = stats.firstOrNull { it.name == label }?.color
 
+    /** Each kind of stat's page keeps its own card order and hidden cards */
+    override val arrangeName: String?
+        get() = if (::stat.isInitialized) app.olauncher.helper.Arrangement.statPage(stat.kind.name) else null
+
     override fun iconOfLabel(label: String): String? = stats.firstOrNull { it.name == label }?.let { StatIcons.forStat(it) }
 
     /** The page's stat counted in something real (hours, dollars) rather than faces, by day; null for faces */
@@ -263,6 +267,7 @@ class StatPageFragment : CardPageFragment() {
             if (!stat.medicine || unit != null || stat.kind == StatKind.EXERCISE) weekdayCard()
             // Set against the medicines, or on a medicine's page every stat set against it; not for things counted like Coffee
             if (stat.isMedicine || !stat.medicine) takenVsNotCard()
+            arrangeCards()
         }
     }
 

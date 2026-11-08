@@ -10,6 +10,9 @@ class Prefs(context: Context) {
     companion object {
         const val FILE_NAME = "app.olauncher"
         const val MAX_HOME_PAGES = 5
+
+        /** What's kept for each home app slot, as "<field>_<slot>" (and "_P<page>" after page 1) */
+        private val SLOT_FIELDS = listOf("APP_NAME", "APP_PACKAGE", "APP_ACTIVITY_CLASS_NAME", "APP_USER", "IS_SHORTCUT", "SHORTCUT_ID")
     }
 
     private val PREFS_FILENAME = FILE_NAME
@@ -811,6 +814,56 @@ class Prefs(context: Context) {
             7 -> appActivityClassName7 = activityClassName
             8 -> appActivityClassName8 = activityClassName
         }
+    }
+
+    // --- Home app slots as a whole, for moving them around ---
+
+    /** Everything kept for home app [slot] (1 to 8) on [page], by field */
+    fun homeSlot(page: Int, slot: Int): Map<String, Any?> {
+        val all = prefs.all
+        return SLOT_FIELDS.associateWith { all[slotKey("${it}_$slot", page)] }
+    }
+
+    private fun putHomeSlot(editor: SharedPreferences.Editor, page: Int, slot: Int, values: Map<String, Any?>) {
+        SLOT_FIELDS.forEach { field ->
+            val key = slotKey("${field}_$slot", page)
+            when (val value = values[field]) {
+                is String -> editor.putString(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                else -> editor.remove(key)
+            }
+        }
+    }
+
+    fun isHomeSlotEmpty(page: Int, slot: Int) = (homeSlot(page, slot)["APP_NAME"] as? String).isNullOrEmpty()
+
+    /** Puts [page]'s slots in a new order: slot i + 1 gets what slot [order][i] had. */
+    fun reorderHomeSlots(page: Int, order: List<Int>) {
+        val before = order.map { homeSlot(page, it) }
+        prefs.edit {
+            before.forEachIndexed { i, values -> putHomeSlot(this, page, i + 1, values) }
+        }
+    }
+
+    /** Takes [slot] off [page], the ones after it moving up and an empty slot left at the end of the shown ones */
+    fun removeHomeSlot(page: Int, slot: Int) {
+        val count = homeAppsNum.coerceIn(slot, 8)
+        val kept = (1..count).filter { it != slot }.map { homeSlot(page, it) }
+        prefs.edit {
+            kept.forEachIndexed { i, values -> putHomeSlot(this, page, i + 1, values) }
+            putHomeSlot(this, page, count, emptyMap())
+        }
+    }
+
+    /** Moves [slot] on [page] to the first empty shown slot on [toPage]; false when that page is full */
+    fun moveHomeSlotToPage(page: Int, slot: Int, toPage: Int): Boolean {
+        val target = (1..homeAppsNum.coerceIn(1, 8)).firstOrNull { isHomeSlotEmpty(toPage, it) } ?: return false
+        val values = homeSlot(page, slot)
+        prefs.edit { putHomeSlot(this, toPage, target, values) }
+        removeHomeSlot(page, slot)
+        return true
     }
 
     fun updateAppActivityClassName(packageName: String, activityClassName: String) {

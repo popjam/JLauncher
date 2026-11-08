@@ -1151,4 +1151,22 @@
     <string name="settings_search_none">No settings match “%1$s”</string>
     <string name="voice_note_button">Voice note</string>
     <string name="google_drive">Google Drive</string>
+
+    <!-- Holding and dragging things into place -->
+    <string name="remove_from_home">Remove from home</string>
+    <string name="to_page">Page %1$d</string>
+    <string name="moved_to_page">Moved to page %1$d</string>
+    <string name="page_full">Page %1$d is full</string>
+    <string name="hidden_turn_on">Hidden. Turn it back on in Settings.</string>
+    <plurals name="hidden_cards">
+        <item quantity="one">1 hidden card · tap to bring it back</item>
+        <item quantity="other">%d hidden cards · tap to bring them back</item>
+    </plurals>
+    <string name="hidden_cards_title">Hidden cards</string>
+    <string name="settings_arrange">Moving things around</string>
+    <string name="info_arrange">Hold anything on the home screen (apps, the clock, the weather, screen time, money), a card’s title on Stats Home or a stat’s page, or Stats Home’s bubble, then drag it. It snaps into place when you let go. Drag it onto Hide at the top to hide it. Holding and letting go without dragging does what holding always did.</string>
+    <string name="settings_reset_layout">Reset layout</string>
+    <string name="info_reset_layout">Puts the home screen, Stats Home and every stat page back the way they first were. Your apps and stats stay.</string>
+    <string name="reset_layout_ask">Put everything back where it first was? Hidden cards come back too.</string>
+    <string name="layout_reset_done">Layout reset</string>
 </resources>

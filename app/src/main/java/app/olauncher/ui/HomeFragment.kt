@@ -35,6 +35,7 @@ import app.olauncher.data.Constants
 import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
+import app.olauncher.helper.Arrangement
 import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.Spending
 import app.olauncher.helper.SwipeTargets
@@ -87,6 +88,11 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
         deviceManager = context?.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
+        underRow = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
+        binding.mainLayout.addView(underRow, binding.mainLayout.indexOfChild(binding.moneyWidget),
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.LEFT))
+        appsPadding = binding.homeAppsLayout.paddingTop to binding.homeAppsLayout.paddingBottom
+        clockMarginTop = (binding.dateTimeLayout.layoutParams as FrameLayout.LayoutParams).topMargin
         initObservers()
         setHomeAlignment(prefs.homeAlignment)
         initSwipeTouchListener()
@@ -277,14 +283,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private fun initSwipeTouchListener() {
         val context = requireContext()
         binding.mainLayout.setOnTouchListener(getSwipeGestureListener(context))
-        binding.homeApp1.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp1))
-        binding.homeApp2.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp2))
-        binding.homeApp3.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp3))
-        binding.homeApp4.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp4))
-        binding.homeApp5.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp5))
-        binding.homeApp6.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp6))
-        binding.homeApp7.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp7))
-        binding.homeApp8.setOnTouchListener(getViewSwipeTouchListener(context, binding.homeApp8))
+        // Holding an app and letting go picks another; holding and dragging moves it
+        appViews.forEach { app ->
+            app.setOnTouchListener(HoldToDrag(getViewSwipeTouchListener(context, app), onHold = { onLongClick(it) }) { view, x, y -> startAppDrag(view, x, y) })
+        }
     }
 
     private fun initClickListeners() {
@@ -303,6 +305,216 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.moneyWidget.setOnClickListener(this)
         binding.weatherIcon.setOnClickListener(this)
         binding.tvWeather.setOnClickListener(this)
+        // Holding and dragging moves them; holding and letting go does what holding always did
+        listOf(binding.clock, binding.date).forEach { it.setOnTouchListener(HoldToDrag { _, x, y -> startClockDrag(x, y) }) }
+        listOf(binding.weatherIcon to Arrangement.WEATHER, binding.tvWeather to Arrangement.WEATHER,
+            binding.moodAvatar to Arrangement.SCREEN_TIME, binding.tvScreenTime to Arrangement.SCREEN_TIME,
+            binding.moneyWidget to Arrangement.MONEY).forEach { (view, key) ->
+            view.setOnTouchListener(HoldToDrag { _, x, y -> startWidgetDrag(key, x, y) })
+        }
+    }
+
+    // --- Moving things on the home screen ---
+
+    private val appViews
+        get() = listOf(binding.homeApp1, binding.homeApp2, binding.homeApp3, binding.homeApp4,
+            binding.homeApp5, binding.homeApp6, binding.homeApp7, binding.homeApp8)
+
+    /** The row under the one beside the clock (above it when the clock is at the bottom) */
+    private lateinit var underRow: LinearLayout
+
+    /** The apps' padding at the top and bottom, and the clock's margin, as laid out with the clock at the top */
+    private var appsPadding = 0 to 0
+    private var clockMarginTop = 0
+
+    private fun pieceOf(key: String): View = when (key) {
+        Arrangement.WEATHER -> binding.weatherColumn
+        Arrangement.SCREEN_TIME -> binding.screenTimeColumn
+        else -> binding.moneyWidget
+    }
+
+    private fun keyOf(piece: View) = when (piece) {
+        binding.weatherColumn -> Arrangement.WEATHER
+        binding.screenTimeColumn -> Arrangement.SCREEN_TIME
+        else -> Arrangement.MONEY
+    }
+
+    /** Puts the weather, screen time and money in their rows, in their order */
+    private fun arrangeWidgets() {
+        val context = requireContext()
+        val order = Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS)
+        val under = Arrangement.underClock(context)
+        listOf(binding.screenTimeLayout to order.filter { it !in under }, underRow to order.filter { it in under }).forEach { (row, keys) ->
+            keys.forEachIndexed { i, key ->
+                val piece = pieceOf(key)
+                if (piece.parent == row && row.indexOfChild(piece) == i) return@forEachIndexed
+                (piece.parent as? ViewGroup)?.removeView(piece)
+                row.addView(piece, minOf(i, row.childCount), LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            }
+        }
+    }
+
+    /** The clock at the top or the bottom, the apps keeping clear of it */
+    private fun placeClock() {
+        val bottom = Arrangement.clockAtBottom(requireContext())
+        val params = binding.dateTimeLayout.layoutParams as FrameLayout.LayoutParams
+        val gravity = if (bottom) Gravity.BOTTOM else Gravity.TOP
+        if (params.gravity != gravity) {
+            params.gravity = gravity
+            params.topMargin = if (bottom) 0 else clockMarginTop
+            params.bottomMargin = if (bottom) 64.dpToPx() else 0
+            binding.dateTimeLayout.layoutParams = params
+        }
+        val (top, end) = appsPadding
+        val apps = binding.homeAppsLayout
+        if (bottom) apps.setPadding(apps.paddingLeft, end, apps.paddingRight, top + 64.dpToPx())
+        else apps.setPadding(apps.paddingLeft, top, apps.paddingRight, end)
+    }
+
+    private fun hideZone(label: Int = R.string.hide) = DragSession.Zone(HIDE, getString(label), Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+
+    private fun hiddenToast() = requireContext().showToast(getString(R.string.hidden_turn_on))
+
+    /** An app, moved among the others, to another page, or off the home screen */
+    private fun startAppDrag(view: View, x: Float, y: Float): DragSession? {
+        val layout = binding.homeAppsLayout
+        val list = ListDrag(layout, null) { it in appViews }
+        list.start(view)
+        val page = prefs.homePage
+        val pages = prefs.homePages
+        val zones = mutableListOf(hideZone(R.string.remove_from_home))
+        if (pages > 1) {
+            val next = (page + 1) % pages
+            val previous = (page - 1 + pages) % pages
+            zones += DragSession.Zone(next, getString(R.string.to_page, next + 1) + "  ›", Gravity.END or Gravity.CENTER_VERTICAL)
+            if (previous != next) zones += DragSession.Zone(previous, "‹  " + getString(R.string.to_page, previous + 1), Gravity.START or Gravity.CENTER_VERTICAL)
+        }
+        val slot = view.tag.toString().toIntOrNull() ?: return null
+        return DragSession(view, x, y, zones = zones,
+            onMove = { _, y -> list.move(y) }, onEnd = { list.stop() }) { key ->
+            val context = requireContext()
+            when (key) {
+                HIDE -> prefs.removeHomeSlot(page, slot)
+                is Int -> if (prefs.moveHomeSlotToPage(page, slot, key)) context.showToast(getString(R.string.moved_to_page, key + 1))
+                    else context.showToast(getString(R.string.page_full, key + 1))
+                else -> {
+                    val order = (0 until layout.childCount).map { layout.getChildAt(it) }.filter { it in appViews && it.isVisible }
+                        .mapNotNull { it.tag.toString().toIntOrNull() }
+                    if (order != order.sorted()) prefs.reorderHomeSlots(page, order)
+                }
+            }
+            // The views back in their places, showing the slots' new apps
+            layout.post {
+                if (_binding == null) return@post
+                appViews.forEachIndexed { i, app ->
+                    if (layout.getChildAt(i) != app) {
+                        layout.removeView(app)
+                        layout.addView(app, i)
+                    }
+                }
+                hideHomeApps()
+                populateHomeApps()
+            }
+        }
+    }
+
+    /** The clock, to the top or the bottom, or hidden */
+    private fun startClockDrag(x: Float, y: Float): DragSession {
+        val clock = binding.dateTimeLayout
+        val main = IntArray(2).also { binding.mainLayout.getLocationOnScreen(it) }
+        val here = IntArray(2).also { clock.getLocationOnScreen(it) }
+        val width = clock.width.toFloat()
+        val height = clock.height.toFloat()
+        val left = here[0].toFloat()
+        val top = main[1] + clockMarginTop.toFloat()
+        val bottom = main[1] + binding.mainLayout.height - 64.dpToPx() - height
+        return DragSession(clock, x, y, zones = listOf(hideZone()),
+            slots = listOf(DragSession.Slot(TOP, android.graphics.RectF(left, top, left + width, top + height)),
+                DragSession.Slot(BOTTOM, android.graphics.RectF(left, bottom, left + width, bottom + height)))) { key ->
+            val context = requireContext()
+            when (key) {
+                HIDE -> {
+                    prefs.dateTimeVisibility = Constants.DateTime.OFF
+                    viewModel.toggleDateTime()
+                    hiddenToast()
+                }
+                TOP, BOTTOM -> Arrangement.setClockAtBottom(context, key == BOTTOM)
+            }
+            placeClock()
+            populateScreenTime()
+        }
+    }
+
+    /** The weather, screen time or money, along its row, into the other row, or hidden */
+    private fun startWidgetDrag(key: String, x: Float, y: Float): DragSession? {
+        val piece = pieceOf(key)
+        if (!piece.isVisible) return null
+        val rows = listOf(binding.screenTimeLayout, underRow)
+        val slots = mutableListOf<DragSession.Slot>()
+        val pieceAt = IntArray(2).also { piece.getLocationOnScreen(it) }
+        val w = piece.width.toFloat()
+        val h = piece.height.toFloat()
+        val clockBottom = Arrangement.clockAtBottom(requireContext())
+        rows.forEachIndexed { r, row ->
+            val others = (0 until row.childCount).map { row.getChildAt(it) }.filter { it != piece && it.isVisible && it.width > 0 }
+            if (others.isEmpty()) {
+                // A box where it would sit alone in the row
+                val first = rows[0]
+                val firstAt = IntArray(2).also { first.getLocationOnScreen(it) }
+                val y = when {
+                    r == 0 -> firstAt[1].toFloat()
+                    clockBottom -> firstAt[1] - h
+                    else -> firstAt[1] + maxOf(first.height.toFloat(), h)
+                }
+                val x = if (first.width > 0) firstAt[0] + first.width - w else pieceAt[0].toFloat()
+                slots += DragSession.Slot(r to 0, android.graphics.RectF(x, y, x + w, y + h))
+                return@forEachIndexed
+            }
+            val rowAt = IntArray(2).also { row.getLocationOnScreen(it) }
+            val top = rowAt[1].toFloat()
+            val bottom = top + row.height
+            val edges = others.map { rowAt[0] + it.left.toFloat() to rowAt[0] + it.right.toFloat() }
+            (0..others.size).forEach { k ->
+                val x = when (k) {
+                    0 -> edges.first().first
+                    others.size -> edges.last().second
+                    else -> (edges[k - 1].second + edges[k].first) / 2
+                }
+                slots += DragSession.Slot(r to k, android.graphics.RectF(x - 5.dpToPx(), top, x + 5.dpToPx(), bottom))
+            }
+        }
+        return DragSession(piece, x, y, zones = listOf(hideZone()), slots = slots) { drop ->
+            val context = requireContext()
+            when (drop) {
+                HIDE -> {
+                    when (key) {
+                        Arrangement.WEATHER -> {
+                            prefs.weatherOn = false
+                            viewModel.getWeather()
+                        }
+                        Arrangement.SCREEN_TIME -> Arrangement.save(context, Arrangement.HOME, Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS),
+                            Arrangement.hidden(context, Arrangement.HOME) + Arrangement.SCREEN_TIME)
+                        else -> Spending.setShowOnHome(context, false)
+                    }
+                    hiddenToast()
+                }
+                is Pair<*, *> -> {
+                    val r = drop.first as Int
+                    val k = drop.second as Int
+                    // Every piece in each row, shown or not, in its order, and this one put at the k-th shown place
+                    val keys = rows.map { row -> (0 until row.childCount).map { row.getChildAt(it) }.filter { it != piece } }
+                    val target = keys[r]
+                    val shown = target.filter { it.isVisible && it.width > 0 }
+                    val before = shown.getOrNull(k)
+                    val inRow = target.toMutableList().apply { add(if (before == null) size else indexOf(before), piece) }
+                    val all = rows.indices.map { if (it == r) inRow else keys[it] }
+                    Arrangement.save(context, Arrangement.HOME, all.flatten().map(::keyOf), Arrangement.hidden(context, Arrangement.HOME))
+                    Arrangement.setUnderClock(context, all[1].map(::keyOf).toSet())
+                }
+            }
+            populateScreenTime()
+            populateMoney()
+        }
     }
 
     private fun setHomeAlignment(horizontalGravity: Int = prefs.homeAlignment) {
@@ -343,13 +555,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val showScreenTime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && context.appUsagePermissionGranted() &&
             app.olauncher.helper.Arrangement.SCREEN_TIME !in app.olauncher.helper.Arrangement.hidden(context, app.olauncher.helper.Arrangement.HOME)
         val showWeather = Weather.isEnabled(context)
-        // Whichever comes first beside the clock
-        val weatherFirst = app.olauncher.helper.Arrangement.order(context, app.olauncher.helper.Arrangement.HOME,
-            app.olauncher.helper.Arrangement.HOME_ITEMS).first() == app.olauncher.helper.Arrangement.WEATHER
-        if ((binding.screenTimeLayout.getChildAt(0) == binding.weatherColumn) != weatherFirst) {
-            binding.screenTimeLayout.removeView(binding.weatherColumn)
-            binding.screenTimeLayout.addView(binding.weatherColumn, if (weatherFirst) 0 else 1)
-        }
+        arrangeWidgets()
+        placeClock()
+        val moneyBeside = Arrangement.MONEY !in Arrangement.underClock(context) && Spending.showOnHome(context)
         binding.screenTimeColumn.isVisible = showScreenTime
         // Holds the avatar's place beside the weather icon until there's a screen time, so the texts line up
         binding.moodAvatar.visibility = when {
@@ -358,7 +566,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             else -> View.GONE
         }
         viewModel.getWeather()
-        if (!showScreenTime && !showWeather) {
+        if (!showScreenTime && !showWeather && !moneyBeside) {
             binding.screenTimeLayout.visibility = View.GONE
             return
         }
@@ -406,30 +614,36 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.moneyWidget.contentDescription = getString(R.string.money_left_description, PixelMoneyView.figure(left), binding.tvMoneyDays.text)
     }
 
-    /** Puts the money widget under the mood and screen time, centred on them; it may sit beside the apps. */
+    /**
+     * Puts the row under the one beside the clock (over it when the clock is at the bottom), its outer
+     * piece centred on the outer piece above; it may sit beside the apps.
+     */
     private fun placeMoneyWidget() {
         val binding = _binding ?: return
-        val money = binding.moneyWidget
-        if (!money.isVisible || money.width == 0) return
+        val row = underRow
+        if (row.width == 0) return
         val layout = binding.screenTimeLayout
-        val column = binding.screenTimeColumn.takeIf { it.isVisible } ?: binding.weatherColumn.takeIf { it.isVisible }
+        val endSide = prefs.homeAlignment != Gravity.END
+        fun outer(r: LinearLayout) = (0 until r.childCount).map { r.getChildAt(it) }.filter { it.isVisible }.let { if (endSide) it.lastOrNull() else it.firstOrNull() }
+        val above = outer(layout).takeIf { layout.isVisible && layout.height > 0 }
+        val mine = outer(row) ?: return
+        val clockBottom = Arrangement.clockAtBottom(requireContext())
         val top: Int
         val centre: Int
-        if (layout.isVisible && column != null) {
-            top = layout.top + layout.height
-            centre = layout.left + column.left + column.width / 2
+        if (above != null) {
+            top = if (clockBottom) layout.top - row.height else layout.top + layout.height
+            centre = layout.left + above.left + above.width / 2
         } else {
-            val margin = 10.dpToPx() + money.width / 2
-            top = 72.dpToPx()
-            centre = if (prefs.homeAlignment == Gravity.END) margin else binding.mainLayout.width - margin
+            val margin = 10.dpToPx() + mine.width / 2
+            top = if (clockBottom) binding.mainLayout.height - 64.dpToPx() - row.height else 72.dpToPx()
+            centre = if (endSide) binding.mainLayout.width - margin else margin
         }
-        val params = money.layoutParams as FrameLayout.LayoutParams
-        val left = (centre - money.width / 2).coerceAtLeast(0)
-        if (params.topMargin != top || params.leftMargin != left || params.gravity != (Gravity.TOP or Gravity.LEFT)) {
-            params.gravity = Gravity.TOP or Gravity.LEFT
-            params.topMargin = top
+        val params = row.layoutParams as FrameLayout.LayoutParams
+        val left = (centre - mine.left - mine.width / 2).coerceIn(0, maxOf(0, binding.mainLayout.width - row.width))
+        if (params.topMargin != top.coerceAtLeast(0) || params.leftMargin != left) {
+            params.topMargin = top.coerceAtLeast(0)
             params.leftMargin = left
-            money.layoutParams = params
+            row.layoutParams = params
         }
     }
 
@@ -1003,5 +1217,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    private companion object {
+        /** Drop places: off the home screen, and the clock's top and bottom */
+        const val HIDE = "hide"
+        const val TOP = "top"
+        const val BOTTOM = "bottom"
     }
 }

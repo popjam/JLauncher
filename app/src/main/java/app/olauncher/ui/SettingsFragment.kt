@@ -521,13 +521,21 @@ class SettingsFragment : CardPageFragment() {
                     viewModel.getWeather(force = true)
                 }
             } else null,
-            if (screenTimeShown && Weather.isEnabled(context)) row(card, getString(R.string.first_beside_clock), getString(
-                if (Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS).first() == Arrangement.WEATHER) R.string.weather else R.string.screen_time),
-                R.string.info_beside_clock, level = 1) {
-                val order = Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS).reversed()
-                Arrangement.save(context, Arrangement.HOME, order, Arrangement.hidden(context, Arrangement.HOME))
-                render()
-            } else null,
+            row(card, getString(R.string.settings_arrange), null, R.string.info_arrange) {
+                AlertDialog.Builder(context).setTitle(R.string.settings_arrange).setMessage(R.string.info_arrange).setPositiveButton(R.string.okay, null).show()
+            },
+            row(card, getString(R.string.settings_reset_layout), null, R.string.info_reset_layout, level = 1) {
+                AlertDialog.Builder(context)
+                    .setMessage(R.string.reset_layout_ask)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.settings_reset_layout) { _, _ ->
+                        Arrangement.reset(context)
+                        viewModel.refreshHome(true)
+                        context.showToast(getString(R.string.layout_reset_done))
+                        render()
+                    }
+                    .show()
+            },
         )
     }
 

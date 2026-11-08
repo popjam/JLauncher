@@ -94,6 +94,39 @@ class StatsHomeFragment : CardPageFragment() {
 
     override fun colorOfLabel(label: String): Int? = stats.firstOrNull { it.name == label }?.color
 
+    // Cards move by their titles; each is kept by its key in Arrangement.STATS_HOME_CARDS
+    override val arrangeName = app.olauncher.helper.Arrangement.STATS_HOME
+
+    /** The card being made now, while rendering */
+    private var makingKey: String? = null
+
+    override fun keyForCard(title: String): String? = makingKey
+
+    override fun cardLabel(key: String): String = getString(when (key) {
+        app.olauncher.helper.Arrangement.DAILY -> R.string.stat_daily
+        app.olauncher.helper.Arrangement.TRENDS -> R.string.graph_trends
+        app.olauncher.helper.Arrangement.REMEMBER -> R.string.remember
+        app.olauncher.helper.Arrangement.INSIGHTS -> R.string.insights
+        app.olauncher.helper.Arrangement.THIS_WEEK -> R.string.this_week
+        else -> R.string.compare_two
+    })
+
+    override fun hiddenKeys(): List<String> = app.olauncher.helper.Arrangement.STATS_HOME_CARDS.filter {
+        it in app.olauncher.helper.Arrangement.hidden(requireContext(), app.olauncher.helper.Arrangement.STATS_HOME)
+    }
+
+    override fun hideCard(key: String, root: View) {
+        super.hideCard(key, root)
+        cards.removeView(root)
+        renderedFor = null
+    }
+
+    override fun unhideCards(keys: Set<String>) {
+        super.unhideCards(keys)
+        renderedFor = null
+        render()
+    }
+
     override fun iconOfLabel(label: String): String? = stats.firstOrNull { it.name == label }?.let { StatIcons.forStat(it) }
 
     private val shown: List<StatInfo> get() = stats.filter { it.id !in data.hiddenInGraph }
@@ -200,6 +233,7 @@ class StatsHomeFragment : CardPageFragment() {
         var compare: Card? = null
         val arrangement = app.olauncher.helper.Arrangement
         arrangement.shown(requireContext(), arrangement.STATS_HOME, arrangement.STATS_HOME_CARDS).forEach { key ->
+            makingKey = key
             when (key) {
                 arrangement.DAILY -> dailyCard()
                 arrangement.TRENDS -> trendCard()
@@ -213,6 +247,8 @@ class StatsHomeFragment : CardPageFragment() {
                 arrangement.COMPARE -> compare = Card(getString(R.string.compare_two)).apply { showNote(getString(R.string.insights_working)) }
             }
         }
+        makingKey = null
+        hiddenFooter()
         renderBubble()
         val generation = ++renderGeneration
         if (insights == null && compare == null) return
@@ -1464,10 +1500,13 @@ class StatsHomeFragment : CardPageFragment() {
         bubble.elevation = 8.dpToPx().toFloat()
         scrim.isVisible = bubbleOpen
         val picked = shown
+        val spot = app.olauncher.helper.Arrangement.BUBBLE_SPOTS[app.olauncher.helper.Arrangement.bubbleSpot(context)]
+        val vertical = if (spot.top) Gravity.TOP else Gravity.BOTTOM
+        (bubble.layoutParams as? FrameLayout.LayoutParams)?.setMargins(16.dpToPx(), if (spot.top) 44.dpToPx() else 0, 16.dpToPx(), if (spot.top) 0 else 28.dpToPx())
         if (!bubbleOpen) {
             (bubble.layoutParams as? FrameLayout.LayoutParams)?.apply {
                 width = ViewGroup.LayoutParams.WRAP_CONTENT
-                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                gravity = vertical or listOf(Gravity.START, Gravity.CENTER_HORIZONTAL, Gravity.END)[spot.side]
             }
             bubble.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -1478,7 +1517,7 @@ class StatsHomeFragment : CardPageFragment() {
                         LinearLayout.LayoutParams(14.dpToPx(), 14.dpToPx()).apply { marginEnd = 6.dpToPx() })
                 }
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                    text = resources.getQuantityString(R.plurals.stats_shown, picked.size, picked.size) + "  ▴"
+                    text = resources.getQuantityString(R.plurals.stats_shown, picked.size, picked.size) + if (spot.top) "  ▾" else "  ▴"
                     textSize = 13f
                     setTextColor(ink)
                     setPadding(4.dpToPx(), 0, 0, 0)
@@ -1487,13 +1526,15 @@ class StatsHomeFragment : CardPageFragment() {
                     bubbleOpen = true
                     renderBubble()
                 }
+                // Holding and dragging it moves it to another corner or edge
+                setOnTouchListener(HoldToDrag(onHold = {}) { _, x, y -> dragBubble(x, y) })
             })
             bubble.requestLayout()
             return
         }
         (bubble.layoutParams as? FrameLayout.LayoutParams)?.apply {
             width = ViewGroup.LayoutParams.MATCH_PARENT
-            gravity = Gravity.BOTTOM
+            gravity = vertical
         }
         bubble.setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
         bubble.addView(LinearLayout(context).apply {
@@ -1520,7 +1561,7 @@ class StatsHomeFragment : CardPageFragment() {
                 })
             }
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = "▾"
+                text = if (spot.top) "▴" else "▾"
                 textSize = 16f
                 setTextColor(ink)
                 setPadding(12.dpToPx(), 2.dpToPx(), 6.dpToPx(), 2.dpToPx())
@@ -1549,6 +1590,29 @@ class StatsHomeFragment : CardPageFragment() {
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 8.dpToPx() })
         bubble.requestLayout()
+    }
+
+    /** The closed bubble, to snap to one of [Arrangement.BUBBLE_SPOTS] */
+    private fun dragBubble(x: Float, y: Float): DragSession? {
+        val page = bubble.parent as? View ?: return null
+        val at = IntArray(2).also { page.getLocationOnScreen(it) }
+        val w = bubble.width.toFloat()
+        val h = bubble.height.toFloat()
+        val slots = app.olauncher.helper.Arrangement.BUBBLE_SPOTS.mapIndexed { i, spot ->
+            val left = at[0] + when (spot.side) {
+                0 -> 16.dpToPx().toFloat()
+                1 -> (page.width - w) / 2
+                else -> page.width - 16.dpToPx() - w
+            }
+            val top = at[1] + if (spot.top) 44.dpToPx().toFloat() else page.height - 28.dpToPx() - h
+            DragSession.Slot(i, android.graphics.RectF(left, top, left + w, top + h))
+        }
+        return DragSession(bubble, x, y, slots = slots) { drop ->
+            if (drop is Int && isAdded) {
+                app.olauncher.helper.Arrangement.setBubbleSpot(requireContext(), drop)
+                renderBubble()
+            }
+        }
     }
 
     private fun closeBubble() {
