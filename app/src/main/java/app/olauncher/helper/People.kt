@@ -174,7 +174,7 @@ object People {
     fun refresh(context: Context, force: Boolean = false) {
         // The call log needn't be read every time home shows
         val now = System.currentTimeMillis()
-        if (!force && now - prefs(context).getLong(REFRESHED, 0L) < REFRESH_MS) return
+        if (!force && !needsUpgrade(context) && now - prefs(context).getLong(REFRESHED, 0L) < REFRESH_MS) return
         prefs(context).edit().putLong(REFRESHED, now).apply()
         Workload.track(context, Workload.PEOPLE) { refreshNow(context) }
     }
@@ -193,7 +193,11 @@ object People {
         }
         // Every day, so the days from when it went by people go by messages too
         store.setFaces(id, days(context).mapValues { faceFor(it.value.messages) })
+        prefs(context).edit().putString(GRADED_BY, BY_MESSAGES).apply()
     }
+
+    /** Whether the stat's days and words still go by how many people, from before it went by messages */
+    fun needsUpgrade(context: Context) = since(context) != null && prefs(context).getString(GRADED_BY, null) != BY_MESSAGES
 
     /** No messages is the saddest face, then up to [FEW_MESSAGES], [SOME_MESSAGES], [MANY_MESSAGES] and more */
     fun faceFor(messages: Int) = when {
@@ -223,6 +227,8 @@ object People {
     private const val PREFS = "people"
     private const val SINCE = "since"
     private const val REFRESHED = "refreshed"
+    private const val GRADED_BY = "gradedBy"
+    private const val BY_MESSAGES = "messages"
     private const val REFRESH_MS = 10 * 60_000L
     private const val SEEN = "seen"
     private const val MESSAGES = "messages"

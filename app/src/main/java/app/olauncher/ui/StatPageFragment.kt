@@ -238,6 +238,15 @@ class StatPageFragment : CardPageFragment() {
             }
             StatKind.PEOPLE -> {
                 val days = app.olauncher.helper.People.days(context)
+                // Straight after the update to messages: regrade the days and relabel the faces, then show them
+                if (!peopleUpgraded && app.olauncher.helper.People.needsUpgrade(context)) {
+                    peopleUpgraded = true
+                    val appContext = context.applicationContext
+                    Thread {
+                        runCatching { app.olauncher.helper.People.refresh(appContext, force = true) }
+                        _binding?.root?.post { if (_binding != null) render() }
+                    }.start()
+                }
                 peopleTodayCard(days)
                 peopleMessagesCard(days)
                 peopleCallsCard(days)
@@ -272,6 +281,9 @@ class StatPageFragment : CardPageFragment() {
             arrangeCards()
         }
     }
+
+    /** People's switch to messages has been started from this page, so it's only tried once */
+    private var peopleUpgraded = false
 
     /** Each render's number, so the later cards of an older one aren't added */
     internal var renderGeneration = 0
