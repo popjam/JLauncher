@@ -4,13 +4,15 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Rect
-import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import app.olauncher.R
@@ -153,48 +155,76 @@ object MoodPrompt {
     private fun View.setPadding(px: Int) = setPadding(px, px, px, px)
 
     /**
-     * While the thoughts box is being typed in, the prompt sits just above the keyboard rather than in
-     * the middle of the screen behind it, so what's written can be seen. The window resizes for the
-     * keyboard where Android does that, and otherwise the space the keyboard covers is padded out.
+     * While the keyboard is up for the thoughts box, the prompt slides up so the box (and Confirm, if
+     * there's room) sits just above it; on a small screen the title goes off the top rather than the box
+     * hiding behind the keyboard. Only the prompt moves, by translation, and it goes back as soon as
+     * the keyboard does, so nothing about its place is left changed. The window itself is told not to
+     * shift or resize, since the launcher's window can't resize and panning moved it unpredictably.
      */
     private fun liftAboveKeyboard(root: View, note: EditText) {
         val box = (root as? FrameLayout)?.getChildAt(0) ?: return
-        val pad = 32.dpToPx()
+        val confirm = root.findViewById<View>(R.id.moodPromptConfirm)
         val activity = root.context.activity()
         val defaultMode = activity?.window?.attributes?.softInputMode
         val frame = Rect()
         val place = IntArray(2)
-        fun layout() {
-            if (!root.isShown) return
-            val typing = note.hasFocus()
-            root.getWindowVisibleDisplayFrame(frame)
-            root.getLocationOnScreen(place)
-            val covered = (place[1] + root.height - frame.bottom).coerceAtLeast(0)
-            val bottom = if (typing) covered + 12.dpToPx() else pad
-            val top = if (typing) 12.dpToPx() else pad
-            val gravity = if (typing) Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL else Gravity.CENTER
-            val params = box.layoutParams as FrameLayout.LayoutParams
-            if (root.paddingBottom != bottom || root.paddingTop != top || params.gravity != gravity) {
-                root.setPadding(pad, top, pad, bottom)
-                params.gravity = gravity
-                box.layoutParams = params
-            }
+        val gap = 12.dpToPx()
+
+        fun keyboardTop(): Int? {
+            val rootView = root.rootView
+            val insets = ViewCompat.getRootWindowInsets(rootView)
+            val ime = insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+            if (insets != null && insets.isVisible(WindowInsetsCompat.Type.ime()) && ime > 0) return rootView.height - ime
+            // Older phones without keyboard insets: the part of the window left showing
+            rootView.getWindowVisibleDisplayFrame(frame)
+            rootView.getLocationOnScreen(place)
+            val covered = place[1] + rootView.height - frame.bottom
+            return if (covered > rootView.height / 5) frame.bottom - place[1] else null
         }
+
+        fun place() {
+            if (!root.isShown) return
+            val top = if (note.hasFocus()) keyboardTop() else null
+            val target = if (top == null) 0f else {
+                box.getLocationInWindow(place)
+                val boxTop = place[1] - box.translationY
+                fun bottomOf(view: View): Float {
+                    view.getLocationInWindow(place)
+                    return place[1] - box.translationY + view.height
+                }
+                val statusBar = ViewCompat.getRootWindowInsets(root)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+                // All of it, down to Confirm, if that fits under the status bar; else just the box
+                val withConfirm = top - gap - bottomOf(confirm)
+                val shift = if (boxTop + withConfirm >= statusBar) withConfirm else top - gap - bottomOf(note)
+                shift.coerceAtMost(0f)
+            }
+            if (box.translationY != target) box.animate().translationY(target).setDuration(150).start()
+        }
+
         note.setOnFocusChangeListener { _, focused ->
             activity?.window?.let { window ->
                 if (focused) window.setSoftInputMode((defaultMode ?: 0) and WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE.inv() and
-                    WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST.inv() or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                    WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST.inv() or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
                     WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED)
                 else if (defaultMode != null) window.setSoftInputMode(defaultMode)
             }
-            root.post { layout() }
+            root.post { place() }
         }
         // Once per prompt view, however many times it's bound
         if (root.getTag(R.id.moodPromptNote) == null) {
             root.setTag(R.id.moodPromptNote, true)
-            root.viewTreeObserver.addOnGlobalLayoutListener { layout() }
+            root.viewTreeObserver.addOnGlobalLayoutListener { place() }
+            ViewCompat.setWindowInsetsAnimationCallback(root, object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                override fun onProgress(insets: WindowInsetsCompat, running: List<WindowInsetsAnimationCompat>) = insets
+                override fun onEnd(animation: WindowInsetsAnimationCompat) = place()
+            })
+            ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+                view.post { place() }
+                insets
+            }
         }
-        layout()
+        box.translationY = 0f
+        place()
     }
 
     private tailrec fun Context.activity(): Activity? = when (this) {
