@@ -19,14 +19,22 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * How many people you were in touch with each day: calls from the call log (answered or made), and
+ * Who you were in touch with each day: calls from the call log (answered or made, and how long), and
  * messages from chat apps' notifications (WhatsApp, Messages, Signal and the like), as the
- * notification listener sees them. Only counts are kept, and people as short codes made from their
- * names: never what was said. Fills in the People stat, from none to five or more.
+ * notification listener sees them. Kept on the phone: how many messages each person sent, as the
+ * notification names them, and how many people in all; never what was said. Fills in the People
+ * stat by how many messages there were, from none to [MANY_MESSAGES] or more.
  */
 object People {
 
-    class Day(val calls: Int, val talkMs: Long, val missed: Int, val received: Int, val sent: Int, val people: Int) {
+    /**
+     * [from]: messages received, by who sent them (only from when names began being kept);
+     * [talkedWith]: time on calls, by who.
+     */
+    class Day(
+        val calls: Int, val talkMs: Long, val missed: Int, val received: Int, val sent: Int, val people: Int,
+        val from: Map<String, Int> = emptyMap(), val talkedWith: Map<String, Long> = emptyMap(),
+    ) {
         val messages get() = received + sent
     }
 
@@ -91,6 +99,10 @@ object People {
                 val who = day.optJSONArray("who") ?: JSONArray().also { day.put("who", it) }
                 val person = code(sender.trim().lowercase())
                 if ((0 until who.length()).none { who.optString(it) == person }) who.put(person)
+                // By name, to show who sends the most
+                val name = sender.trim().take(MAX_NAME)
+                val from = day.optJSONObject("from") ?: JSONObject().also { day.put("from", it) }
+                from.put(name, from.optInt(name) + 1)
             }
             changed = true
         }
@@ -113,27 +125,30 @@ object People {
 
     // --- Calls, from the call log ---
 
-    private class Calls(val count: Int, val ms: Long, val missed: Int, val who: Set<String>)
+    private class Calls(val count: Int, val ms: Long, val missed: Int, val who: Set<String>, val byName: Map<String, Long>)
 
     private fun calls(context: Context, from: LocalDate): Map<LocalDate, Calls> {
         if (!hasCallLog(context)) return emptyMap()
         val start = from.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val rows = mutableListOf<Triple<LocalDate, Pair<Int, Long>, String>>()
+        val names = mutableListOf<String>()
         runCatching {
             context.contentResolver.query(CallLog.Calls.CONTENT_URI,
                 arrayOf(CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.TYPE, CallLog.Calls.CACHED_NAME, CallLog.Calls.NUMBER),
                 "${CallLog.Calls.DATE} >= ?", arrayOf(start.toString()), null)?.use { c ->
                 while (c.moveToNext()) {
                     val date = Instant.ofEpochMilli(c.getLong(0)).atZone(ZoneId.systemDefault()).toLocalDate()
-                    val who = (c.getString(3)?.takeIf { it.isNotBlank() } ?: c.getString(4).orEmpty()).trim().lowercase()
-                    rows += Triple(date, c.getInt(2) to c.getLong(1) * 1000, code(who))
+                    val shown = (c.getString(3)?.takeIf { it.isNotBlank() } ?: c.getString(4).orEmpty()).trim()
+                    rows += Triple(date, c.getInt(2) to c.getLong(1) * 1000, code(shown.lowercase()))
+                    names += shown.take(MAX_NAME)
                 }
             }
         }
-        return rows.groupBy { it.first }.mapValues { (_, list) ->
-            val talked = list.filter { it.second.second > 0 && it.second.first in setOf(CallLog.Calls.INCOMING_TYPE, CallLog.Calls.OUTGOING_TYPE) }
-            Calls(talked.size, talked.sumOf { it.second.second }, list.count { it.second.first == CallLog.Calls.MISSED_TYPE },
-                talked.map { it.third }.toSet())
+        return rows.zip(names).groupBy { it.first.first }.mapValues { (_, list) ->
+            val talked = list.filter { (row, _) -> row.second.second > 0 && row.second.first in setOf(CallLog.Calls.INCOMING_TYPE, CallLog.Calls.OUTGOING_TYPE) }
+            Calls(talked.size, talked.sumOf { it.first.second.second }, list.count { it.first.second.first == CallLog.Calls.MISSED_TYPE },
+                talked.map { it.first.third }.toSet(),
+                talked.groupBy({ it.second }, { it.first.second.second }).mapValues { (_, ms) -> ms.sum() })
         }
     }
 
@@ -149,11 +164,13 @@ object People {
             val m = counts.optJSONObject(date.toString())
             val c = calls[date]
             val who = (m?.optJSONArray("who")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()) + c?.who.orEmpty()
-            Day(c?.count ?: 0, c?.ms ?: 0L, c?.missed ?: 0, m?.optInt("in") ?: 0, m?.optInt("out") ?: 0, who.toSet().size)
+            val from = m?.optJSONObject("from")?.let { f -> f.keys().asSequence().associateWith { f.optInt(it) } }.orEmpty()
+            Day(c?.count ?: 0, c?.ms ?: 0L, c?.missed ?: 0, m?.optInt("in") ?: 0, m?.optInt("out") ?: 0, who.toSet().size,
+                from, c?.byName.orEmpty())
         }
     }
 
-    /** Adds the People stat once there's something to count, and fills in the last [DAYS_BACK] days */
+    /** Adds the People stat once there's something to count, and fills in its days by the messages */
     fun refresh(context: Context, force: Boolean = false) {
         // The call log needn't be read every time home shows
         val now = System.currentTimeMillis()
@@ -169,24 +186,35 @@ object People {
             store.addStat(NAME, COLOR, daily = false, scale = 5, question = "", labels = LABELS, inverted = false,
                 phrases = emptyList(), medicine = false, nextDay = false)
         } ?: return
-        val today = LocalDate.now()
-        MoodStore(context).setFaces(id, days(context).filterKeys { it > today.minusDays(DAYS_BACK) }.mapValues { faceFor(it.value.people) })
+        val store = MoodStore(context)
+        // It went by how many people at first; its words go with the messages now, unless they were changed
+        store.load().stat(id)?.takeIf { it.labels == OLD_LABELS }?.let {
+            store.editStat(id, it.name, it.color, it.daily, it.question, LABELS, it.inverted, it.phrases, it.medicine, it.nextDay)
+        }
+        // Every day, so the days from when it went by people go by messages too
+        store.setFaces(id, days(context).mapValues { faceFor(it.value.messages) })
     }
 
-    /** No one is the saddest face, then one, two, three or four, and five or more */
-    fun faceFor(people: Int) = when {
-        people <= 0 -> MoodStore.SAD
-        people == 1 -> MoodStore.MILDLY_SAD
-        people == 2 -> MoodStore.NEUTRAL
-        people <= 4 -> MoodStore.MILDLY_HAPPY
+    /** No messages is the saddest face, then up to [FEW_MESSAGES], [SOME_MESSAGES], [MANY_MESSAGES] and more */
+    fun faceFor(messages: Int) = when {
+        messages <= 0 -> MoodStore.SAD
+        messages < FEW_MESSAGES -> MoodStore.MILDLY_SAD
+        messages < SOME_MESSAGES -> MoodStore.NEUTRAL
+        messages < MANY_MESSAGES -> MoodStore.MILDLY_HAPPY
         else -> MoodStore.HAPPY
     }
+
+    const val FEW_MESSAGES = 10
+    const val SOME_MESSAGES = 30
+    const val MANY_MESSAGES = 60
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     const val NAME = "People"
     private val COLOR = 0xFFFF8A65.toInt()
-    private val LABELS = listOf("No one", "1 person", "2 people", "3–4 people", "5+ people")
+    private val LABELS = listOf("No messages", "1–9", "10–29", "30–59", "60+")
+    private val OLD_LABELS = listOf("No one", "1 person", "2 people", "3–4 people", "5+ people")
+    private const val MAX_NAME = 40
     private val APPS = setOf(
         "com.whatsapp", "com.whatsapp.w4b", "com.google.android.apps.messaging", "com.samsung.android.messaging",
         "org.thoughtcrime.securesms", "com.facebook.orca", "org.telegram.messenger", "com.discord",
@@ -200,5 +228,4 @@ object People {
     private const val MESSAGES = "messages"
     private const val SEEN_MS = 3 * 24 * 3_600_000L
     private const val KEEP_DAYS = 400L
-    private const val DAYS_BACK = 30L
 }

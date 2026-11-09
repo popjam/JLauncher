@@ -741,17 +741,17 @@
     <string name="people_need_notifications">Messages aren’t counted until notification access is on</string>
     <string name="people_count_calls">Count calls</string>
     <string name="people_tile_people">people a day</string>
-    <string name="people_tile_calls">calls a day</string>
-    <string name="people_tile_no_one">days with no one</string>
-    <string name="people_and_mood">People and mood</string>
-    <string name="people_group_none">No one</string>
-    <string name="people_group_one">1</string>
-    <string name="people_group_few">2–3</string>
-    <string name="people_group_many">4+</string>
+    <string name="people_tile_messages">messages a day</string>
+    <string name="people_tile_talking">on calls a day</string>
+        <string name="people_and_mood">Messages and mood</string>
+    <string name="people_group_none">None</string>
+        <string name="people_group_few">1–9</string>
+    <string name="people_group_some">10–29</string>
+    <string name="people_group_many">30+</string>
     <string name="ins_sun_more">on sunnier days</string>
     <string name="ins_sun_less">on greyer days</string>
-    <string name="ins_people_more">on days you’re in touch with more people</string>
-    <string name="ins_people_less">on days you’re in touch with fewer people</string>
+    <string name="ins_people_more">on days with more messages</string>
+    <string name="ins_people_less">on days with fewer messages</string>
     <string name="ins_rainy">on rainy days</string>
     <string name="ins_dry">on dry days</string>
     <string name="ins_daylight_more">on days with more daylight</string>
@@ -1169,4 +1169,9 @@
     <string name="info_reset_layout">Puts the home screen, Stats Home and every stat page back the way they first were. Your apps and stats stay.</string>
     <string name="reset_layout_ask">Put everything back where it first was? Hidden cards come back too.</string>
     <string name="layout_reset_done">Layout reset</string>
+    <string name="people_who_messages">Who messages you most</string>
+    <string name="people_who_none">Shows who messages you most once messages come in. Names are only kept from this update on.</string>
+    <string name="people_calls_title">Phone calls</string>
+    <string name="people_calls_none">No calls answered or made in this time</string>
+    <string name="people_calls_total">%1$s on calls · %2$s</string>
 </resources>

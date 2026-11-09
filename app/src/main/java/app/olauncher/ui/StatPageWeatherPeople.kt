@@ -121,13 +121,13 @@ internal fun StatPageFragment.daylightMoodCard(days: Map<LocalDate, WeatherHisto
 
 private fun StatPageFragment.peopleDayText(date: LocalDate, day: People.Day) = listOfNotNull(
     dateText(date),
+    resources.getQuantityString(R.plurals.people_messages, day.messages, day.messages),
     resources.getQuantityString(R.plurals.people_count, day.people, day.people),
     resources.getQuantityString(R.plurals.people_calls, day.calls, day.calls).takeIf { day.calls > 0 },
-    duration(day.talkMs).takeIf { day.talkMs > 0 },
-    resources.getQuantityString(R.plurals.people_messages, day.messages, day.messages).takeIf { day.messages > 0 },
+    duration(day.talkMs).takeIf { day.talkMs > 0 }?.let { getString(R.string.people_talking, it) },
 ).joinToString(" · ")
 
-/** Today's people, calls, time talking and messages; the last days as bars; and the usual */
+/** Today's messages, with the people, calls and time talking under them; the last days as bars; and the usual */
 internal fun StatPageFragment.peopleTodayCard(days: Map<LocalDate, People.Day>) {
     val context = requireContext()
     val card = Card(getString(R.string.mac_today))
@@ -136,12 +136,12 @@ internal fun StatPageFragment.peopleTodayCard(days: Map<LocalDate, People.Day>) 
     if (day == null) {
         card.showNote(getString(R.string.people_waiting))
     } else {
-        card.headline(resources.getQuantityString(R.plurals.people_count, day.people, day.people), listOfNotNull(
+        card.headline(resources.getQuantityString(R.plurals.people_messages, day.messages, day.messages), listOfNotNull(
+            resources.getQuantityString(R.plurals.people_count, day.people, day.people),
             resources.getQuantityString(R.plurals.people_calls, day.calls, day.calls),
             duration(day.talkMs).takeIf { day.talkMs > 0 }?.let { getString(R.string.people_talking, it) },
-            resources.getQuantityString(R.plurals.people_messages, day.messages, day.messages),
         ).joinToString(" · "))
-        dayBars(card, days.mapValues { it.value.people.toFloat() }, stat.color) { date, _ -> peopleDayText(date, days.getValue(date)) }
+        dayBars(card, days.mapValues { it.value.messages.toFloat() }, stat.color) { date, _ -> peopleDayText(date, days.getValue(date)) }
     }
     // What it counts from, and what's missing
     val missing = listOfNotNull(
@@ -160,22 +160,80 @@ internal fun StatPageFragment.peopleTodayCard(days: Map<LocalDate, People.Day>) 
     val past = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }
     if (past.size < 2) return
     tiles(Card(getString(R.string.steps_usual_title)), getString(R.string.social_usual, past.size), listOf(
+        past.values.map { it.messages }.average().roundToInt().toString() to getString(R.string.people_tile_messages),
         String.format(Locale.getDefault(), "%.1f", past.values.map { it.people }.average()) to getString(R.string.people_tile_people),
-        String.format(Locale.getDefault(), "%.1f", past.values.map { it.calls }.average()) to getString(R.string.people_tile_calls),
-        past.values.count { it.people == 0 }.toString() to getString(R.string.people_tile_no_one),
+        duration(past.values.sumOf { it.talkMs } / past.size) to getString(R.string.people_tile_talking),
     ))
 }
 
-/** Mood by how many people you were in touch with */
+/** The past week, month or year, by [StatPageFragment.peopleSpan] */
+private fun StatPageFragment.peopleDays(days: Map<LocalDate, People.Day>): Collection<People.Day> {
+    val today = LocalDate.now()
+    val back = listOf(7L, 30L, 365L)[StatPageFragment.peopleSpan]
+    return days.filterKeys { it > today.minusDays(back) }.values
+}
+
+private fun StatPageFragment.peopleSpanPicker(card: Card, redraw: () -> Unit) =
+    card.segment(listOf(R.string.trend_weeks, R.string.trend_months, R.string.trend_years), StatPageFragment.peopleSpan) {
+        StatPageFragment.peopleSpan = it
+        redraw()
+    }
+
+/** Who sent the most messages over the past week, month or year */
+internal fun StatPageFragment.peopleMessagesCard(days: Map<LocalDate, People.Day>) {
+    val card = Card(getString(R.string.people_who_messages))
+    fun draw() {
+        peopleSpanPicker(card, ::draw)
+        val counts = peopleDays(days).flatMap { it.from.entries }.groupBy({ it.key }, { it.value }).mapValues { (_, n) -> n.sum() }
+        val top = counts.entries.sortedByDescending { it.value }.take(PEOPLE_SHOWN)
+        if (top.isEmpty()) return card.showNote(getString(R.string.people_who_none))
+        card.describe = { key ->
+            val (name, count) = top[key as Int]
+            listOf(name, resources.getQuantityString(R.plurals.people_messages, count, count),
+                getString(R.string.stat_label, getString(R.string.share_of), "${(count * 100f / counts.values.sum()).roundToInt()}%")).joinToString("\n")
+        }
+        horizontalBars(card, top.map { Triple(it.key, it.value, stat.color) }) { it.toString() }
+    }
+    draw()
+}
+
+/** Time on calls over the past week, month or year, and who with */
+internal fun StatPageFragment.peopleCallsCard(days: Map<LocalDate, People.Day>) {
+    if (!People.hasCallLog(requireContext())) return
+    val card = Card(getString(R.string.people_calls_title))
+    // The span's total, between the title and the bars
+    val total = card.textView(14f, 220).apply { setPadding(0, 0, 0, (10 * resources.displayMetrics.density).toInt()) }
+    card.root.addView(total, card.root.indexOfChild(card.scene))
+    fun draw() {
+        peopleSpanPicker(card, ::draw)
+        val span = peopleDays(days)
+        val calls = span.sumOf { it.calls }
+        total.text = getString(R.string.people_calls_total, duration(span.sumOf { it.talkMs }), resources.getQuantityString(R.plurals.people_calls, calls, calls))
+        val byName = span.flatMap { it.talkedWith.entries }.groupBy({ it.key }, { it.value }).mapValues { (_, ms) -> ms.sum() }
+        val top = byName.entries.sortedByDescending { it.value }.take(PEOPLE_SHOWN)
+        if (top.isEmpty()) return card.showNote(getString(R.string.people_calls_none))
+        card.describe = { key ->
+            val (name, ms) = top[key as Int]
+            listOf(name, getString(R.string.stat_label, getString(R.string.time), duration(ms))).joinToString("\n")
+        }
+        // In whole minutes, at least one for a call that happened
+        horizontalBars(card, top.map { Triple(it.key, ((it.value + 59_999) / 60_000).toInt(), stat.color) }) { duration(it * 60_000L) }
+    }
+    draw()
+}
+
+private const val PEOPLE_SHOWN = 8
+
+/** Mood by how many messages there were */
 internal fun StatPageFragment.peopleMoodCard(days: Map<LocalDate, People.Day>) {
     moodByCard(getString(R.string.people_and_mood),
-        listOf(R.string.people_group_none, R.string.people_group_one, R.string.people_group_few, R.string.people_group_many).map { getString(it) },
+        listOf(R.string.people_group_none, R.string.people_group_few, R.string.people_group_some, R.string.people_group_many).map { getString(it) },
         days.keys) { date ->
-        val p = days[date]?.people ?: return@moodByCard null
+        val m = days[date]?.messages ?: return@moodByCard null
         when {
-            p == 0 -> 0
-            p == 1 -> 1
-            p <= 3 -> 2
+            m == 0 -> 0
+            m < People.FEW_MESSAGES -> 1
+            m < People.SOME_MESSAGES -> 2
             else -> 3
         }
     }

@@ -239,6 +239,8 @@ class StatPageFragment : CardPageFragment() {
             StatKind.PEOPLE -> {
                 val days = app.olauncher.helper.People.days(context)
                 peopleTodayCard(days)
+                peopleMessagesCard(days)
+                peopleCallsCard(days)
                 peopleMoodCard(days)
                 dailyCard()
             }
@@ -1141,5 +1143,6 @@ class StatPageFragment : CardPageFragment() {
         internal var trendPeriod = 0
         internal var overTimeSpan = 1
         internal var vibeProjectsSpan = 0
+        internal var peopleSpan = 0
     }
 }

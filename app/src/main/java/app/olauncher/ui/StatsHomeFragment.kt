@@ -743,7 +743,7 @@ class StatsHomeFragment : CardPageFragment() {
                         .mapValues { it.value.outMs / 3_600_000f }, ::hoursText)
                 }
                 StatKind.WEATHER -> amount(app.olauncher.helper.WeatherHistory.days(context).mapValues { it.value.sunHours }, ::hoursText)
-                StatKind.PEOPLE -> amount(app.olauncher.helper.People.days(context).mapValues { it.value.people.toFloat() }, ::numberText)
+                StatKind.PEOPLE -> amount(app.olauncher.helper.People.days(context).mapValues { it.value.messages.toFloat() }, ::numberText)
                 app.olauncher.helper.StatKind.WORK -> list.add(Measured(stat.id, stat.name, stat.color, icon, ValueKind.YES_NO,
                     faces.mapValues { if (stat.isBlank(it.value)) 0f else 1f }, ::percentText, getString(R.string.compare_off) to getString(R.string.compare_worked)))
                 else -> if (stat.medicine) {
