@@ -529,7 +529,8 @@ class StatsHomeFragment : CardPageFragment() {
             }
             val points = all.values.flatMap { it.keys }
             val first = points.minOrNull()
-            val last = pointOf(today, year) ?: points.maxOrNull()
+            // The week or month just begun only shows once something's in it
+            val last = pointOf(today, year)?.takeIf { it in points } ?: points.maxOrNull()
             chart.isVisible = first != null && last != null
             if (first == null || last == null) {
                 card.note.isVisible = true

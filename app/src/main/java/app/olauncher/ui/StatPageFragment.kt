@@ -681,13 +681,13 @@ class StatPageFragment : CardPageFragment() {
             }
             val start = firstDate ?: return card.showNote(getString(R.string.no_data))
             val today = LocalDate.now()
-            val last = periodOf(period, today)
+            val current = periodOf(period, today)
             val first = when (period) {
-                Period.WEEKS -> maxOf(last - 12, periodOf(period, start))
-                Period.MONTHS -> maxOf(last - 11, periodOf(period, start))
+                Period.WEEKS -> maxOf(current - 12, periodOf(period, start))
+                Period.MONTHS -> maxOf(current - 11, periodOf(period, start))
                 Period.YEARS -> periodOf(period, start)
             }
-            val keyOf = { date: LocalDate -> periodOf(period, date).takeIf { it in first..last } }
+            val keyOf = { date: LocalDate -> periodOf(period, date).takeIf { it in first..current } }
             val grouped = real.orEmpty().entries.mapNotNull { (date, v) -> keyOf(date)?.let { it to v } }.groupBy({ it.first }, { it.second })
             val values: Map<Int, Float> = when {
                 totals -> grouped.mapValues { (_, list) -> list.sum() }
@@ -695,6 +695,8 @@ class StatPageFragment : CardPageFragment() {
                 else -> averages(stat, keyOf)
             }
             val taken = if (stat.medicine) takenCounts(keyOf) else emptyMap()
+            // The week (or month, or year) just begun is left off until it has something, so the line doesn't stop short
+            val last = if (current > first && values[current] == null && taken[current] == null) current - 1 else current
             // Real amounts fit the highest point, so the line uses the card's height however small they are
             val max = if (unit != null) trendMax(values.values.maxOrNull()) else 5f
             val low = if (unit != null) 0f else 1f
@@ -714,7 +716,7 @@ class StatPageFragment : CardPageFragment() {
                     Period.MONTHS -> periodStart.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
                     Period.YEARS -> point.toString()
                 }
-                val parts = mutableListOf(if (point == last) getString(R.string.graph_so_far, title) else title)
+                val parts = mutableListOf(if (point == current) getString(R.string.graph_so_far, title) else title)
                 when {
                     totals -> values[point]?.let { parts.add(getString(R.string.stat_label, getString(R.string.spent), valueText(it))) }
                     stat.medicine && unit == null -> taken[point]?.let { (yes, all) -> parts.add(getString(R.string.stat_label, getString(R.string.taken), getString(R.string.n_of_days, yes, all))) }
@@ -740,7 +742,7 @@ class StatPageFragment : CardPageFragment() {
                 points.filterNotNull().takeIf { it.size > 1 }?.let { s.area(it, bottom, ColorUtils.setAlphaComponent(color, 70)) }
                 s.polyline(points, color, s.dp(3f))
                 values.forEach { (p, value) ->
-                    if (p == last) s.ring(x(p), y(fraction(value)), s.dp(5.5f), color, s.dp(2.5f))
+                    if (p == current) s.ring(x(p), y(fraction(value)), s.dp(5.5f), color, s.dp(2.5f))
                     else s.circle(x(p), y(fraction(value)), s.dp(4f), color)
                 }
                 val labelY = bottom + s.dp(20f)
