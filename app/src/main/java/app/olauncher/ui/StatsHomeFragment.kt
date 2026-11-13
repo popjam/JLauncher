@@ -424,11 +424,13 @@ class StatsHomeFragment : CardPageFragment() {
     /** Records a voice note for [date], its words added to that day's note */
     private fun recordInto(date: LocalDate) {
         saveNote()
+        // The words are already added to the day's note; onto the end of the box too if it's still showing that day
         recordVoiceNote(date, onText = { text ->
-            val now = store.load().days[date.toString()]?.note.orEmpty().trim()
-            val note = if (now.isEmpty()) text else now + "\n" + text
-            store.setNote(date, note)
-            if (noteDate == date) noteInput?.setText(note)
+            val input = noteInput
+            if (noteDate == date && input != null && view != null) {
+                val now = input.text?.toString().orEmpty().trim()
+                input.setText(if (now.isEmpty()) text else now + "\n" + text)
+            }
         })
     }
 

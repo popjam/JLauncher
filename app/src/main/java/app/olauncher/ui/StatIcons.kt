@@ -534,6 +534,32 @@ object StatIcons {
         "...........",
         "...........",
     )
+    val PLAY = icon(
+        "...........",
+        "..XX.......",
+        "..XXXX.....",
+        "..XXXXXX...",
+        "..XXXXXXXX.",
+        "..XXXXXXXXX",
+        "..XXXXXXXX.",
+        "..XXXXXX...",
+        "..XXXX.....",
+        "..XX.......",
+        "...........",
+    )
+    val STOP = icon(
+        "...........",
+        "...........",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "..XXXXXXX..",
+        "...........",
+        "...........",
+    )
     val CHECK = icon(
         "...........",
         "...........",

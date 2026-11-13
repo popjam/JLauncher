@@ -27,6 +27,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import android.view.KeyEvent
+import app.olauncher.helper.MyAccessibilityService
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
 import androidx.core.view.updatePadding
@@ -622,7 +624,33 @@ class SettingsFragment : CardPageFragment() {
                 prefs.homeButtonShowRecents = !prefs.homeButtonShowRecents
                 render()
             },
+            row(card, getString(R.string.voice_key), if (prefs.voiceKey != 0 && isAccessServiceEnabled(context)) keyName(prefs.voiceKey) else getString(R.string.off),
+                R.string.info_voice_key) { pickVoiceKey() },
         )
+    }
+
+    private fun keyName(code: Int) = KeyEvent.keyCodeToString(code).removePrefix("KEYCODE_").replace('_', ' ')
+        .lowercase(Locale.getDefault()).replaceFirstChar { it.uppercase() }
+
+    /** Waits for the key to be pressed, through the accessibility service */
+    private fun pickVoiceKey() {
+        if (!isAccessServiceEnabled(requireContext())) return askAccessibility()
+        val builder = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.voice_key)
+            .setMessage(R.string.voice_key_press)
+            .setNegativeButton(R.string.cancel, null)
+        if (prefs.voiceKey != 0) builder.setNeutralButton(R.string.voice_key_off) { _, _ ->
+            prefs.voiceKey = 0
+            render()
+        }
+        val dialog = builder.create()
+        dialog.setOnDismissListener { MyAccessibilityService.learn = null }
+        MyAccessibilityService.learn = { code ->
+            prefs.voiceKey = code
+            runCatching { dialog.dismiss() }
+            if (isAdded) render()
+        }
+        dialog.show()
     }
 
     private fun toggleLock() {

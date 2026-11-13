@@ -14,7 +14,10 @@ import android.os.ParcelFileDescriptor
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.core.content.ContextCompat
+import app.olauncher.R
+import app.olauncher.data.MoodStore
 import java.io.File
 import java.io.RandomAccessFile
 import java.time.LocalDate
@@ -222,5 +225,54 @@ object VoiceNotes {
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ finish() }, lengthMs(file) / 2 + 60_000L)
     }
 
-    fun delete(file: File) = file.delete()
+    fun delete(context: Context, file: File) {
+        file.delete()
+        setFailed(context, file, false)
+    }
+
+    // --- Writing a recording into its day's note ---
+
+    private fun failedPrefs(context: Context) = context.applicationContext.getSharedPreferences("voice_notes", Context.MODE_PRIVATE)
+
+    /** Recordings whose words couldn't be written out */
+    fun failed(context: Context, file: File) = file.name in failedPrefs(context).getStringSet("failed", emptySet()).orEmpty()
+
+    private fun setFailed(context: Context, file: File, failed: Boolean) {
+        val prefs = failedPrefs(context)
+        val set = prefs.getStringSet("failed", emptySet()).orEmpty().toMutableSet()
+        if (if (failed) set.add(file.name) else set.remove(file.name)) prefs.edit().putStringSet("failed", set).apply()
+    }
+
+    /** Told when a recording's words are added to a day's note, so a page showing that day's note can show them */
+    private val listeners = mutableListOf<(LocalDate, String) -> Unit>()
+
+    fun addListener(listener: (LocalDate, String) -> Unit) { listeners += listener }
+    fun removeListener(listener: (LocalDate, String) -> Unit) { listeners -= listener }
+
+    /**
+     * Writes [file] out as text and adds it to the end of [date]'s note, whatever page is open by then;
+     * [done] gets the words (null if it couldn't). Call on the main thread.
+     */
+    fun writeOut(context: Context, date: LocalDate, file: File, done: ((String?) -> Unit)? = null) {
+        val app = context.applicationContext
+        if (!canTranscribe(app)) {
+            setFailed(app, file, true)
+            Toast.makeText(app, R.string.voice_no_text, Toast.LENGTH_LONG).show()
+            return done?.invoke(null) ?: Unit
+        }
+        Toast.makeText(app, R.string.voice_writing, Toast.LENGTH_SHORT).show()
+        transcribe(app, file) { text ->
+            if (text == null) {
+                setFailed(app, file, true)
+                Toast.makeText(app, R.string.voice_no_text, Toast.LENGTH_LONG).show()
+                return@transcribe done?.invoke(null) ?: Unit
+            }
+            setFailed(app, file, false)
+            val store = MoodStore(app)
+            val now = store.load().days[date.toString()]?.note.orEmpty().trim()
+            store.setNote(date, if (now.isEmpty()) text else now + "\n" + text)
+            listeners.toList().forEach { it(date, text) }
+            done?.invoke(text)
+        }
+    }
 }

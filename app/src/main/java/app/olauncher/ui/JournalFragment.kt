@@ -50,6 +50,7 @@ class JournalFragment : Fragment() {
     /** Today's note, written straight in at the top */
     private lateinit var todayInput: EditText
     private lateinit var todayTitle: TextView
+    private lateinit var todayButtons: LinearLayout
     private var todayShown: String? = null
     private var todayDate: LocalDate = LocalDate.now()
 
@@ -89,6 +90,7 @@ class JournalFragment : Fragment() {
                 }
             })
         }
+        todayButtons = LinearLayout(context)
         todayTitle = TextView(context, null, 0, R.style.TextSmall).apply {
             textSize = 13f
             setTextColor(ink)
@@ -120,7 +122,7 @@ class JournalFragment : Fragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(todayTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 4.dpToPx() })
-            addView(voiceButton(ink) { recordToday() })
+            addView(todayButtons)
         }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -161,8 +163,12 @@ class JournalFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         fillToday()
-        load()
-        show()
+        refresh()
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        app.olauncher.helper.VoiceNotes.addListener(voiceAdded)
     }
 
     override fun onPause() {
@@ -173,6 +179,7 @@ class JournalFragment : Fragment() {
 
     override fun onDestroyView() {
         handler.removeCallbacksAndMessages(null)
+        app.olauncher.helper.VoiceNotes.removeListener(voiceAdded)
         search.hideKeyboard()
         todayInput.hideKeyboard()
         super.onDestroyView()
@@ -205,21 +212,38 @@ class JournalFragment : Fragment() {
         }
     }
 
-    /** Records a voice note for today; its words go on the end of today's note */
+    /** Records a voice note for today; its words go on the end of today's note ([voiceAdded]) */
     private fun recordToday() {
         saveToday()
-        val date = todayDate
-        recordVoiceNote(date, onText = { text ->
-            val showing = date == todayDate && view != null
-            val now = (if (showing) todayInput.text?.toString() else store.load().days[date.toString()]?.note).orEmpty().trim()
-            val note = if (now.isEmpty()) text else now + "\n" + text
-            store.setNote(date, note)
-            if (date == todayDate && view != null) {
-                todayShown = note
-                todayInput.setText(note)
+        recordVoiceNote(todayDate, onSaved = { if (view != null) refresh() })
+    }
+
+    /** Today's buttons: its recordings, if any, and Record */
+    private fun fillTodayButtons() {
+        todayButtons.removeAllViews()
+        val ink = ink
+        voiceListButton(ink, todayDate) { if (view != null) refresh() }?.let {
+            todayButtons.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() })
+        }
+        todayButtons.addView(voiceButton(ink) { recordToday() })
+    }
+
+    private fun refresh() {
+        fillTodayButtons()
+        load()
+        show()
+    }
+
+    /** A voice note's words, already added to the day's note: onto the end of today's box too, keeping anything typed meanwhile */
+    private val voiceAdded: (LocalDate, String) -> Unit = { day, text ->
+        if (view != null) {
+            if (day == todayDate) {
+                val now = todayInput.text?.toString().orEmpty().trim()
+                todayInput.setText(if (now.isEmpty()) text else now + "\n" + text)
+                todayShown = store.load().days[day.toString()]?.note.orEmpty()
             }
-            if (view != null) { load(); show() }
-        }, onSaved = { if (view != null) { load(); show() } })
+            refresh()
+        }
     }
 
     private fun load() {

@@ -43,10 +43,11 @@ fun stopVoicePlayback() {
 }
 
 /**
- * Records a voice note for [date] until Done, then writes it out as text and hands that to [onText]
- * (to add to the note). [onSaved] runs once the recording's kept, text or not.
+ * Records a voice note for [date] until Done, then writes it out as text onto the end of that day's
+ * note ([VoiceNotes.writeOut]), handing the words to [onText] too. [onSaved] runs once the recording's
+ * kept, text or not.
  */
-fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved: () -> Unit = {}) {
+fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null, onSaved: () -> Unit = {}) {
     val context = requireContext().applicationContext
     if (!VoiceNotes.canRecord(context)) {
         @Suppress("DEPRECATION")
@@ -81,15 +82,8 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
     val pause = roundButton(ui, StatIcons.PAUSE, ui.getString(R.string.voice_pause), ink, filled = true, sizeDp = 72)
     val done = roundButton(ui, StatIcons.CHECK, ui.getString(R.string.voice_done), ink, filled = false, sizeDp = 54)
 
-    val card = LinearLayout(ui).apply {
-        orientation = LinearLayout.VERTICAL
+    val card = sheetCard(ui).apply {
         gravity = Gravity.CENTER_HORIZONTAL
-        background = GradientDrawable().apply {
-            cornerRadius = 28.dpToPx().toFloat()
-            setColor(ColorUtils.setAlphaComponent(ui.getColorFromAttr(R.attr.primaryInverseColor), 245))
-            setStroke((0.5f * ui.resources.displayMetrics.density).toInt().coerceAtLeast(1), faint(90))
-        }
-        setPadding(24.dpToPx(), 22.dpToPx(), 24.dpToPx(), 20.dpToPx())
         addView(LinearLayout(ui).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -105,20 +99,9 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 14.dpToPx() })
     }
 
-    val dialog = Dialog(ui).apply {
-        requestWindowFeature(Window.FEATURE_NO_TITLE)
-        setContentView(FrameLayout(ui).apply {
-            setPadding(20.dpToPx(), 0, 20.dpToPx(), 0)
-            addView(card)
-        })
-        setCancelable(false)
-        window?.apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setDimAmount(0.7f)
-            // Thinking for a while shouldn't let the screen go off mid-note
-            addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
+    val dialog = sheetDialog(ui, card, cancelable = false).apply {
+        // Thinking for a while shouldn't let the screen go off mid-note
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     fun showState() {
@@ -154,12 +137,7 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
             main.post {
                 if (file == null) return@post Toast.makeText(context, R.string.voice_too_short, Toast.LENGTH_SHORT).show()
                 onSaved()
-                if (!VoiceNotes.canTranscribe(context)) return@post Toast.makeText(context, R.string.voice_no_text, Toast.LENGTH_LONG).show()
-                Toast.makeText(context, R.string.voice_writing, Toast.LENGTH_SHORT).show()
-                VoiceNotes.transcribe(context, file) { text ->
-                    if (text != null) onText(text)
-                    else Toast.makeText(context, R.string.voice_no_text, Toast.LENGTH_LONG).show()
-                }
+                VoiceNotes.writeOut(context, date, file) { text -> if (text != null) onText?.invoke(text) }
             }
         }.start()
     }
@@ -291,28 +269,104 @@ private class LevelBars(context: Context, private val ink: Int) : View(context) 
 
 private fun clockOf(ms: Long) = "%d:%02d".format(ms / 60_000, ms / 1000 % 60)
 
+/** The rounded card the voice note popups are drawn on */
+private fun sheetCard(context: Context) = LinearLayout(context).apply {
+    orientation = LinearLayout.VERTICAL
+    val ink = context.getColorFromAttr(R.attr.primaryColor)
+    background = GradientDrawable().apply {
+        cornerRadius = 28.dpToPx().toFloat()
+        setColor(ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryInverseColor), 245))
+        setStroke((0.5f * context.resources.displayMetrics.density).toInt().coerceAtLeast(1), ColorUtils.setAlphaComponent(ink, 90))
+    }
+    setPadding(24.dpToPx(), 22.dpToPx(), 24.dpToPx(), 20.dpToPx())
+}
+
+/** A dialog showing [card] across the screen, the page dimmed behind it */
+private fun sheetDialog(context: Context, card: View, cancelable: Boolean) = Dialog(context).apply {
+    requestWindowFeature(Window.FEATURE_NO_TITLE)
+    setContentView(FrameLayout(context).apply {
+        setPadding(20.dpToPx(), 0, 20.dpToPx(), 0)
+        addView(card)
+    })
+    setCancelable(cancelable)
+    setCanceledOnTouchOutside(cancelable)
+    window?.apply {
+        setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        setDimAmount(0.7f)
+    }
+}
+
 /**
- * A row for each of [date]'s recordings: tap to play or stop; hold to write it out again (its words to
- * [onText]) or delete it ([onChange] after).
+ * [date]'s recordings in a popup: each can be played, written out again if it couldn't be before, or
+ * deleted ([onChange] after a delete).
  */
-internal fun Fragment.voiceRows(card: CardPageFragment.Card, date: LocalDate, onText: (String) -> Unit, onChange: () -> Unit): LinearLayout? {
-    val context = requireContext()
-    val files = VoiceNotes.files(context, date)
-    if (files.isEmpty()) return null
-    val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    files.forEach { file ->
-        val label = card.textView(14f, 220)
+internal fun Fragment.showVoiceNotes(date: LocalDate, onChange: () -> Unit) {
+    val ui = requireContext()
+    val ink = ui.getColorFromAttr(R.attr.primaryColor)
+    fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
+    val list = LinearLayout(ui).apply { orientation = LinearLayout.VERTICAL }
+    val card = sheetCard(ui).apply {
+        addView(TextView(ui, null, 0, R.style.TextLarge).apply {
+            setText(R.string.voice_notes)
+            textSize = 22f
+            setTextColor(ink)
+        })
+        addView(TextView(ui, null, 0, R.style.TextSmall).apply {
+            text = date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", java.util.Locale.getDefault()))
+            textSize = 13f
+            setTextColor(faint(150))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 2.dpToPx() })
+        addView(android.widget.ScrollView(ui).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(list)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 12.dpToPx() })
+    }
+    val dialog = sheetDialog(ui, card, cancelable = true)
+    val main = android.os.Handler(android.os.Looper.getMainLooper())
+    lateinit var fill: () -> Unit
+
+    fun row(file: java.io.File): View {
+        val playButton = ImageView(ui).apply {
+            scaleType = ImageView.ScaleType.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(faint(22))
+                setStroke(1.dpToPx(), faint(70))
+            }
+        }
+        val time = TextView(ui, null, 0, R.style.TextSmall).apply {
+            text = android.text.format.DateFormat.getTimeFormat(ui).format(java.util.Date(file.name.substringAfter(' ').substringBefore('.').toLongOrNull() ?: file.lastModified()))
+            textSize = 15f
+            setTextColor(ink)
+        }
+        val length = TextView(ui, null, 0, R.style.TextSmall).apply {
+            textSize = 13f
+            setTextColor(faint(150))
+        }
+        // Couldn't be written out, or (from before that was remembered) the day has no note at all
+        val failed = VoiceNotes.failed(ui, file) ||
+            app.olauncher.data.MoodStore(ui).load().days[date.toString()]?.note.isNullOrBlank()
         fun show() {
-            label.text = getString(if (playing == file) R.string.voice_stop else R.string.voice_play, clockOf(VoiceNotes.lengthMs(file)))
+            val on = playing == file
+            playButton.setImageDrawable(StatIcons.drawable(if (on) StatIcons.STOP else StatIcons.PLAY, ink, 14.dpToPx()))
+            val total = clockOf(VoiceNotes.lengthMs(file))
+            val at = if (on) player?.let { runCatching { clockOf(it.currentPosition.toLong()) + " / " }.getOrNull() }.orEmpty() else ""
+            length.text = at + total + if (failed) " · " + ui.getString(R.string.voice_not_written) else ""
         }
         show()
-        label.setPadding(4.dpToPx(), 10.dpToPx(), 4.dpToPx(), 10.dpToPx())
-        label.setBackgroundResource(android.R.drawable.list_selector_background)
-        label.setOnClickListener {
+        val progress = object : Runnable {
+            override fun run() {
+                if (playing != file || !dialog.isShowing) return
+                show()
+                main.postDelayed(this, 250)
+            }
+        }
+        playButton.setOnClickListener {
             if (playing == file) {
                 stopVoicePlayback()
-                show()
-                return@setOnClickListener
+                return@setOnClickListener fill()
             }
             stopVoicePlayback()
             player = runCatching {
@@ -320,61 +374,98 @@ internal fun Fragment.voiceRows(card: CardPageFragment.Card, date: LocalDate, on
                     setDataSource(file.path)
                     setOnCompletionListener {
                         stopVoicePlayback()
-                        show()
+                        if (dialog.isShowing) fill()
                     }
                     prepare()
                     start()
                 }
             }.getOrNull()
             playing = if (player != null) file else null
-            show()
+            // Only the one playing shows Stop
+            fill()
+            main.post(progress)
         }
-        label.setOnLongClickListener {
-            AlertDialog.Builder(context)
-                .setItems(arrayOf(getString(R.string.voice_write_again), getString(R.string.voice_delete))) { _, which ->
-                    if (which == 0) {
-                        if (!VoiceNotes.canTranscribe(context)) return@setItems Toast.makeText(context, R.string.voice_no_text, Toast.LENGTH_LONG).show()
-                        Toast.makeText(context, R.string.voice_writing, Toast.LENGTH_SHORT).show()
-                        VoiceNotes.transcribe(context.applicationContext, file) { text ->
-                            if (text != null) onText(text) else Toast.makeText(context, R.string.voice_no_text, Toast.LENGTH_LONG).show()
-                        }
-                    } else AlertDialog.Builder(context)
+        return LinearLayout(ui).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 8.dpToPx(), 0, 8.dpToPx())
+            addView(playButton, LinearLayout.LayoutParams(40.dpToPx(), 40.dpToPx()).apply { marginEnd = 14.dpToPx() })
+            addView(LinearLayout(ui).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(time)
+                addView(length)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (failed) addView(pillButton(ui, ink, ui.getString(R.string.voice_write_out), null) {
+                VoiceNotes.writeOut(ui, date, file) { if (dialog.isShowing) fill() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() })
+            addView(ImageView(ui).apply {
+                setImageDrawable(StatIcons.drawable(StatIcons.CROSS, faint(170), 12.dpToPx()))
+                scaleType = ImageView.ScaleType.CENTER
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                contentDescription = ui.getString(R.string.voice_delete)
+                setOnClickListener {
+                    AlertDialog.Builder(ui)
                         .setMessage(R.string.voice_delete_ask)
                         .setNegativeButton(R.string.cancel, null)
                         .setPositiveButton(R.string.voice_delete) { _, _ ->
                             if (playing == file) stopVoicePlayback()
-                            VoiceNotes.delete(file)
+                            VoiceNotes.delete(ui, file)
                             onChange()
+                            if (VoiceNotes.files(ui, date).isEmpty()) dialog.dismiss() else fill()
                         }
                         .show()
                 }
-                .show()
-            true
+            }, LinearLayout.LayoutParams(36.dpToPx(), 36.dpToPx()))
         }
-        list.addView(label)
     }
-    return list
+
+    fill = {
+        list.removeAllViews()
+        VoiceNotes.files(ui, date).forEach { list.addView(row(it)) }
+    }
+    fill()
+    dialog.setOnDismissListener { stopVoicePlayback() }
+    dialog.show()
 }
 
-/** A small "Voice note" button with a mic, for under a note box, doing [onTap] */
-internal fun Fragment.voiceButton(ink: Int, onTap: () -> Unit): TextView = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
-    setText(R.string.voice_note_button)
+/** A small outlined button with an optional pixel icon, doing [onTap] */
+private fun pillButton(context: Context, ink: Int, text: String, icon: String?, onTap: () -> Unit): TextView = TextView(context, null, 0, R.style.TextSmall).apply {
+    this.text = text
     textSize = 13f
     setTextColor(ink)
     gravity = Gravity.CENTER_VERTICAL
-    setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.MIC, ink, 14.dpToPx()), null, null, null)
-    compoundDrawablePadding = 6.dpToPx()
-    background = android.graphics.drawable.GradientDrawable().apply {
+    if (icon != null) {
+        setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(icon, ink, 14.dpToPx()), null, null, null)
+        compoundDrawablePadding = 6.dpToPx()
+    }
+    background = GradientDrawable().apply {
         cornerRadius = 14.dpToPx().toFloat()
-        setStroke(1.dpToPx(), androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 70))
+        setStroke(1.dpToPx(), ColorUtils.setAlphaComponent(ink, 70))
     }
     setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
     setOnClickListener { onTap() }
 }
 
-/** [button] on the right, in its own row, for under a note box */
-internal fun Fragment.endRow(button: android.view.View): LinearLayout = LinearLayout(requireContext()).apply {
+/** A small "Record" button with a mic, for under a note box, doing [onTap] */
+internal fun Fragment.voiceButton(ink: Int, onTap: () -> Unit): TextView =
+    pillButton(requireContext(), ink, getString(R.string.voice_note_button), StatIcons.MIC, onTap)
+
+/** A button opening [date]'s recordings ([showVoiceNotes]), or null if there are none */
+internal fun Fragment.voiceListButton(ink: Int, date: LocalDate, onChange: () -> Unit): TextView? {
+    val count = VoiceNotes.files(requireContext(), date).size
+    if (count == 0) return null
+    return pillButton(requireContext(), ink, resources.getQuantityString(R.plurals.voice_note_count, count, count), StatIcons.PLAY) {
+        showVoiceNotes(date, onChange)
+    }
+}
+
+/** [buttons] on the right, in their own row, for under a note box */
+internal fun Fragment.endRow(vararg buttons: View?): LinearLayout = LinearLayout(requireContext()).apply {
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.END
-    addView(button)
+    buttons.filterNotNull().forEachIndexed { i, button ->
+        addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            if (i > 0) marginStart = 8.dpToPx()
+        })
+    }
 }

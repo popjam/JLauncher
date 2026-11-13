@@ -47,6 +47,38 @@ class MyAccessibilityService : AccessibilityService() {
             .enabledInputMethodList.map { it.packageName }.toSet()
     }
 
+    /** The voice note key: held, it records for today; while settings is picking one, the next key pressed */
+    override fun onKeyEvent(event: KeyEvent): Boolean {
+        val code = event.keyCode
+        learn?.let { picked ->
+            if (code in RESERVED_KEYS) return false
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                learn = null
+                picked(code)
+            }
+            return true
+        }
+        val key = Prefs(this).voiceKey
+        if (key == 0 || code != key) {
+            // Let go of after a learn, or the setting changed mid-hold
+            if (VoiceKey.recording && event.action == KeyEvent.ACTION_UP && code == heldKey) {
+                VoiceKey.finish(this)
+                return true
+            }
+            return false
+        }
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) {
+                heldKey = code
+                VoiceKey.start(this)
+            }
+            KeyEvent.ACTION_UP -> VoiceKey.finish(this)
+        }
+        return true
+    }
+
+    private var heldKey = 0
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> onWindowChanged(event)
@@ -181,6 +213,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        VoiceKey.cancel(this)
         removeGate()
         return super.onUnbind(intent)
     }
@@ -193,6 +226,12 @@ class MyAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val SYSTEM_UI = "com.android.systemui"
+
+        /** Keys never taken for the voice note key */
+        private val RESERVED_KEYS = setOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_APP_SWITCH, KeyEvent.KEYCODE_POWER)
+
+        /** Set by settings while picking the voice note key: gets the next key pressed */
+        var learn: ((Int) -> Unit)? = null
 
         // Runs in the launcher's process, so the launcher can reach it directly
         private var instanceRef: java.lang.ref.WeakReference<MyAccessibilityService>? = null

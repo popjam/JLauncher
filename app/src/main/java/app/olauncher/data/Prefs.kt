@@ -33,6 +33,7 @@ class Prefs(context: Context) {
     private val PAUSE_SECONDS = "PAUSE_SECONDS"
     private val USE_FOR_ON = "USE_FOR_ON"
     private val AUTO_SHOW_KEYBOARD = "AUTO_SHOW_KEYBOARD"
+    private val VOICE_KEY = "VOICE_KEY"
     private val KEYBOARD_MESSAGE = "KEYBOARD_MESSAGE"
     private val DAILY_WALLPAPER = "DAILY_WALLPAPER"
     private val DAILY_WALLPAPER_URL = "DAILY_WALLPAPER_URL"
@@ -184,6 +185,11 @@ class Prefs(context: Context) {
     var lockModePending: Boolean
         get() = prefs.getBoolean(LOCK_MODE_PENDING, false)
         set(value) = prefs.edit { putBoolean(LOCK_MODE_PENDING, value).apply() }
+
+    /** The hardware key held to record a voice note for today (0 for none) */
+    var voiceKey: Int
+        get() = prefs.getInt(VOICE_KEY, 0)
+        set(value) = prefs.edit { putInt(VOICE_KEY, value).apply() }
 
     var autoShowKeyboard: Boolean
         get() = prefs.getBoolean(AUTO_SHOW_KEYBOARD, true)

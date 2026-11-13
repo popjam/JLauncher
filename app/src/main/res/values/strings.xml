@@ -717,6 +717,11 @@
     <string name="voice_recording">Recording</string>
     <string name="voice_done">Done</string>
     <string name="voice_paused">Paused</string>
+    <string name="voice_added">Added to today\'s note</string>
+    <string name="voice_key">Voice note key</string>
+    <string name="voice_key_press">Press the key</string>
+    <string name="voice_key_off">Turn off</string>
+    <string name="info_voice_key">Hold this key anywhere to record a voice note. Letting go adds its words to today\'s note.</string>
     <string name="voice_pause">Pause</string>
     <string name="voice_resume">Resume</string>
     <string name="voice_discard_ask">Throw this recording away?</string>
@@ -725,8 +730,13 @@
     <string name="voice_too_short">Too short to keep</string>
     <string name="voice_writing">Writing it down…</string>
     <string name="voice_no_text">Couldn’t write it out; the recording is kept on the day</string>
-    <string name="voice_play">▶  Voice note · %1$s</string>
-    <string name="voice_stop">■  Playing · %1$s</string>
+    <string name="voice_notes">Voice notes</string>
+    <string name="voice_not_written">not written out</string>
+    <string name="voice_write_out">Write out</string>
+    <plurals name="voice_note_count">
+        <item quantity="one">%d voice note</item>
+        <item quantity="other">%d voice notes</item>
+    </plurals>
     <string name="voice_delete_ask">Delete this recording? Its words stay in the note.</string>
     <string name="voice_delete">Delete</string>
     <string name="journal_with_voice">%1$s · voice note</string>
@@ -777,7 +787,6 @@
         <item quantity="one">%d message</item>
         <item quantity="other">%d messages</item>
     </plurals>
-    <string name="voice_write_again">Write it out again</string>
     <string name="settings">Settings</string>
     <string name="clock">Clock</string>
     <string name="apps_at_bottom">Apps at the bottom</string>
@@ -1156,7 +1165,7 @@
     <!-- Settings search, and a voice note from the check-in -->
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_none">No settings match “%1$s”</string>
-    <string name="voice_note_button">Voice note</string>
+    <string name="voice_note_button">Record</string>
     <string name="google_drive">Google Drive</string>
 
     <!-- Holding and dragging things into place -->
