@@ -716,6 +716,14 @@
     <string name="voice_cant_record">Couldn’t start recording</string>
     <string name="voice_recording">Recording</string>
     <string name="voice_done">Done</string>
+    <string name="voice_paused">Paused</string>
+    <string name="voice_pause">Pause</string>
+    <string name="voice_resume">Resume</string>
+    <string name="voice_up_to">up to %1$s</string>
+    <string name="voice_paused_hint">Mic’s off. Take your time, then resume.</string>
+    <string name="voice_discard_ask">Throw this recording away?</string>
+    <string name="voice_keep_going">Keep it</string>
+    <string name="voice_discard">Throw away</string>
     <string name="voice_too_short">Too short to keep</string>
     <string name="voice_writing">Writing it down…</string>
     <string name="voice_no_text">Couldn’t write it out; the recording is kept on the day</string>

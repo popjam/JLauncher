@@ -50,16 +50,34 @@ object VoiceNotes {
     /** How long a recording is, from its size */
     fun lengthMs(file: File) = maxOf(0L, file.length() - 44) * 1000 / (RATE * 2)
 
-    /** Records to a new file for [date] until [stop]ped; [cancel] throws it away */
+    /**
+     * Records to a new file for [date] until [stop]ped; [cancel] throws it away. [paused] turns the mic
+     * off for a while without ending the recording; only the time spent recording counts to [MAX_MS].
+     */
     class Recorder(context: Context, date: LocalDate) {
         val file = File(folder(context), "$date ${System.currentTimeMillis()}.wav")
         @Volatile private var running = true
         private var thread: Thread? = null
-        val startedAt = System.currentTimeMillis()
+
+        /** Paused: the mic is off and nothing is written until it's unpaused */
+        @Volatile var paused = false
+
+        /** Bytes of sound written so far */
+        @Volatile private var written = 0L
+
+        /** How loud the last moment was, 0 to 1 (0 while paused) */
+        @Volatile var level = 0f
+            private set
+
+        /** How long has been recorded, pauses left out */
+        val recordedMs get() = written * 1000 / (RATE * 2)
+
+        /** Whether it stopped by itself, having reached [MAX_MS] */
+        val full get() = recordedMs >= MAX_MS
 
         @SuppressLint("MissingPermission")
         fun start(): Boolean {
-            val size = maxOf(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), RATE)
+            val size = maxOf(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), RATE / 5)
             val record = runCatching { AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size) }
                 .getOrNull()?.takeIf { it.state == AudioRecord.STATE_INITIALIZED } ?: return false
             thread = Thread {
@@ -67,19 +85,44 @@ object VoiceNotes {
                     RandomAccessFile(file, "rw").use { out ->
                         out.setLength(0)
                         out.write(ByteArray(44))
-                        val buffer = ByteArray(size)
-                        record.startRecording()
-                        while (running && System.currentTimeMillis() - startedAt < MAX_MS) {
+                        // Small reads, so the level moves smoothly
+                        val buffer = ByteArray(RATE / 10)
+                        var on = false
+                        while (running && !full) {
+                            if (paused) {
+                                if (on) { record.stop(); on = false }
+                                level = 0f
+                                Thread.sleep(40)
+                                continue
+                            }
+                            if (!on) { record.startRecording(); on = true }
                             val read = record.read(buffer, 0, buffer.size)
-                            if (read > 0) out.write(buffer, 0, read)
+                            if (read > 0) {
+                                out.write(buffer, 0, read)
+                                written += read
+                                level = peak(buffer, read)
+                            }
                         }
-                        record.stop()
+                        if (on) record.stop()
+                        level = 0f
                         writeHeader(out, (out.length() - 44).toInt())
                     }
                 }
                 record.release()
             }.also { it.start() }
             return true
+        }
+
+        /** The loudest sample in [buffer], 0 to 1, eased so quiet speech still shows */
+        private fun peak(buffer: ByteArray, read: Int): Float {
+            var max = 0
+            var i = 0
+            while (i + 1 < read) {
+                val sample = (buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)
+                max = maxOf(max, kotlin.math.abs(sample))
+                i += 2
+            }
+            return kotlin.math.sqrt(max / 32768f).coerceIn(0f, 1f)
         }
 
         /** Stops and waits for the file to be finished */
