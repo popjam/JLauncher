@@ -76,20 +76,7 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
         gravity = Gravity.CENTER
         fontFeatureSettings = "tnum"
     }
-    val limit = TextView(ui, null, 0, R.style.TextSmall).apply {
-        text = ui.getString(R.string.voice_up_to, clockOf(VoiceNotes.MAX_MS))
-        textSize = 12f
-        setTextColor(faint(110))
-        gravity = Gravity.CENTER
-    }
     val bars = LevelBars(ui, ink)
-    val hint = TextView(ui, null, 0, R.style.TextSmall).apply {
-        setText(R.string.voice_paused_hint)
-        textSize = 13f
-        setTextColor(faint(150))
-        gravity = Gravity.CENTER
-        visibility = View.INVISIBLE
-    }
     val cancel = roundButton(ui, StatIcons.CROSS, ui.getString(R.string.cancel), ink, filled = false, sizeDp = 54)
     val pause = roundButton(ui, StatIcons.PAUSE, ui.getString(R.string.voice_pause), ink, filled = true, sizeDp = 72)
     val done = roundButton(ui, StatIcons.CHECK, ui.getString(R.string.voice_done), ink, filled = false, sizeDp = 54)
@@ -110,9 +97,7 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
             addView(status)
         })
         addView(timer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 10.dpToPx() })
-        addView(limit)
         addView(bars, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 44.dpToPx()).apply { topMargin = 18.dpToPx() })
-        addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 10.dpToPx() })
         addView(LinearLayout(ui).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -142,7 +127,6 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: (String) -> Unit, onSaved:
         status.setTextColor(if (paused) faint(170) else ink)
         dot.setImageDrawable(StatIcons.drawable(if (paused) StatIcons.PAUSE else StatIcons.RECORD, if (paused) faint(170) else red, 12.dpToPx()))
         timer.alpha = if (paused) 0.55f else 1f
-        hint.visibility = if (paused) View.VISIBLE else View.INVISIBLE
         pause.icon.setImageDrawable(StatIcons.drawable(if (paused) StatIcons.RECORD else StatIcons.PAUSE, if (paused) red else ui.getColorFromAttr(R.attr.primaryInverseColor), 24.dpToPx()))
         pause.label.setText(if (paused) R.string.voice_resume else R.string.voice_pause)
         bars.paused = paused
