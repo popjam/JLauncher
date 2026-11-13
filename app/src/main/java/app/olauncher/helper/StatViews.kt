@@ -10,6 +10,8 @@ import android.widget.TextView
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.ui.PixelFaceView
+import java.time.LocalDate
+import java.util.Locale
 
 /**
  * A stat to show: one of the built-ins or a custom stat, with the name and colour to use. [question] is
@@ -165,4 +167,22 @@ fun statDot(color: Int, sizePx: Int = 7.dpToPx()) = GradientDrawable().apply {
 fun TextView.setStatDot(color: Int?) {
     setCompoundDrawablesRelativeWithIntrinsicBounds(color?.let { statDot(it) }, null, null, null)
     compoundDrawablePadding = 6.dpToPx()
+}
+
+/**
+ * A filled-in stat's real amount on [date] (hours slept, messages, sun, money spent...) rather than the
+ * band its face stands for; null when it hasn't one, so the face's name is shown instead.
+ */
+fun Context.statAmount(stat: StatInfo, date: LocalDate, day: MoodStore.Day?): String? = when (stat.kind) {
+    StatKind.SCREEN -> day?.totalUsageMs?.let { formattedTimeSpent(it) }
+    StatKind.SLEEP -> Sleep.nights(this)[date]?.let { formattedTimeSpent(it.asleepMs) }
+    StatKind.VIBECODING -> Vibecoding.days(this)[date]?.let { formattedTimeSpent(it.minutes * 60_000L) }
+    StatKind.MUSIC -> Music.days(this)[date]?.let { formattedTimeSpent(it.ms) }
+    StatKind.SOCIAL -> Social.days(this)[date]?.let { formattedTimeSpent(it.outMs) }
+    StatKind.WORK -> Social.days(this)[date]?.workMs?.takeIf { it > 0 }?.let { formattedTimeSpent(it) }
+    StatKind.WEATHER -> WeatherHistory.days(this)[date]?.let { String.format(Locale.getDefault(), "%.1fh sun", it.sunHours) }
+    StatKind.PEOPLE -> People.days(this)[date]?.let { resources.getQuantityString(R.plurals.messages_count, it.messages, it.messages) }
+    StatKind.MONEY -> if (Spending.purchases(this).any { it.date == date })
+        String.format(Locale.getDefault(), "$%.2f", Spending.totalCents(this, date) / 100.0) else null
+    else -> null
 }

@@ -1174,4 +1174,8 @@
     <string name="people_calls_title">Phone calls</string>
     <string name="people_calls_none">No calls answered or made in this time</string>
     <string name="people_calls_total">%1$s on calls · %2$s</string>
+    <plurals name="messages_count">
+        <item quantity="one">%d message</item>
+        <item quantity="other">%d messages</item>
+    </plurals>
 </resources>

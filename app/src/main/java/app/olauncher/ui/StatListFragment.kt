@@ -22,6 +22,7 @@ import app.olauncher.helper.Sleep
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.StatKind
+import app.olauncher.helper.statAmount
 import app.olauncher.helper.Vibecoding
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
@@ -165,15 +166,8 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         val day = data.days[today.toString()]
         val values = mutableMapOf<String, String>()
         stats.forEach { stat ->
-            val text = when (stat.kind) {
-                StatKind.SCREEN -> day?.totalUsageMs?.let { context.formattedTimeSpent(it) }
-                StatKind.SLEEP -> Sleep.nights(context)[today]?.let { context.formattedTimeSpent(it.asleepMs) }
-                StatKind.VIBECODING -> Vibecoding.days(context)[today]?.let { context.formattedTimeSpent(it.minutes * 60_000L) }
-                StatKind.MUSIC -> Music.days(context)[today]?.let { context.formattedTimeSpent(it.ms) }
-                StatKind.MONEY -> if (Spending.purchases(context).any { it.date == today })
-                    Spending.totalCents(context, today).let { String.format(Locale.getDefault(), "$%.2f", it / 100.0) } else null
-                else -> null
-            } ?: day?.face(stat.id)?.let { faceName(stat, it) }
+            val text = context.statAmount(stat, today, day)
+                ?: day?.face(stat.id)?.let { faceName(stat, it) }
             if (text != null) values[stat.id] = text
         }
         return values

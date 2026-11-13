@@ -35,6 +35,7 @@ import app.olauncher.helper.bindFaceLabels
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.hideKeyboard
+import app.olauncher.helper.statAmount
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -255,8 +256,7 @@ class DayPageFragment : CardPageFragment() {
             val editable = stat.id != MoodStore.USAGE
             val value = when {
                 stat.id == MoodStore.USAGE -> day?.totalUsageMs?.let { duration(it) }
-                face == null -> null
-                else -> faceName(stat, face)
+                else -> context.statAmount(stat, date, day) ?: face?.let { faceName(stat, it) }
             }
             list.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
