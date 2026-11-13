@@ -326,6 +326,7 @@ internal fun Fragment.showVoiceNotes(date: LocalDate, onChange: () -> Unit) {
     val dialog = sheetDialog(ui, card, cancelable = true)
     val main = android.os.Handler(android.os.Looper.getMainLooper())
     lateinit var fill: () -> Unit
+    var noNote = false
 
     fun row(file: java.io.File): View {
         val playButton = ImageView(ui).apply {
@@ -345,13 +346,13 @@ internal fun Fragment.showVoiceNotes(date: LocalDate, onChange: () -> Unit) {
             textSize = 13f
             setTextColor(faint(150))
         }
-        // Couldn't be written out, or (from before that was remembered) the day has no note at all
-        val failed = VoiceNotes.failed(ui, file) ||
-            app.olauncher.data.MoodStore(ui).load().days[date.toString()]?.note.isNullOrBlank()
+        // Couldn't be written out, or (from before that was remembered) the day has no note at all.
+        // Compressed ones were written out.
+        val failed = file.name.endsWith(".wav") && (VoiceNotes.failed(ui, file) || noNote)
         fun show() {
             val on = playing == file
             playButton.setImageDrawable(StatIcons.drawable(if (on) StatIcons.STOP else StatIcons.PLAY, ink, 14.dpToPx()))
-            val total = clockOf(VoiceNotes.lengthMs(file))
+            val total = clockOf(VoiceNotes.lengthMs(ui, file))
             val at = if (on) player?.let { runCatching { clockOf(it.currentPosition.toLong()) + " / " }.getOrNull() }.orEmpty() else ""
             length.text = at + total + if (failed) " · " + ui.getString(R.string.voice_not_written) else ""
         }
@@ -420,6 +421,7 @@ internal fun Fragment.showVoiceNotes(date: LocalDate, onChange: () -> Unit) {
     }
 
     fill = {
+        noNote = app.olauncher.data.MoodStore(ui).load().days[date.toString()]?.note.isNullOrBlank()
         list.removeAllViews()
         VoiceNotes.files(ui, date).forEach { list.addView(row(it)) }
     }

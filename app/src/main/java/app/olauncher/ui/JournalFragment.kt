@@ -104,6 +104,9 @@ class JournalFragment : Fragment() {
             setHintTextColor(ColorUtils.setAlphaComponent(ink, 110))
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             minLines = 3
+            // A long note scrolls inside the box rather than pushing the list away
+            maxLines = 7
+            isVerticalScrollBarEnabled = true
             gravity = Gravity.TOP
             background = GradientDrawable().apply {
                 cornerRadius = 16.dpToPx().toFloat()
@@ -264,7 +267,9 @@ class JournalFragment : Fragment() {
         val context = requireContext()
         val query = search.text.toString().trim().lowercase(Locale.getDefault())
         val words = query.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        // Today's note is in the box at the top, so it's only listed when searching
         val shown = notes.filter { (date, day) ->
+            if (words.isEmpty() && date == todayDate) return@filter false
             val haystack = (day.note.orEmpty() + " " + dateText(date)).lowercase(Locale.getDefault())
             words.all { it in haystack }
         }
@@ -313,6 +318,11 @@ class JournalFragment : Fragment() {
                         setTextColor(ink)
                         setPadding(0, 3.dpToPx(), 0, 0)
                         setLineSpacing(0f, 1.15f)
+                        // Long notes cut short (tapping opens the whole day); in full while searching, to see the matches
+                        if (words.isEmpty()) {
+                            maxLines = 4
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                        }
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 // The whole day, where the note can be changed too

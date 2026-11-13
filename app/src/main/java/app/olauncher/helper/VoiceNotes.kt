@@ -26,12 +26,14 @@ import java.util.Locale
 /**
  * Voice notes for a day's journal: recorded as WAV files on the phone (in voice/, named by day and
  * time), and written out as text by the phone's own speech recognition, from the file, so the note can
- * be searched. The recordings stay on the phone; only the text goes into backups.
+ * be searched. Once written out, a recording is squeezed into a small AAC file (.m4a). The backup
+ * folder keeps a copy of each in its own voice folder ([BackupManager][app.olauncher.data.BackupManager]).
  */
 object VoiceNotes {
 
     const val RATE = 16_000
     const val MAX_MS = 3 * 60_000L
+    private const val BIT_RATE = 24_000
 
     fun canRecord(context: Context) =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -40,18 +42,184 @@ object VoiceNotes {
     fun canTranscribe(context: Context) = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         (SpeechRecognizer.isOnDeviceRecognitionAvailable(context) || SpeechRecognizer.isRecognitionAvailable(context))
 
-    private fun folder(context: Context) = File(context.filesDir, "voice").apply { mkdirs() }
+    fun folder(context: Context) = File(context.filesDir, "voice").apply { mkdirs() }
+
+    /** Whether [name] is a finished recording (not one being written) */
+    fun isRecording(name: String) = name.endsWith(".wav") || name.endsWith(".m4a")
+
+    /** Every finished recording */
+    fun all(context: Context): List<File> = folder(context).listFiles { f -> isRecording(f.name) }.orEmpty().toList()
 
     /** [date]'s recordings, oldest first */
     fun files(context: Context, date: LocalDate): List<File> =
-        folder(context).listFiles { f -> f.name.startsWith("$date ") && f.name.endsWith(".wav") }.orEmpty().sortedBy { it.name }
+        folder(context).listFiles { f -> f.name.startsWith("$date ") && isRecording(f.name) }.orEmpty().sortedBy { it.name }
 
     /** Every day with a recording */
-    fun dates(context: Context): Set<LocalDate> = folder(context).listFiles().orEmpty()
+    fun dates(context: Context): Set<LocalDate> = all(context)
         .mapNotNull { runCatching { LocalDate.parse(it.name.substringBefore(' ')) }.getOrNull() }.toSet()
 
-    /** How long a recording is, from its size */
-    fun lengthMs(file: File) = maxOf(0L, file.length() - 44) * 1000 / (RATE * 2)
+    /** How long a recording is: a WAV's from its size, a compressed one's as noted when it was made */
+    private fun wavMs(file: File) = maxOf(0L, file.length() - 44) * 1000 / (RATE * 2)
+
+    fun lengthMs(context: Context, file: File): Long {
+        if (file.name.endsWith(".wav")) return wavMs(file)
+        val prefs = failedPrefs(context)
+        val known = prefs.getLong("len:" + file.name, -1L)
+        if (known >= 0) return known
+        return measure(file).also { prefs.edit().putLong("len:" + file.name, it).apply() }
+    }
+
+    /** A compressed file's length, read from the file (slow-ish, so done once and noted) */
+    private fun measure(file: File): Long = runCatching {
+        val extractor = android.media.MediaExtractor()
+        try {
+            extractor.setDataSource(file.path)
+            extractor.getTrackFormat(0).getLong(android.media.MediaFormat.KEY_DURATION) / 1000
+        } finally {
+            extractor.release()
+        }
+    }.getOrDefault(0L)
+
+    /** Notes [file]'s length if it isn't yet; for a recording brought back from the backup. Off the main thread. */
+    fun noteLength(context: Context, file: File) {
+        if (file.name.endsWith(".m4a") && !failedPrefs(context).contains("len:" + file.name))
+            failedPrefs(context).edit().putLong("len:" + file.name, measure(file)).apply()
+    }
+
+    // --- Compressing ---
+
+    private val compressLock = Any()
+
+    /** One at a time, off the main thread */
+    private val work = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    /** Compresses [wav] soon, then has the backup pick it up */
+    fun compressLater(context: Context, wav: File) {
+        val appContext = context.applicationContext
+        work.execute {
+            compress(appContext, wav)
+            app.olauncher.data.BackupManager.requestSync(appContext)
+        }
+    }
+
+    /**
+     * Squeezes recordings that are done with: written out, or from before today and not waiting to be
+     * written out again. Off the main thread.
+     */
+    fun tidy(context: Context) {
+        val today = LocalDate.now().toString()
+        all(context).forEach { file ->
+            if (file.name.endsWith(".wav") && !failed(context, file) && file.name.substringBefore(' ') < today) compress(context, file)
+        }
+    }
+
+    /**
+     * [wav] as AAC in an .m4a beside it, replacing it; null if it couldn't (the WAV is kept then).
+     * Off the main thread.
+     */
+    fun compress(context: Context, wav: File): File? = synchronized(compressLock) {
+        if (!wav.exists() || !wav.name.endsWith(".wav")) return null
+        val out = File(wav.parentFile, wav.name.removeSuffix(".wav") + ".m4a")
+        val part = File(wav.parentFile, out.name + ".part")
+        var codec: android.media.MediaCodec? = null
+        var muxer: android.media.MediaMuxer? = null
+        try {
+            val format = android.media.MediaFormat.createAudioFormat(android.media.MediaFormat.MIMETYPE_AUDIO_AAC, RATE, 1).apply {
+                setInteger(android.media.MediaFormat.KEY_AAC_PROFILE, android.media.MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(android.media.MediaFormat.KEY_BIT_RATE, BIT_RATE)
+                setInteger(android.media.MediaFormat.KEY_MAX_INPUT_SIZE, 16_384)
+            }
+            codec = android.media.MediaCodec.createEncoderByType(android.media.MediaFormat.MIMETYPE_AUDIO_AAC).apply {
+                configure(format, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE)
+                start()
+            }
+            muxer = android.media.MediaMuxer(part.path, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            var track = -1
+            var muxing = false
+            val info = android.media.MediaCodec.BufferInfo()
+            wav.inputStream().buffered().use { input ->
+                input.skip(44)
+                var read = 0L
+                var inputDone = false
+                val chunk = ByteArray(8192)
+                while (true) {
+                    if (!inputDone) {
+                        val index = codec.dequeueInputBuffer(10_000)
+                        if (index >= 0) {
+                            val buffer = codec.getInputBuffer(index)!!
+                            buffer.clear()
+                            val n = input.read(chunk, 0, minOf(chunk.size, buffer.remaining()))
+                            val at = read * 1_000_000 / (RATE * 2)
+                            if (n <= 0) {
+                                codec.queueInputBuffer(index, 0, 0, at, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                                inputDone = true
+                            } else {
+                                buffer.put(chunk, 0, n)
+                                codec.queueInputBuffer(index, 0, n, at, 0)
+                                read += n
+                            }
+                        }
+                    }
+                    val index = codec.dequeueOutputBuffer(info, 10_000)
+                    when {
+                        index == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                            track = muxer.addTrack(codec.outputFormat)
+                            muxer.start()
+                            muxing = true
+                        }
+                        index >= 0 -> {
+                            val data = codec.getOutputBuffer(index)!!
+                            if (info.flags and android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) info.size = 0
+                            if (info.size > 0 && muxing) {
+                                data.position(info.offset)
+                                data.limit(info.offset + info.size)
+                                muxer.writeSampleData(track, data, info)
+                            }
+                            codec.releaseOutputBuffer(index, false)
+                            if (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                        }
+                    }
+                }
+            }
+            val length = maxOf(0L, wav.length() - 44) * 1000 / (RATE * 2)
+            codec.stop()
+            muxer.stop()
+            muxer.release()
+            muxer = null
+            if (!part.renameTo(out)) throw IllegalStateException("Couldn't keep the compressed file")
+            failedPrefs(context).edit().putLong("len:" + out.name, length).apply()
+            // The WAV's copy in the backup goes too, if it had one
+            forgetInBackup(context, wav.name)
+            wav.delete()
+            out
+        } catch (e: Exception) {
+            e.printStackTrace()
+            part.delete()
+            null
+        } finally {
+            runCatching { codec?.release() }
+            runCatching { muxer?.release() }
+        }
+    }
+
+    // --- Backing up ---
+
+    /** The recordings the backup folder should have: compressed ones, and WAVs that are staying as they are */
+    fun toBackUp(context: Context): List<File> = all(context).filter { it.name.endsWith(".m4a") || failed(context, it) }
+
+    /** Recordings deleted from the phone (or replaced by a compressed one), to delete from the backup too */
+    fun deletedFromBackup(context: Context): Set<String> = failedPrefs(context).getStringSet("gone", emptySet()).orEmpty()
+
+    private fun forgetInBackup(context: Context, name: String) {
+        val prefs = failedPrefs(context)
+        prefs.edit().putStringSet("gone", deletedFromBackup(context) + name).apply()
+    }
+
+    /** [names] are gone from the backup folder now */
+    fun goneFromBackup(context: Context, names: Set<String>) {
+        if (names.isEmpty()) return
+        failedPrefs(context).edit().putStringSet("gone", deletedFromBackup(context) - names).apply()
+    }
 
     /**
      * Records to a new file for [date] until [stop]ped; [cancel] throws it away. [paused] turns the mic
@@ -132,7 +300,7 @@ object VoiceNotes {
         fun stop(): File? {
             running = false
             thread?.join(3000)
-            return file.takeIf { lengthMs(it) >= 500 } ?: run { file.delete(); null }
+            return file.takeIf { wavMs(it) >= 500 } ?: run { file.delete(); null }
         }
 
         fun cancel() {
@@ -157,7 +325,8 @@ object VoiceNotes {
      * [done] (null if it couldn't). Call on the main thread.
      */
     fun transcribe(context: Context, file: File, done: (String?) -> Unit) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return done(null)
+        // Only a WAV's sound can be fed in as it is; compressed ones have been written out already
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !file.name.endsWith(".wav")) return done(null)
         val recognizer = runCatching {
             if (SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
             else SpeechRecognizer.createSpeechRecognizer(context)
@@ -222,12 +391,15 @@ object VoiceNotes {
             }
         }.start()
         // In case the recogniser never says it's done
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ finish() }, lengthMs(file) / 2 + 60_000L)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ finish() }, wavMs(file) / 2 + 60_000L)
     }
 
     fun delete(context: Context, file: File) {
         file.delete()
         setFailed(context, file, false)
+        failedPrefs(context).edit().remove("len:" + file.name).apply()
+        forgetInBackup(context, file.name)
+        app.olauncher.data.BackupManager.requestSync(context)
     }
 
     // --- Writing a recording into its day's note ---
@@ -240,7 +412,11 @@ object VoiceNotes {
     private fun setFailed(context: Context, file: File, failed: Boolean) {
         val prefs = failedPrefs(context)
         val set = prefs.getStringSet("failed", emptySet()).orEmpty().toMutableSet()
-        if (if (failed) set.add(file.name) else set.remove(file.name)) prefs.edit().putStringSet("failed", set).apply()
+        if (if (failed) set.add(file.name) else set.remove(file.name)) {
+            prefs.edit().putStringSet("failed", set).apply()
+            // A WAV that couldn't be written out stays as it is, so it's backed up as it is
+            if (failed) app.olauncher.data.BackupManager.requestSync(context)
+        }
     }
 
     /** Told when a recording's words are added to a day's note, so a page showing that day's note can show them */
@@ -273,6 +449,7 @@ object VoiceNotes {
             store.setNote(date, if (now.isEmpty()) text else now + "\n" + text)
             listeners.toList().forEach { it(date, text) }
             done?.invoke(text)
+            compressLater(app, file)
         }
     }
 }

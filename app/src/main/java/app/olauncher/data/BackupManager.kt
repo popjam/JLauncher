@@ -258,9 +258,18 @@ object BackupManager {
     }
 
     private fun syncNow(context: Context) {
+        // Recordings done with are compressed first, so it's the small files that are backed up
+        runCatching { app.olauncher.helper.VoiceNotes.tidy(context) }
         val folder = backupFolder(context)
         if (folder.isEmpty()) return
         val prefs = prefs(context)
+        val voiceOk = try {
+            syncVoice(context, Uri.parse(folder))
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
         try {
             val backup = buildBackup(context)
             // Compared without the timestamp, which is different every time
@@ -280,11 +289,88 @@ object BackupManager {
                 output.use { it.write(backup.put("savedAt", System.currentTimeMillis()).toString(2).toByteArray()) }
                 lastSyncedJson = json
             }
-            prefs.edit().putLong(LAST_SYNC, System.currentTimeMillis()).remove(SYNC_FAILED).apply()
+            if (voiceOk) prefs.edit().putLong(LAST_SYNC, System.currentTimeMillis()).remove(SYNC_FAILED).apply()
+            else prefs.edit().putBoolean(SYNC_FAILED, true).apply()
         } catch (e: Exception) {
             e.printStackTrace()
             prefs.edit().putBoolean(SYNC_FAILED, true).apply()
         }
+    }
+
+    private const val VOICE_FOLDER = "voice"
+
+    /**
+     * Keeps the backup folder's voice folder matching the phone's recordings: new ones copied there,
+     * ones deleted on the phone deleted there, and ones only there (a new phone, say) brought back.
+     */
+    private fun syncVoice(context: Context, treeUri: Uri) {
+        val voice = app.olauncher.helper.VoiceNotes
+        val resolver = context.contentResolver
+        val rootId = DocumentsContract.getTreeDocumentId(treeUri)
+        val folderId = listChildren(context, treeUri, rootId)[VOICE_FOLDER]?.first
+            ?: DocumentsContract.createDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, rootId),
+                DocumentsContract.Document.MIME_TYPE_DIR, VOICE_FOLDER)?.let { DocumentsContract.getDocumentId(it) }
+            ?: throw IllegalStateException("Couldn't make the voice folder")
+        val there = listChildren(context, treeUri, folderId).filterKeys { voice.isRecording(it) }
+        val local = voice.all(context).associateBy { it.name }
+
+        // Deleted on the phone: deleted there too
+        val gone = voice.deletedFromBackup(context)
+        val cleared = mutableSetOf<String>()
+        gone.forEach { name ->
+            val id = there[name]?.first
+            if (id == null || DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, id))) cleared += name
+        }
+        voice.goneFromBackup(context, cleared)
+
+        // New on the phone: copied there. One cut short before (a different size there) is copied again.
+        voice.toBackUp(context).forEach { file ->
+            val existing = there[file.name]
+            if (existing != null && (existing.second < 0 || existing.second == file.length())) return@forEach
+            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension) ?: "application/octet-stream"
+            val doc = existing?.let { DocumentsContract.buildDocumentUriUsingTree(treeUri, it.first) }
+                ?: DocumentsContract.createDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, folderId), mime, file.name)
+                ?: throw IllegalStateException("Couldn't copy ${file.name}")
+            try {
+                resolver.openOutputStream(doc, "wt")?.use { out -> file.inputStream().use { it.copyTo(out) } }
+                    ?: throw IllegalStateException("Couldn't write ${file.name}")
+            } catch (e: Exception) {
+                runCatching { DocumentsContract.deleteDocument(resolver, doc) }
+                throw e
+            }
+        }
+
+        // Only there: brought back to the phone
+        there.forEach { (name, doc) ->
+            val id = doc.first
+            if (name in local || name in gone) return@forEach
+            // A WAV the phone has since compressed isn't brought back
+            if (name.endsWith(".wav") && name.removeSuffix(".wav") + ".m4a" in local) return@forEach
+            val target = java.io.File(voice.folder(context), name)
+            val part = java.io.File(voice.folder(context), "$name.part")
+            try {
+                resolver.openInputStream(DocumentsContract.buildDocumentUriUsingTree(treeUri, id))?.use { input ->
+                    part.outputStream().use { input.copyTo(it) }
+                } ?: return@forEach
+                if (part.renameTo(target)) voice.noteLength(context, target)
+            } finally {
+                part.delete()
+            }
+        }
+    }
+
+    /** A folder's children: display name -> document id and size (-1 if the provider doesn't say) */
+    private fun listChildren(context: Context, treeUri: Uri, parentId: String): Map<String, Pair<String, Long>> {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
+        return context.contentResolver.query(
+            childrenUri,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_SIZE),
+            null, null, null
+        )?.use { cursor ->
+            val files = mutableMapOf<String, Pair<String, Long>>()
+            while (cursor.moveToNext()) files[cursor.getString(1)] = cursor.getString(0) to (if (cursor.isNull(2)) -1L else cursor.getLong(2))
+            files
+        } ?: emptyMap()
     }
 
     /** Keeps the backup folder up to date whenever a setting changes. Call once from the launcher. */
