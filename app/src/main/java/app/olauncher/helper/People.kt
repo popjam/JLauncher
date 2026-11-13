@@ -61,6 +61,7 @@ object People {
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0 || n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
         if (n.category == Notification.CATEGORY_CALL || n.category == Notification.CATEGORY_MISSED_CALL) return
         val extras = n.extras
+        val apps = appNames(context)
         val self = extras.getCharSequence(Notification.EXTRA_SELF_DISPLAY_NAME)?.toString()
             ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) personName(extras.get(Notification.EXTRA_MESSAGING_PERSON)) else null
         // time, sender (null for you), the text's code
@@ -76,9 +77,13 @@ object People {
                 messages += Triple(bundle.getLong("time"), if (mine) null else sender, code(bundle.getCharSequence("text")?.toString().orEmpty()))
             }
         } else {
+            // Without a list of messages it's only a message if it says so, not the app's own notices
+            if (n.category != null && n.category != Notification.CATEGORY_MESSAGE) return
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: return
             messages += Triple(n.`when`.takeIf { it > 0 } ?: sbn.postTime, title, code(extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()))
         }
+        // The app itself ("WhatsApp: 5 new messages"), missed calls and the like aren't anyone
+        messages.removeAll { (_, sender, _) -> sender != null && !isPerson(sender, apps) }
         if (messages.isEmpty()) return
         begin(context)
         val prefs = prefs(context)
@@ -97,7 +102,7 @@ object People {
             else {
                 day.put("in", day.optInt("in") + 1)
                 val who = day.optJSONArray("who") ?: JSONArray().also { day.put("who", it) }
-                val person = code(sender.trim().lowercase())
+                val person = code(nameKey(sender))
                 if ((0 until who.length()).none { who.optString(it) == person }) who.put(person)
                 // By name, to show who sends the most
                 val name = sender.trim().take(MAX_NAME)
@@ -112,6 +117,55 @@ object People {
         val cutoff = LocalDate.now().minusDays(KEEP_DAYS).toString()
         counts.keys().asSequence().toList().filter { it < cutoff }.forEach { counts.remove(it) }
         prefs.edit().putString(SEEN, seen.toString()).putString(MESSAGES, counts.toString()).apply()
+    }
+
+    /**
+     * Whether [name] is someone, not the chat app itself ([apps], and the usual names) or one of its
+     * notices, like "Missed voice call" or "3 new messages"
+     */
+    fun isPerson(name: String, apps: Set<String> = emptySet()): Boolean {
+        val key = nameKey(name)
+        if (key.isEmpty() || key in APP_NAMES || key in apps) return false
+        return NOT_PEOPLE.none { it.matches(key) }
+    }
+
+    /** The same name however it's written: case and spaces aside, so Mum on WhatsApp and Mum by text count together */
+    fun nameKey(name: String) = name.trim().replace(Regex("\\s+"), " ").lowercase()
+
+    /** Names to go by, adding up spellings of the same name under the one used most */
+    fun mergeNames(counts: Map<String, Int>): Map<String, Int> =
+        counts.entries.groupBy { nameKey(it.key) }.values.associate { same ->
+            same.maxByOrNull { it.value }!!.key.trim() to same.sumOf { it.value }
+        }
+
+    private fun appNames(context: Context): Set<String> = APPS.mapNotNull { pkg ->
+        runCatching { context.packageManager.run { getApplicationLabel(getApplicationInfo(pkg, 0)).toString() } }.getOrNull()?.let(::nameKey)
+    }.toSet()
+
+    /** Takes out what was counted as people before [isPerson] kept them out */
+    private fun cleanUp(context: Context) {
+        val prefs = prefs(context)
+        if (prefs.getBoolean(CLEANED, false)) return
+        synchronized(LOCK) {
+            val counts = prefs.getString(MESSAGES, null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+            if (counts != null) {
+                val apps = appNames(context)
+                counts.keys().forEach { date ->
+                    val day = counts.optJSONObject(date) ?: return@forEach
+                    val from = day.optJSONObject("from") ?: return@forEach
+                    val gone = from.keys().asSequence().toList().filter { !isPerson(it, apps) }
+                    if (gone.isEmpty()) return@forEach
+                    val codes = gone.map { code(it.trim().lowercase()) }.toSet()
+                    day.put("in", (day.optInt("in") - gone.sumOf { from.optInt(it) }).coerceAtLeast(0))
+                    gone.forEach { from.remove(it) }
+                    day.optJSONArray("who")?.let { who ->
+                        day.put("who", JSONArray((0 until who.length()).map { who.optString(it) }.filter { it !in codes }))
+                    }
+                }
+                prefs.edit().putString(MESSAGES, counts.toString()).apply()
+            }
+            prefs.edit().putBoolean(CLEANED, true).apply()
+        }
     }
 
     private fun personName(person: Any?): String? =
@@ -139,7 +193,7 @@ object People {
                 while (c.moveToNext()) {
                     val date = Instant.ofEpochMilli(c.getLong(0)).atZone(ZoneId.systemDefault()).toLocalDate()
                     val shown = (c.getString(3)?.takeIf { it.isNotBlank() } ?: c.getString(4).orEmpty()).trim()
-                    rows += Triple(date, c.getInt(2) to c.getLong(1) * 1000, code(shown.lowercase()))
+                    rows += Triple(date, c.getInt(2) to c.getLong(1) * 1000, code(nameKey(shown)))
                     names += shown.take(MAX_NAME)
                 }
             }
@@ -164,7 +218,7 @@ object People {
             val m = counts.optJSONObject(date.toString())
             val c = calls[date]
             val who = (m?.optJSONArray("who")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()) + c?.who.orEmpty()
-            val from = m?.optJSONObject("from")?.let { f -> f.keys().asSequence().associateWith { f.optInt(it) } }.orEmpty()
+            val from = m?.optJSONObject("from")?.let { f -> mergeNames(f.keys().asSequence().associateWith { f.optInt(it) }) }.orEmpty()
             Day(c?.count ?: 0, c?.ms ?: 0L, c?.missed ?: 0, m?.optInt("in") ?: 0, m?.optInt("out") ?: 0, who.toSet().size,
                 from, c?.byName.orEmpty())
         }
@@ -180,6 +234,7 @@ object People {
     }
 
     private fun refreshNow(context: Context) {
+        cleanUp(context)
         if (hasCallLog(context)) begin(context)
         if (since(context) == null) return
         val id = AutoStats.ensure(context, AutoStats.PEOPLE, NAME) { store ->
@@ -223,6 +278,14 @@ object People {
         "com.whatsapp", "com.whatsapp.w4b", "com.google.android.apps.messaging", "com.samsung.android.messaging",
         "org.thoughtcrime.securesms", "com.facebook.orca", "org.telegram.messenger", "com.discord",
     )
+    private val APP_NAMES = setOf("whatsapp", "whatsapp business", "messages", "google messages", "samsung messages",
+        "signal", "messenger", "telegram", "discord")
+    private val NOT_PEOPLE = listOf(
+        Regex("(missed|incoming|ongoing) (voice |video |group )?calls?.*"),
+        Regex("\\d+ (new )?messages?( from \\d+ chats?)?"),
+        Regex("you"),
+    )
+    private const val CLEANED = "cleanedApps"
     private val LOCK = Any()
     private const val PREFS = "people"
     private const val SINCE = "since"
