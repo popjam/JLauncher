@@ -441,6 +441,7 @@
         <item quantity="other">%d notes found</item>
     </plurals>
     <string name="day_note_hint">Anything about the day… or hold to talk</string>
+    <string name="journal_today_hint">How\'s today going? Add to it any time… or hold to talk</string>
     <string name="day_stats">Stats</string>
     <string name="day_tap_to_change">tap to change · hold to open</string>
     <string name="day_top_app">mostly %1$s, %2$s</string>

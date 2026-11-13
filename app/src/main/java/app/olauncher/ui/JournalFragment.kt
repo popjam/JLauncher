@@ -47,6 +47,12 @@ class JournalFragment : Fragment() {
     private lateinit var search: EditText
     private var notes: List<Pair<LocalDate, MoodStore.Day>> = emptyList()
 
+    /** Today's note, written straight in at the top */
+    private lateinit var todayInput: EditText
+    private lateinit var todayTitle: TextView
+    private var todayShown: String? = null
+    private var todayDate: LocalDate = LocalDate.now()
+
     /** Days with a voice note */
     private var voiced: Set<LocalDate> = emptySet()
     private val handler = Handler(Looper.getMainLooper())
@@ -83,13 +89,52 @@ class JournalFragment : Fragment() {
                 }
             })
         }
+        todayTitle = TextView(context, null, 0, R.style.TextSmall).apply {
+            textSize = 13f
+            setTextColor(ink)
+            alpha = 0.6f
+            setTypeface(null, Typeface.BOLD)
+        }
+        todayInput = EditText(context).apply {
+            hint = getString(R.string.journal_today_hint)
+            textSize = 15f
+            setTextColor(ink)
+            setHintTextColor(ColorUtils.setAlphaComponent(ink, 110))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 3
+            gravity = Gravity.TOP
+            background = GradientDrawable().apply {
+                cornerRadius = 16.dpToPx().toFloat()
+                setColor(ColorUtils.setAlphaComponent(ink, 18))
+            }
+            setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
+            setOnFocusChangeListener { _, focused -> if (!focused) saveToday() }
+            // Holding it while not typing records a voice note, like the day page's note
+            setOnLongClickListener {
+                if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
+                recordToday()
+                true
+            }
+        }
+        val todayRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(todayTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 4.dpToPx() })
+            addView(voiceButton(ink) { recordToday() })
+        }
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20.dpToPx(), 48.dpToPx(), 20.dpToPx(), 64.dpToPx())
             addView(pageHeader(context, StatIcons.BOOK, getString(R.string.journal)) { findNavController().popBackStack() },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = (-20).dpToPx() })
-            addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            addView(todayRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = 20.dpToPx()
+            })
+            addView(todayInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 8.dpToPx()
+            })
+            addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 24.dpToPx()
             })
             addView(count, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = 14.dpToPx()
@@ -115,14 +160,66 @@ class JournalFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        fillToday()
         load()
         show()
+    }
+
+    override fun onPause() {
+        saveToday()
+        stopVoicePlayback()
+        super.onPause()
     }
 
     override fun onDestroyView() {
         handler.removeCallbacksAndMessages(null)
         search.hideKeyboard()
+        todayInput.hideKeyboard()
         super.onDestroyView()
+    }
+
+    /** Today's note into the box (it may have changed on the day page, or the day turned over) */
+    private fun fillToday() {
+        val now = LocalDate.now()
+        if (now != todayDate) {
+            saveToday()
+            todayDate = now
+            todayShown = null
+        }
+        todayTitle.text = getString(R.string.today) + " · " + dateText(todayDate)
+        val note = store.load().days[todayDate.toString()]?.note.orEmpty()
+        if (todayShown == null || (!todayInput.hasFocus() && note != todayShown)) {
+            todayShown = note
+            todayInput.setText(note)
+        }
+    }
+
+    private fun saveToday() {
+        val text = todayInput.text?.toString() ?: return
+        if (text.trim() == todayShown?.trim().orEmpty()) return
+        store.setNote(todayDate, text)
+        todayShown = text
+        if (view != null && isResumed) {
+            load()
+            show()
+        }
+    }
+
+    /** Records a voice note for today; its words go on the end of today's note */
+    private fun recordToday() {
+        saveToday()
+        val date = todayDate
+        recordVoiceNote(date, onText = { text ->
+            val showing = date == todayDate && view != null
+            val now = (if (showing) todayInput.text?.toString() else store.load().days[date.toString()]?.note).orEmpty().trim()
+            val note = if (now.isEmpty()) text else now + "\n" + text
+            store.setNote(date, note)
+            if (date == todayDate && view != null) {
+                todayShown = note
+                todayInput.setText(note)
+            }
+            if (view != null) { load(); show() }
+        }, onSaved = { if (view != null) { load(); show() } })
     }
 
     private fun load() {
