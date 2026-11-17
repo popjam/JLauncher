@@ -38,8 +38,8 @@ class PauseFragment : Fragment() {
             binding,
             app.appPackage,
             app.appLabel,
-            pauseSeconds = if (prefs.pauseAppsOn) prefs.pauseSeconds else null,
-            askUseFor = AppPause.useForActive(prefs),
+            pauseSeconds = if (AppPause.pauses(requireContext(), prefs, app.appPackage)) prefs.pauseSeconds else null,
+            askUseFor = AppPause.asksUseFor(prefs, app.appPackage),
             onOpen = { minutes ->
                 viewModel.openPausedApp(minutes)
                 findNavController().popBackStack()

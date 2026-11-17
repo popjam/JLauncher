@@ -399,8 +399,10 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
                                 .setMessage(getString(R.string.places_remove_ask, place.name))
                                 .setNegativeButton(R.string.cancel, null)
                                 .setPositiveButton(R.string.places_remove) { _, _ ->
-                                    Places.remove(context, place.id)
-                                    if (_binding != null) render()
+                                    lockdownPlaceChange(place.id) {
+                                        Places.remove(context, place.id)
+                                        if (_binding != null) render()
+                                    }
                                 }
                                 .show()
                         }
@@ -462,14 +464,20 @@ internal fun StatPageFragment.editHome(slot: Int, home: Social.Home?) {
         .setPositiveButton(R.string.save) { _, _ ->
             val wifi = ssid ?: home!!.ssid
             val place = Social.Home(wifi, name.text.toString().trim().ifEmpty { wifi })
-            if (slot == Social.WORK) Social.setWork(context, place) else Social.setHome(context, slot, place)
-            if (slot == Social.WORK) runCatching { Social.refresh(context) }
-            if (_binding != null) render()
+            val save = {
+                if (slot == Social.WORK) Social.setWork(context, place) else Social.setHome(context, slot, place)
+                if (slot == Social.WORK) runCatching { Social.refresh(context) }
+                if (_binding != null) render()
+            }
+            // Only a new Wi-Fi changes where lockdown's place is; renaming doesn't
+            if (home != null && home.ssid != wifi) lockdownPlaceChange(slot, save) else save()
         }
         .apply {
             if (home != null) setNeutralButton(R.string.social_remove) { _, _ ->
-                if (slot == Social.WORK) Social.setWork(context, null) else Social.setHome(context, slot, null)
-                if (_binding != null) render()
+                lockdownPlaceChange(slot) {
+                    if (slot == Social.WORK) Social.setWork(context, null) else Social.setHome(context, slot, null)
+                    if (_binding != null) render()
+                }
             }
         }
         .show()
@@ -691,4 +699,9 @@ internal fun StatPageFragment.workTrendCard() {
         }
         s.height = bottom + s.dp(22f)
     }
+}
+
+/** Removing or moving a place lockdown turns on at loosens lockdown, so it needs the unlock while lockdown is on */
+private fun StatPageFragment.lockdownPlaceChange(id: Int, change: () -> Unit) {
+    if (id in app.olauncher.data.Prefs(requireContext()).lockdownPlaces) LockdownGate(this).loosen(change) else change()
 }

@@ -155,19 +155,24 @@
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
         <action
-            android:id="@+id/action_settingsFragment_to_pausedAppsFragment"
-            app:destination="@id/pausedAppsFragment"
+            android:id="@+id/action_settingsFragment_to_lockdownFragment"
+            app:destination="@id/lockdownFragment"
             app:enterAnim="@anim/fade_enter"
             app:exitAnim="@anim/fade_exit"
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
     </fragment>
 
+    <!-- Lockdown's page, and its own pages (apps, websites, places, stages, limits, one app) -->
     <fragment
-        android:id="@+id/pausedAppsFragment"
-        android:name="app.olauncher.ui.PausedAppsFragment"
-        android:label="PausedAppsFragment"
-        tools:layout="@layout/fragment_paused_apps" />
+        android:id="@+id/lockdownFragment"
+        android:name="app.olauncher.ui.LockdownFragment"
+        android:label="LockdownFragment" />
+
+    <fragment
+        android:id="@+id/lockdownPageFragment"
+        android:name="app.olauncher.ui.LockdownPageFragment"
+        android:label="LockdownPageFragment" />
 
     <!-- Wellness pause before opening an app; always shown over the home screen -->
     <fragment

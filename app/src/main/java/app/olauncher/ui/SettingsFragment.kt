@@ -231,14 +231,10 @@ class SettingsFragment : CardPageFragment() {
             prefs.lockModeOn = true
         }
         render()
-        // Lockdown's times and waits move on while the page is open
-        main.removeCallbacks(refreshStatus)
-        main.postDelayed(refreshStatus, 30_000)
     }
 
     override fun onPause() {
         info?.dismiss()
-        main.removeCallbacks(refreshStatus)
         super.onPause()
     }
 
@@ -697,8 +693,6 @@ class SettingsFragment : CardPageFragment() {
     private fun appsSection() {
         val context = requireContext()
         val card = Card(getString(R.string.apps))
-        val serviceOn = isAccessServiceEnabled(context)
-        val slowing = prefs.pauseAppsOn || prefs.useForOn
         val hidden = prefs.hiddenApps.size
         card.body(
             row(card, getString(R.string.hidden_apps), hidden.toString(), R.string.info_hidden_apps) {
@@ -711,41 +705,6 @@ class SettingsFragment : CardPageFragment() {
                 prefs.autoShowKeyboard = !prefs.autoShowKeyboard
                 render()
             },
-            row(card, getString(R.string.pause_before_opening), onOff(prefs.pauseAppsOn), R.string.info_pause) {
-                if (prefs.pauseAppsOn) loosen { prefs.pauseAppsOn = false; render() }
-                else {
-                    prefs.pauseAppsOn = true
-                    AppPause.addAddictiveApps(context, prefs)
-                    render()
-                }
-            },
-            if (prefs.pauseAppsOn) row(card, getString(R.string.pause_length), getString(R.string.seconds_value, prefs.pauseSeconds), R.string.info_pause_length, level = 1) {
-                val options = listOf(5, 10, 15, 20, 30, 45, 60)
-                choose(R.string.pause_length, options.map { getString(R.string.seconds_value, it) }, options.indexOf(prefs.pauseSeconds)) {
-                    val seconds = options[it]
-                    if (seconds < prefs.pauseSeconds) loosen { prefs.pauseSeconds = seconds; render() } else prefs.pauseSeconds = seconds
-                }
-            } else null,
-            row(card, getString(R.string.use_for_a_set_time), onOff(prefs.useForOn), R.string.info_use_for) {
-                if (prefs.useForOn) loosen { prefs.useForOn = false; render() }
-                else {
-                    prefs.useForOn = true
-                    AppPause.addAddictiveApps(context, prefs)
-                    render()
-                    if (!serviceOn) askAccessibility()
-                }
-            },
-            if (prefs.useForOn) row(card, getString(R.string.use_for_lengths), AppPause.useForLengths(context).joinToString(", "), R.string.info_use_for_lengths, level = 1) {
-                val sets = AppPause.USE_FOR_SETS
-                choose(R.string.use_for_lengths, sets.map { set -> set.joinToString(", ") { getString(R.string.minutes_short, it) } },
-                    sets.indexOf(AppPause.useForLengths(context))) { AppPause.setUseForSet(context, it) }
-            } else null,
-            if (slowing) row(card, getString(R.string.paused_apps), prefs.pausedApps.count { context.isPackageInstalled(it) }.toString(), R.string.info_paused_apps, level = 1) {
-                loosen { findNavController().navigate(R.id.pausedAppsFragment) }
-            } else null,
-            if (slowing) row(card, getString(R.string.apps_opened_elsewhere), onOff(serviceOn), R.string.info_elsewhere, level = 1) {
-                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-            } else null,
         )
     }
 
@@ -1037,287 +996,16 @@ class SettingsFragment : CardPageFragment() {
     // --- Lockdown ---
 
     private val gate by lazy { LockdownGate(this) { render() } }
-    private var lockdownCard: Card? = null
-    private var lockdownPhase: List<Any>? = null
 
-    /** What changes lockdown's rows: whether it's on, timed, and how far a wait has got */
-    private fun lockdownPhase(context: Context) = listOf(Lockdown.isActive(context, prefs), Lockdown.timedActive(context, prefs),
-        Lockdown.waitState(context, prefs)::class)
-
-    /** Keeps lockdown's status current while the page is open, and its rows when they change */
-    private val refreshStatus = object : Runnable {
-        override fun run() {
-            if (!isAdded) return
-            val context = requireContext()
-            if (lockdownPhase(context) != lockdownPhase) render() else lockdownCard?.subtitle(LockdownGate.status(context))
-            main.postDelayed(this, 30_000)
-        }
-    }
-
+    /** Lockdown has its own page; here it's one row with its status */
     private fun lockdownSection() {
         val context = requireContext()
         val card = Card(getString(R.string.lockdown))
-        lockdownCard = card
-        lockdownPhase = lockdownPhase(context)
-        card.subtitle(LockdownGate.status(context))
-        // Tapping the title 500 times shows the password, when that way of recovering it is on
-        card.titleView.setOnClickListener {
-            if (!prefs.passwordRecoveryEnabled || !prefs.recoveryTap500 || !prefs.isLockdownPasswordSet) return@setOnClickListener
-            recoveryTaps++
-            if (recoveryTaps >= 500) {
-                recoveryTaps = 0
-                gate.showPassword()
-            } else if (recoveryTaps % 50 == 0) context.showToast(getString(R.string.recovery_tap_progress, recoveryTaps))
-        }
-        val manual = prefs.lockdownModeOn
-        val timedEnd = Lockdown.timedEnd(context, prefs)
-        val schedules = Lockdown.schedules(prefs)
-        val locks = Lockdown.Lock.values()
-        val blocked = prefs.lockdownBlockedApps.count { context.isPackageInstalled(it) }
-        val unlock = Lockdown.unlock(prefs)
-        val needsService = blocked > 0 || prefs.lockdownProtect
-        val password = unlock == Lockdown.Unlock.PASSWORD
-        val recovery = password && prefs.passwordRecoveryEnabled
-        fun method(title: Int, about: Int, get: () -> Boolean, toggle: () -> Unit) = if (recovery) row(card, getString(title), onOff(get()), about, level = 2) {
-            loosen(toggle)
-        } else null
         card.body(
-            // Switched on, or on by itself until a time
-            row(card, getString(R.string.lockdown), when {
-                manual -> getString(R.string.on)
-                Lockdown.isActive(context, prefs) -> Lockdown.activeUntil(context, prefs)?.let { getString(R.string.lockdown_until, LockdownGate.time(context, it)) }
-                    ?: getString(R.string.on)
-                else -> getString(R.string.off)
-            }, R.string.info_lockdown) {
-                if (manual) loosen { prefs.lockdownModeOn = false; render() }
-                else {
-                    prefs.lockdownModeOn = true
-                    render()
-                }
+            row(card, getString(R.string.lockdown), LockdownGate.status(context), R.string.info_lockdown) {
+                findNavController().navigate(R.id.lockdownFragment)
             },
-            row(card, getString(R.string.lockdown_lock_for), timedEnd?.let { getString(R.string.lockdown_until, LockdownGate.time(context, it)) } ?: getString(R.string.off),
-                R.string.info_lockdown_lock_for) { askLockFor() },
-            row(card, getString(R.string.lockdown_schedules), if (schedules.isEmpty()) getString(R.string.off) else schedules.size.toString(),
-                R.string.info_lockdown_schedules) { if (schedules.isEmpty()) addSchedule() else showSchedules() },
-            row(card, getString(R.string.lockdown_whats_locked), getString(R.string.lockdown_count_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size),
-                R.string.info_lockdown_whats_locked) { pickLocks() },
-            row(card, getString(R.string.blocked_apps), blocked.toString(), R.string.info_blocked_apps) {
-                findNavController().navigate(R.id.pausedAppsFragment, bundleOf(PausedAppsFragment.MODE to PausedAppsFragment.BLOCKED))
-            },
-            if (needsService) row(card, getString(R.string.accessibility), onOff(isAccessServiceEnabled(context)), R.string.info_lockdown_accessibility, level = 1) {
-                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-            } else null,
-            row(card, getString(R.string.lockdown_unlock_with), unlockName(unlock), R.string.info_lockdown_unlock_with) { pickUnlock() },
-            if (password) row(card, getString(R.string.change_lockdown_password), null, R.string.info_change_password, level = 1) {
-                gate.requirePassword { gate.setNewPassword(warn = false) { render() } }
-            } else null,
-            if (password) row(card, getString(R.string.lockdown_password_recovery), onOff(prefs.passwordRecoveryEnabled), R.string.info_recovery, level = 1) {
-                loosen { prefs.passwordRecoveryEnabled = !prefs.passwordRecoveryEnabled; render() }
-            } else null,
-            method(R.string.recovery_tap_500, R.string.recovery_tap_500_info, { prefs.recoveryTap500 }) { prefs.recoveryTap500 = !prefs.recoveryTap500; render() },
-            method(R.string.recovery_clue, R.string.recovery_clue_info, { prefs.recoveryClue }) { toggleClue() },
-            method(R.string.recovery_essay, R.string.recovery_essay_info, { prefs.recoveryEssay }) { prefs.recoveryEssay = !prefs.recoveryEssay; render() },
         )
-    }
-
-    private fun unlockName(unlock: Lockdown.Unlock) = when (unlock) {
-        Lockdown.Unlock.NOTHING -> getString(R.string.lockdown_unlock_nothing)
-        Lockdown.Unlock.PASSWORD -> getString(R.string.lockdown_password)
-        Lockdown.Unlock.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(requireContext(), prefs.lockdownWaitMinutes * 60_000L))
-    }
-
-    /** Nothing, the password, or one of the waits. Anything but a stricter choice loosens lockdown. */
-    private fun pickUnlock() {
-        val context = requireContext()
-        val current = Lockdown.unlock(prefs)
-        val waits = Lockdown.WAIT_CHOICES
-        val names = listOf(getString(R.string.lockdown_unlock_nothing), getString(R.string.lockdown_password)) +
-            waits.map { getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, it * 60_000L)) }
-        val selected = when (current) {
-            Lockdown.Unlock.NOTHING -> 0
-            Lockdown.Unlock.PASSWORD -> 1
-            Lockdown.Unlock.WAIT -> 2 + waits.indexOf(prefs.lockdownWaitMinutes)
-        }
-        AlertDialog.Builder(context)
-            .setTitle(R.string.lockdown_unlock_with)
-            .setSingleChoiceItems(names.toTypedArray(), selected) { dialog, which ->
-                dialog.dismiss()
-                if (which == selected) return@setSingleChoiceItems
-                val stricter = current == Lockdown.Unlock.NOTHING ||
-                    (current == Lockdown.Unlock.WAIT && which >= 2 && waits[which - 2] > prefs.lockdownWaitMinutes)
-                val change = {
-                    when (which) {
-                        0 -> {
-                            gate.clearPassword()
-                            prefs.lockdownUnlock = Lockdown.Unlock.NOTHING.ordinal
-                            render()
-                        }
-                        1 -> gate.setNewPassword(warn = true) {
-                            prefs.lockdownUnlock = Lockdown.Unlock.PASSWORD.ordinal
-                            render()
-                        }
-                        else -> {
-                            gate.clearPassword()
-                            prefs.lockdownWaitMinutes = waits[which - 2]
-                            prefs.lockdownUnlock = Lockdown.Unlock.WAIT.ordinal
-                            Lockdown.cancelWait(prefs)
-                            render()
-                        }
-                    }
-                }
-                if (stricter) change() else loosen(change)
-            }
-            .show()
-    }
-
-    private fun lockName(lock: Lockdown.Lock) = getString(when (lock) {
-        Lockdown.Lock.APP_LIST -> R.string.lockdown_lock_app_list
-        Lockdown.Lock.APP_CHANGES -> R.string.lockdown_lock_app_changes
-        Lockdown.Lock.HIDDEN_APPS -> R.string.lockdown_lock_hidden_apps
-        Lockdown.Lock.LAUNCHER -> R.string.lockdown_lock_launcher
-        Lockdown.Lock.PROTECT -> R.string.lockdown_lock_protect
-    })
-
-    /** A tick for each thing lockdown locks. Unticking one loosens lockdown. */
-    private fun pickLocks() {
-        val context = requireContext()
-        val locks = Lockdown.Lock.values()
-        val ticked = locks.map { Lockdown.enabled(prefs, it) }.toBooleanArray()
-        AlertDialog.Builder(context)
-            .setTitle(R.string.lockdown_whats_locked)
-            .setMultiChoiceItems(locks.map { lockName(it) }.toTypedArray(), ticked) { _, i, on -> ticked[i] = on }
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.save) { _, _ ->
-                val loosens = locks.indices.any { Lockdown.enabled(prefs, locks[it]) && !ticked[it] }
-                val protectAdded = !prefs.lockdownProtect && ticked[locks.indexOf(Lockdown.Lock.PROTECT)]
-                val apply = {
-                    locks.forEachIndexed { i, lock -> Lockdown.setEnabled(prefs, lock, ticked[i]) }
-                    render()
-                    if (protectAdded && !isAccessServiceEnabled(context)) askAccessibility()
-                }
-                if (loosens) loosen(apply) else apply()
-            }
-            .show()
-    }
-
-    /** Starts a timed lockdown, or adds to the one running. It can't be shortened. */
-    private fun askLockFor() {
-        val context = requireContext()
-        val running = Lockdown.timedActive(context, prefs)
-        val minutes = listOf(15, 30, 60, 120, 240, 480, 1440)
-        val names = minutes.map { (if (running) "+" else "") + LockdownGate.duration(context, it * 60_000L) } + getString(R.string.lockdown_until_a_time)
-        AlertDialog.Builder(context)
-            .setTitle(if (running) R.string.lockdown_add_time else R.string.lockdown_lock_for)
-            .setItems(names.toTypedArray()) { _, which ->
-                val left = Lockdown.timedMsLeft(context, prefs)
-                if (which < minutes.size) return@setItems confirmLockFor(left + minutes[which] * 60_000L)
-                val now = LocalTime.now()
-                TimePickerDialog(context, { _, hour, minute ->
-                    val at = LocalDate.now().atTime(hour, minute).let { if (it.isAfter(java.time.LocalDateTime.now())) it else it.plusDays(1) }
-                    val total = java.time.Duration.between(java.time.LocalDateTime.now(), at).toMillis()
-                    if (total <= left) context.showToast(getString(R.string.lockdown_cant_shorten)) else confirmLockFor(total)
-                }, (now.hour + 1) % 24, 0, DateFormat.is24HourFormat(context)).show()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    /** Asks before locking for [totalMs] from now, since it can't be undone */
-    private fun confirmLockFor(totalMs: Long) {
-        val context = requireContext()
-        AlertDialog.Builder(context)
-            .setTitle(getString(R.string.lockdown_lock_until_ask, LockdownGate.time(context, System.currentTimeMillis() + totalMs)))
-            .setMessage(R.string.lockdown_lock_until_message)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.lockdown_lock) { _, _ ->
-                Lockdown.lockForTotal(context, totalMs, prefs)
-                render()
-            }
-            .show()
-    }
-
-    private fun scheduleName(schedule: Lockdown.Schedule): String {
-        val context = requireContext()
-        val days = when (schedule.days) {
-            Lockdown.EVERY_DAY -> getString(R.string.lockdown_every_day)
-            Lockdown.WEEKDAYS -> getString(R.string.lockdown_weekdays)
-            Lockdown.WEEKENDS -> getString(R.string.lockdown_weekends)
-            else -> java.time.DayOfWeek.values().filter { schedule.on(it) }
-                .joinToString(", ") { it.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }
-        }
-        if (schedule.start == schedule.end) return days + " · " + getString(R.string.lockdown_all_day)
-        val pattern = if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm a"
-        fun time(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-        return days + " · " + time(schedule.start) + "–" + time(schedule.end)
-    }
-
-    /** The schedules: tapping one removes it, which loosens lockdown */
-    private fun showSchedules() {
-        val schedules = Lockdown.schedules(prefs)
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.lockdown_schedules)
-            .setItems(schedules.map { scheduleName(it) }.toTypedArray()) { _, i ->
-                val schedule = schedules[i]
-                AlertDialog.Builder(requireContext())
-                    .setTitle(scheduleName(schedule))
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.lockdown_remove) { _, _ ->
-                        loosen {
-                            prefs.lockdownSchedules = Lockdown.formatSchedules(Lockdown.schedules(prefs) - schedule)
-                            render()
-                        }
-                    }
-                    .show()
-            }
-            .setNegativeButton(R.string.close, null)
-            .setPositiveButton(R.string.add) { _, _ -> addSchedule() }
-            .show()
-    }
-
-    /** The days, then when it starts and ends */
-    private fun addSchedule() {
-        val context = requireContext()
-        val days = java.time.DayOfWeek.values()
-        val ticked = days.map { it.value <= 5 }.toBooleanArray()
-        AlertDialog.Builder(context)
-            .setTitle(R.string.lockdown_schedule_days)
-            .setMultiChoiceItems(days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) }.toTypedArray(), ticked) { _, i, on -> ticked[i] = on }
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.okay) { _, _ ->
-                val bits = ticked.foldIndexed(0) { i, acc, on -> if (on) acc or (1 shl i) else acc }
-                if (bits == 0) return@setPositiveButton context.showToast(getString(R.string.lockdown_choose_a_day))
-                val is24 = DateFormat.is24HourFormat(context)
-                TimePickerDialog(context, { _, startHour, startMinute ->
-                    TimePickerDialog(context, { _, endHour, endMinute ->
-                        val schedule = Lockdown.Schedule(bits, startHour * 60 + startMinute, endHour * 60 + endMinute)
-                        prefs.lockdownSchedules = Lockdown.formatSchedules(Lockdown.schedules(prefs) + schedule)
-                        render()
-                    }, 7, 0, is24).apply { setTitle(R.string.lockdown_schedule_ends) }.show()
-                }, 22, 0, is24).apply { setTitle(R.string.lockdown_schedule_starts) }.show()
-            }
-            .show()
-    }
-
-    private fun toggleClue() {
-        if (prefs.recoveryClue) {
-            prefs.recoveryClue = false
-            prefs.recoveryClueText = ""
-            return render()
-        }
-        val input = EditText(requireContext()).apply { hint = getString(R.string.enter_clue) }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.enter_clue)
-            .setView(LockdownGate.padded(requireContext(), input))
-            .setPositiveButton(R.string.okay) { _, _ ->
-                val clue = input.text.toString().trim()
-                if (clue.isNotEmpty()) {
-                    prefs.recoveryClue = true
-                    prefs.recoveryClueText = clue
-                    render()
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
     }
 
     // --- Backup ---

@@ -96,6 +96,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         // animating main layout once it shows (see detach)
         detach(binding.moneyWidget)
         underRow.addView(binding.moneyWidget)
+        lockdownWidget = lockdownWidgetView()
+        underRow.addView(lockdownWidget)
         appsPadding = binding.homeAppsLayout.paddingTop to binding.homeAppsLayout.paddingBottom
         clockMarginTop = (binding.dateTimeLayout.layoutParams as FrameLayout.LayoutParams).topMargin
         initObservers()
@@ -119,6 +121,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         }
         populateHomeScreen(false)
+        handler.removeCallbacks(lockdownTick)
+        handler.postDelayed(lockdownTick, 30_000)
         viewModel.isOlauncherDefault()
         if (prefs.showStatusBar) showStatusBar()
         else hideStatusBar()
@@ -130,6 +134,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         runCatching { requireContext().unregisterReceiver(batteryChanged) }
         handler.removeCallbacks(midnightRefresh)
         handler.removeCallbacks(moodPromptCheck)
+        handler.removeCallbacks(lockdownTick)
         super.onPause()
     }
 
@@ -338,13 +343,81 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private fun pieceOf(key: String): View = when (key) {
         Arrangement.WEATHER -> binding.weatherColumn
         Arrangement.SCREEN_TIME -> binding.screenTimeColumn
+        Arrangement.LOCKDOWN -> lockdownWidget
         else -> binding.moneyWidget
     }
 
     private fun keyOf(piece: View) = when (piece) {
         binding.weatherColumn -> Arrangement.WEATHER
         binding.screenTimeColumn -> Arrangement.SCREEN_TIME
+        lockdownWidget -> Arrangement.LOCKDOWN
         else -> Arrangement.MONEY
+    }
+
+    // --- Lockdown's widget: a lock that adds time to a timed lockdown ---
+
+    private lateinit var lockdownWidget: LinearLayout
+    private lateinit var lockdownWidgetIcon: View
+    private lateinit var lockdownWidgetText: TextView
+
+    private fun lockdownWidgetView(): LinearLayout {
+        val context = requireContext()
+        lockdownWidgetIcon = View(context).apply {
+            background = StatIcons.drawable(StatIcons.LOCK, LOCKDOWN_BLUE, 32.dpToPx())
+        }
+        lockdownWidgetText = androidx.appcompat.widget.AppCompatTextView(context, null, 0).apply {
+            setTextAppearance(R.style.TextSmall)
+            gravity = Gravity.CENTER
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size))
+            setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 10.dpToPx())
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            visibility = View.GONE
+            addView(lockdownWidgetIcon, LinearLayout.LayoutParams(32.dpToPx(), 32.dpToPx()).apply { topMargin = 10.dpToPx() })
+            addView(lockdownWidgetText)
+            setOnClickListener { addLockdownTime() }
+            // Held without dragging, it opens the Lockdown page
+            setOnLongClickListener {
+                runCatching { findNavController().navigate(R.id.lockdownFragment) }
+                true
+            }
+            setOnTouchListener(HoldToDrag { _, x, y -> startWidgetDrag(Arrangement.LOCKDOWN, x, y) })
+        }
+    }
+
+    /** Off: a faded lock and what a tap adds. On: how long until it opens. */
+    private fun populateLockdownWidget() {
+        val context = requireContext()
+        lockdownWidget.isVisible = prefs.lockdownHomeWidget
+        if (!prefs.lockdownHomeWidget) return
+        val on = Lockdown.isActive(context, prefs)
+        lockdownWidgetText.text = when {
+            !on -> "+" + LockdownGate.duration(context, prefs.lockdownWidgetMinutes * 60_000L)
+            else -> Lockdown.activeUntil(context, prefs)?.let { LockdownGate.duration(context, it - System.currentTimeMillis()) }
+                ?: getString(R.string.on)
+        }
+        lockdownWidget.alpha = if (on) 1f else 0.45f
+        lockdownWidget.contentDescription = getString(R.string.lockdown) + ", " + lockdownWidgetText.text
+    }
+
+    /** A tap: the set amount more of timed lockdown, straight away */
+    private fun addLockdownTime() {
+        val context = requireContext()
+        Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs)
+        Lockdown.timedEnd(context, prefs)?.let { context.showToast(getString(R.string.lockdown_locked_until, LockdownGate.time(context, it))) }
+        app.olauncher.helper.LockdownSystem.sync(context)
+        populateLockdownWidget()
+    }
+
+    /** Keeps the widget's time left current while home shows */
+    private val lockdownTick = object : Runnable {
+        override fun run() {
+            if (_binding == null) return
+            populateLockdownWidget()
+            handler.postDelayed(this, 30_000)
+        }
     }
 
     /**
@@ -514,6 +587,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                         }
                         Arrangement.SCREEN_TIME -> Arrangement.save(context, Arrangement.HOME, Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS),
                             Arrangement.hidden(context, Arrangement.HOME) + Arrangement.SCREEN_TIME)
+                        Arrangement.LOCKDOWN -> prefs.lockdownHomeWidget = false
                         else -> Spending.setShowOnHome(context, false)
                     }
                     hiddenToast()
@@ -534,6 +608,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
             populateScreenTime()
             populateMoney()
+            populateLockdownWidget()
         }
     }
 
@@ -577,7 +652,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val showWeather = Weather.isEnabled(context)
         arrangeWidgets()
         placeClock()
-        val moneyBeside = Arrangement.MONEY !in Arrangement.underClock(context) && Spending.showOnHome(context)
+        val moneyBeside = (Arrangement.MONEY !in Arrangement.underClock(context) && Spending.showOnHome(context)) ||
+            (Arrangement.LOCKDOWN !in Arrangement.underClock(context) && prefs.lockdownHomeWidget)
         binding.screenTimeColumn.isVisible = showScreenTime
         // Holds the avatar's place beside the weather icon until there's a screen time, so the texts line up
         binding.moodAvatar.visibility = when {
@@ -755,6 +831,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
         populateScreenTime()
         populateMoney()
+        populateLockdownWidget()
 
         populateHomeApps()
     }
@@ -827,6 +904,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         isShortcut: Boolean,
         shortcutId: String?,
     ): Boolean {
+        // With lockdown's allowlist, apps not allowed are left out, keeping their place
+        if (packageName.isNotEmpty() && Lockdown.hides(requireContext(), packageName, prefs)) {
+            textView.text = ""
+            textView.visibility = View.INVISIBLE
+            return true
+        }
         // Get user handle for the app/shortcut
         val userHandle = getUserHandleFromString(requireContext(), userString)
 
@@ -1247,5 +1330,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
         val HOME_APP_IDS = setOf(R.id.homeApp1, R.id.homeApp2, R.id.homeApp3, R.id.homeApp4,
             R.id.homeApp5, R.id.homeApp6, R.id.homeApp7, R.id.homeApp8)
+
+        /** The lockdown widget's lock, the Lockdown stat's colour */
+        val LOCKDOWN_BLUE = 0xFF8FB3FF.toInt()
     }
 }

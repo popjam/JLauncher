@@ -31,6 +31,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!--Lockdown's ongoing notification-->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--Only for grayscale during lockdown; granted once over adb, never asked for-->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <queries>
         <intent>
@@ -145,6 +151,22 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Lockdown's Quick Settings tile, and its notification's "+1 hour" -->
+        <service
+            android:name=".helper.LockdownTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_lock"
+            android:label="@string/lockdown"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".helper.LockdownReceiver"
+            android:exported="false" />
 
         <service
             android:name=".helper.MyAccessibilityService"
