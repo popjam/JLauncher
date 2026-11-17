@@ -27,8 +27,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import android.view.KeyEvent
-import app.olauncher.helper.MyAccessibilityService
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
 import androidx.core.view.updatePadding
@@ -624,33 +622,36 @@ class SettingsFragment : CardPageFragment() {
                 prefs.homeButtonShowRecents = !prefs.homeButtonShowRecents
                 render()
             },
-            row(card, getString(R.string.voice_key), if (prefs.voiceKey != 0 && isAccessServiceEnabled(context)) keyName(prefs.voiceKey) else getString(R.string.off),
-                R.string.info_voice_key) { pickVoiceKey() },
+            row(card, getString(R.string.voice_tidy), onOff(app.olauncher.helper.AiTidy.isOn(context)), R.string.info_voice_tidy) { setTidyKey() },
         )
     }
 
-    private fun keyName(code: Int) = KeyEvent.keyCodeToString(code).removePrefix("KEYCODE_").replace('_', ' ')
-        .lowercase(Locale.getDefault()).replaceFirstChar { it.uppercase() }
-
-    /** Waits for the key to be pressed, through the accessibility service */
-    private fun pickVoiceKey() {
-        if (!isAccessServiceEnabled(requireContext())) return askAccessibility()
-        val builder = AlertDialog.Builder(requireContext())
-            .setTitle(R.string.voice_key)
-            .setMessage(R.string.voice_key_press)
-            .setNegativeButton(R.string.cancel, null)
-        if (prefs.voiceKey != 0) builder.setNeutralButton(R.string.voice_key_off) { _, _ ->
-            prefs.voiceKey = 0
-            render()
+    /** The Anthropic API key dictated notes are tidied with; none turns it off */
+    private fun setTidyKey() {
+        val context = requireContext()
+        val input = EditText(context).apply {
+            hint = getString(R.string.voice_tidy_key)
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(app.olauncher.helper.AiTidy.key(context).orEmpty())
         }
-        val dialog = builder.create()
-        dialog.setOnDismissListener { MyAccessibilityService.learn = null }
-        MyAccessibilityService.learn = { code ->
-            prefs.voiceKey = code
-            runCatching { dialog.dismiss() }
+        val builder = AlertDialog.Builder(context)
+            .setTitle(R.string.voice_tidy)
+            .setMessage(R.string.info_voice_tidy)
+            .setView(android.widget.FrameLayout(context).apply {
+                setPadding(20.dpToPx(), 0, 20.dpToPx(), 0)
+                addView(input)
+            })
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.okay) { _, _ ->
+                app.olauncher.helper.AiTidy.setKey(context, input.text?.toString())
+                if (isAdded) render()
+            }
+        if (app.olauncher.helper.AiTidy.isOn(context)) builder.setNeutralButton(R.string.voice_tidy_off) { _, _ ->
+            app.olauncher.helper.AiTidy.setKey(context, null)
             if (isAdded) render()
         }
-        dialog.show()
+        builder.show()
     }
 
     private fun toggleLock() {

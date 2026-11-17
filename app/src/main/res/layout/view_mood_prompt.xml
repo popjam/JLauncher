@@ -176,7 +176,6 @@
             android:hint="@string/thoughts_hint"
             android:importantForAutofill="no"
             android:inputType="textMultiLine|textCapSentences"
-            android:maxLength="2000"
             android:maxLines="6"
             android:minLines="3"
             android:padding="12dp"

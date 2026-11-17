@@ -81,6 +81,9 @@ dependencies {
     //Material dependency
     implementation libs.material
 
+    // Tidying dictated notes with Claude
+    implementation 'com.anthropic:anthropic-java:3.9.0'
+
     testImplementation 'junit:junit:4.13.2'
 
 }

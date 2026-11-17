@@ -416,7 +416,7 @@ class StatsHomeFragment : CardPageFragment() {
         container.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 10.dpToPx()
         })
-        container.addView(endRow(voiceButton(ink) { recordInto(selectedDate) }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        container.addView(endRow(journalButton(ink, selectedDate) { saveNote() }, voiceButton(ink) { recordInto(selectedDate) }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 8.dpToPx()
         })
     }
@@ -429,7 +429,7 @@ class StatsHomeFragment : CardPageFragment() {
             val input = noteInput
             if (noteDate == date && input != null && view != null) {
                 val now = input.text?.toString().orEmpty().trim()
-                input.setText(if (now.isEmpty()) text else now + "\n" + text)
+                input.setText(if (now.isEmpty()) text else now + "\n\n" + text)
             }
         })
     }
@@ -594,7 +594,7 @@ class StatsHomeFragment : CardPageFragment() {
                 }, LinearLayout.LayoutParams(34.dpToPx(), 34.dpToPx()).apply { marginEnd = 14.dpToPx() })
             }
             addView(card.textView(15f, 235).apply {
-                text = getString(R.string.quoted, note)
+                text = getString(R.string.quoted, app.olauncher.helper.JournalText.preview(note, 400))
                 setLineSpacing(3.dpToPx().toFloat(), 1f)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         })

@@ -607,7 +607,7 @@ class MoodStore(context: Context) {
         const val FILE_NAME = "mood_data.json"
         const val DEFAULT_PROMPT_MINUTES = 21 * 60
         const val DEFAULT_CATCH_UP_MINUTES = 12 * 60
-        const val MAX_NOTE_LENGTH = 2000
+        const val MAX_NOTE_LENGTH = 100_000
         const val MAX_NAME_LENGTH = 24
         const val MAX_QUESTION_LENGTH = 80
         const val MAX_PHRASE_LENGTH = 100

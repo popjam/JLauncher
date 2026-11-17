@@ -221,7 +221,7 @@ object Report {
                     val note = data.days[d.toString()]?.note?.takeIf { it.isNotBlank() }
                     val moodName = data.days[d.toString()]?.mood?.let { context.resources.getStringArray(R.array.mood_names)[it] } ?: s.roundToInt().toString()
                     text(d.format(shortDate) + " · " + moodName, 11f, bold = true)
-                    if (note != null) text(note, 10.5f, grey)
+                    if (note != null) text(app.olauncher.helper.JournalText.preview(note, 400), 10.5f, grey)
                     y += 6f
                 }
             }

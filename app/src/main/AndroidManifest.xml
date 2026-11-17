@@ -62,6 +62,24 @@
             </intent-filter>
         </activity>
 
+        <!-- Speaking today's note from anywhere: in the app list, so a programmable key can open it -->
+        <activity
+            android:name=".VoiceNoteActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_voice_note"
+            android:label="@string/voice_note_app"
+            android:launchMode="singleTask"
+            android:roundIcon="@mipmap/ic_voice_note"
+            android:taskAffinity="app.olauncher.voice"
+            android:theme="@style/VoiceNoteTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".helper.PinItemActivity"
             android:exported="true"

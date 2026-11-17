@@ -45,6 +45,17 @@
 
     </style>
 
+    <!-- The voice note popup on its own: nothing but the popup over whatever was open -->
+    <style name="VoiceNoteTheme" parent="AppTheme">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <!-- The popup's own dimming doesn't reach past a see-through window, so the window dims what's behind -->
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.7</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <style name="WindowAnimationTransition">
         <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
         <item name="android:windowExitAnimation">@android:anim/fade_out</item>

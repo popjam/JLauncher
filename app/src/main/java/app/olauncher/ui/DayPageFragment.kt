@@ -109,7 +109,6 @@ class DayPageFragment : CardPageFragment() {
 
     override fun onPause() {
         saveNote()
-        stopVoicePlayback()
         super.onPause()
     }
 
@@ -217,16 +216,16 @@ class DayPageFragment : CardPageFragment() {
             setOnLongClickListener {
                 if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
                 saveNote()
-                recordVoiceNote(date, onSaved = { if (isAdded) render() })
+                recordVoiceNote(date)
                 true
             }
         }
         card.root.addView(noteInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 14.dpToPx()
         })
-        card.root.addView(endRow(voiceListButton(ink, date) { if (isAdded) render() }, voiceButton(ink) {
+        card.root.addView(endRow(journalButton(ink, date) { saveNote() }, voiceButton(ink) {
             saveNote()
-            recordVoiceNote(date, onSaved = { if (isAdded) render() })
+            recordVoiceNote(date)
         }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 8.dpToPx()
         })
@@ -240,7 +239,7 @@ class DayPageFragment : CardPageFragment() {
         val input = noteInput
         if (day == date && input != null && view != null) {
             val now = input.text?.toString().orEmpty().trim()
-            input.setText(if (now.isEmpty()) text else now + "\n" + text)
+            input.setText(if (now.isEmpty()) text else now + "\n\n" + text)
             noteShown = store.load().days[date.toString()]?.note.orEmpty()
         }
     }

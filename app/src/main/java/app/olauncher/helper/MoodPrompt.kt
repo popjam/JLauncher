@@ -142,7 +142,7 @@ object MoodPrompt {
         voice.setOnClickListener {
             onVoice?.invoke { text ->
                 val now = note.text?.toString().orEmpty().trim()
-                note.setText(if (now.isEmpty()) text else now + "\n" + text)
+                note.setText(if (now.isEmpty()) text else now + "\n\n" + text)
                 note.setSelection(note.text.length)
             }
         }

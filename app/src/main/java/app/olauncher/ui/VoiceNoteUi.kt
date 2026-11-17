@@ -9,7 +9,6 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
-import android.media.MediaPlayer
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -23,6 +22,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import app.olauncher.R
 import app.olauncher.helper.VoiceNotes
 import app.olauncher.helper.dpToPx
@@ -30,35 +32,35 @@ import app.olauncher.helper.getColorFromAttr
 import java.io.File
 import java.time.LocalDate
 
-// Voice notes: holding a note box records one, written out as text into the note; the day page plays them back
+// Speaking a note: a popup records it, then its words go on the end of the day's note ([VoiceNotes.writeOut])
 
-/** What's playing now, so starting another stops it */
-private var player: MediaPlayer? = null
-private var playing: File? = null
+const val MIC_REQUEST = 41
 
-fun stopVoicePlayback() {
-    runCatching { player?.release() }
-    player = null
-    playing = null
+/** Records a note for [date] from a page; [onText] gets its words once they're in the note */
+fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null) {
+    if (!VoiceNotes.canRecord(requireContext())) {
+        @Suppress("DEPRECATION")
+        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MIC_REQUEST)
+        Toast.makeText(requireContext(), R.string.voice_allow_mic, Toast.LENGTH_LONG).show()
+        return
+    }
+    showRecorder(requireContext(), viewLifecycleOwner.lifecycle, date, onText)
 }
 
 /**
- * Records a voice note for [date] until Done, then writes it out as text onto the end of that day's
- * note ([VoiceNotes.writeOut]), handing the words to [onText] too. [onSaved] runs once the recording's
- * kept, text or not.
+ * The recording popup, over [ui] (an activity's context), for [date]. Done writes it out ([onText]
+ * gets the words); Cancel throws it away. [onClosed] runs once it's gone either way.
+ *
+ * Leaving [lifecycle] (home pressed, screen off) pauses it, so the mic isn't left on; it's still there
+ * on coming back. [lifecycle] ending altogether keeps what was said, unless it was only a few seconds.
  */
-fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null, onSaved: () -> Unit = {}) {
-    val context = requireContext().applicationContext
-    if (!VoiceNotes.canRecord(context)) {
-        @Suppress("DEPRECATION")
-        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 41)
-        Toast.makeText(context, R.string.voice_allow_mic, Toast.LENGTH_LONG).show()
-        return
-    }
-    stopVoicePlayback()
+fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((String) -> Unit)? = null, onClosed: () -> Unit = {}) {
+    val context = ui.applicationContext
     val recorder = VoiceNotes.Recorder(context, date)
-    if (!recorder.start()) return run { Toast.makeText(context, R.string.voice_cant_record, Toast.LENGTH_SHORT).show() }
-    val ui = requireContext()
+    if (!recorder.start()) {
+        Toast.makeText(context, R.string.voice_cant_record, Toast.LENGTH_SHORT).show()
+        return onClosed()
+    }
     val ink = ui.getColorFromAttr(R.attr.primaryColor)
     val red = 0xFFEF5350.toInt()
     fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
@@ -117,16 +119,16 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null
     showState()
 
     val main = android.os.Handler(android.os.Looper.getMainLooper())
-    val lifecycle = viewLifecycleOwner.lifecycle
     var finished = false
     lateinit var tick: Runnable
-    lateinit var keeper: androidx.lifecycle.DefaultLifecycleObserver
+    lateinit var keeper: DefaultLifecycleObserver
 
     fun close() {
         finished = true
         main.removeCallbacks(tick)
         lifecycle.removeObserver(keeper)
         runCatching { dialog.dismiss() }
+        onClosed()
     }
 
     fun save() {
@@ -136,7 +138,6 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null
             val file = recorder.stop()
             main.post {
                 if (file == null) return@post Toast.makeText(context, R.string.voice_too_short, Toast.LENGTH_SHORT).show()
-                onSaved()
                 VoiceNotes.writeOut(context, date, file) { text -> if (text != null) onText?.invoke(text) }
             }
         }.start()
@@ -165,21 +166,19 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null
         }
     }
 
-    // Leaving the page (home pressed, screen off) pauses it, so the mic isn't left on; it's still there on coming back.
-    // The page going altogether throws it away.
-    keeper = object : androidx.lifecycle.DefaultLifecycleObserver {
-        override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+    keeper = object : DefaultLifecycleObserver {
+        override fun onStop(owner: LifecycleOwner) {
             recorder.paused = true
             showState()
         }
 
-        override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) = discard()
+        override fun onDestroy(owner: LifecycleOwner) = if (recorder.recordedMs >= KEEP_ON_CLOSE_MS) save() else discard()
     }
     lifecycle.addObserver(keeper)
 
     cancel.setOnClickListener {
         // A long recording is worth a second thought before throwing it away
-        if (recorder.recordedMs < 10_000) return@setOnClickListener discard()
+        if (recorder.recordedMs < KEEP_ON_CLOSE_MS) return@setOnClickListener discard()
         recorder.paused = true
         showState()
         AlertDialog.Builder(ui)
@@ -197,6 +196,9 @@ fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null
     dialog.show()
     main.post(tick)
 }
+
+/** Recordings shorter than this are thrown away without asking, and when the page goes */
+private const val KEEP_ON_CLOSE_MS = 10_000L
 
 /** A round button with a pixel icon in it and its name under it */
 private class RoundButton(context: Context) : LinearLayout(context) {
@@ -269,7 +271,7 @@ private class LevelBars(context: Context, private val ink: Int) : View(context) 
 
 private fun clockOf(ms: Long) = "%d:%02d".format(ms / 60_000, ms / 1000 % 60)
 
-/** The rounded card the voice note popups are drawn on */
+/** The rounded card the voice popup is drawn on */
 private fun sheetCard(context: Context) = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
     val ink = context.getColorFromAttr(R.attr.primaryColor)
@@ -298,140 +300,62 @@ private fun sheetDialog(context: Context, card: View, cancelable: Boolean) = Dia
 }
 
 /**
- * [date]'s recordings in a popup: each can be played, written out again if it couldn't be before, or
- * deleted ([onChange] after a delete).
+ * Recordings that couldn't be written out, one row each, into [into] (hidden when there are none):
+ * each can be tried again or thrown away.
  */
-internal fun Fragment.showVoiceNotes(date: LocalDate, onChange: () -> Unit) {
+internal fun Fragment.fillPending(into: LinearLayout) {
     val ui = requireContext()
     val ink = ui.getColorFromAttr(R.attr.primaryColor)
     fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
-    val list = LinearLayout(ui).apply { orientation = LinearLayout.VERTICAL }
-    val card = sheetCard(ui).apply {
-        addView(TextView(ui, null, 0, R.style.TextLarge).apply {
-            setText(R.string.voice_notes)
-            textSize = 22f
-            setTextColor(ink)
-        })
+    into.removeAllViews()
+    val files = VoiceNotes.pending(ui)
+    into.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
+    if (files.isEmpty()) return
+    into.addView(TextView(ui, null, 0, R.style.TextSmall).apply {
+        text = resources.getQuantityString(R.plurals.voice_not_written, files.size, files.size)
+        textSize = 13f
+        setTextColor(ink)
+        alpha = 0.6f
+        setTypeface(null, Typeface.BOLD)
+        setPadding(4.dpToPx(), 0, 0, 2.dpToPx())
+    })
+    files.forEach { file -> into.addView(pendingRow(ui, ink, file, ::faint)) }
+}
+
+private fun Fragment.pendingRow(ui: Context, ink: Int, file: File, faint: (Int) -> Int): View {
+    val date = VoiceNotes.dateOf(file) ?: LocalDate.now()
+    val day = date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.getDefault()))
+    val time = android.text.format.DateFormat.getTimeFormat(ui).format(java.util.Date(VoiceNotes.startedAt(file)))
+    return LinearLayout(ui).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(4.dpToPx(), 6.dpToPx(), 0, 6.dpToPx())
         addView(TextView(ui, null, 0, R.style.TextSmall).apply {
-            text = date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", java.util.Locale.getDefault()))
-            textSize = 13f
-            setTextColor(faint(150))
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 2.dpToPx() })
-        addView(android.widget.ScrollView(ui).apply {
-            isVerticalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            addView(list)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 12.dpToPx() })
-    }
-    val dialog = sheetDialog(ui, card, cancelable = true)
-    val main = android.os.Handler(android.os.Looper.getMainLooper())
-    lateinit var fill: () -> Unit
-    var noNote = false
-
-    fun row(file: java.io.File): View {
-        val playButton = ImageView(ui).apply {
-            scaleType = ImageView.ScaleType.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(faint(22))
-                setStroke(1.dpToPx(), faint(70))
-            }
-        }
-        val time = TextView(ui, null, 0, R.style.TextSmall).apply {
-            text = android.text.format.DateFormat.getTimeFormat(ui).format(java.util.Date(file.name.substringAfter(' ').substringBefore('.').toLongOrNull() ?: file.lastModified()))
-            textSize = 15f
+            text = "$day, $time · ${clockOf(VoiceNotes.wavMs(file))}"
+            textSize = 14f
             setTextColor(ink)
-        }
-        val length = TextView(ui, null, 0, R.style.TextSmall).apply {
-            textSize = 13f
-            setTextColor(faint(150))
-        }
-        // Couldn't be written out, or (from before that was remembered) the day has no note at all.
-        // Compressed ones were written out.
-        val failed = file.name.endsWith(".wav") && (VoiceNotes.failed(ui, file) || noNote)
-        fun show() {
-            val on = playing == file
-            playButton.setImageDrawable(StatIcons.drawable(if (on) StatIcons.STOP else StatIcons.PLAY, ink, 14.dpToPx()))
-            val total = clockOf(VoiceNotes.lengthMs(ui, file))
-            val at = if (on) player?.let { runCatching { clockOf(it.currentPosition.toLong()) + " / " }.getOrNull() }.orEmpty() else ""
-            length.text = at + total + if (failed) " · " + ui.getString(R.string.voice_not_written) else ""
-        }
-        show()
-        val progress = object : Runnable {
-            override fun run() {
-                if (playing != file || !dialog.isShowing) return
-                show()
-                main.postDelayed(this, 250)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(pillButton(ui, ink, ui.getString(R.string.voice_try_again), null) {
+            VoiceNotes.writeOut(ui, date, file)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = 4.dpToPx() })
+        addView(ImageView(ui).apply {
+            setImageDrawable(StatIcons.drawable(StatIcons.CROSS, faint(170), 12.dpToPx()))
+            scaleType = ImageView.ScaleType.CENTER
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            contentDescription = ui.getString(R.string.voice_discard)
+            setOnClickListener {
+                AlertDialog.Builder(ui)
+                    .setMessage(R.string.voice_discard_ask)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.voice_discard) { _, _ -> VoiceNotes.delete(file) }
+                    .show()
             }
-        }
-        playButton.setOnClickListener {
-            if (playing == file) {
-                stopVoicePlayback()
-                return@setOnClickListener fill()
-            }
-            stopVoicePlayback()
-            player = runCatching {
-                MediaPlayer().apply {
-                    setDataSource(file.path)
-                    setOnCompletionListener {
-                        stopVoicePlayback()
-                        if (dialog.isShowing) fill()
-                    }
-                    prepare()
-                    start()
-                }
-            }.getOrNull()
-            playing = if (player != null) file else null
-            // Only the one playing shows Stop
-            fill()
-            main.post(progress)
-        }
-        return LinearLayout(ui).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 8.dpToPx(), 0, 8.dpToPx())
-            addView(playButton, LinearLayout.LayoutParams(40.dpToPx(), 40.dpToPx()).apply { marginEnd = 14.dpToPx() })
-            addView(LinearLayout(ui).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(time)
-                addView(length)
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (failed) addView(pillButton(ui, ink, ui.getString(R.string.voice_write_out), null) {
-                VoiceNotes.writeOut(ui, date, file) { if (dialog.isShowing) fill() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() })
-            addView(ImageView(ui).apply {
-                setImageDrawable(StatIcons.drawable(StatIcons.CROSS, faint(170), 12.dpToPx()))
-                scaleType = ImageView.ScaleType.CENTER
-                setBackgroundResource(android.R.drawable.list_selector_background)
-                contentDescription = ui.getString(R.string.voice_delete)
-                setOnClickListener {
-                    AlertDialog.Builder(ui)
-                        .setMessage(R.string.voice_delete_ask)
-                        .setNegativeButton(R.string.cancel, null)
-                        .setPositiveButton(R.string.voice_delete) { _, _ ->
-                            if (playing == file) stopVoicePlayback()
-                            VoiceNotes.delete(ui, file)
-                            onChange()
-                            if (VoiceNotes.files(ui, date).isEmpty()) dialog.dismiss() else fill()
-                        }
-                        .show()
-                }
-            }, LinearLayout.LayoutParams(36.dpToPx(), 36.dpToPx()))
-        }
+        }, LinearLayout.LayoutParams(40.dpToPx(), 40.dpToPx()))
     }
-
-    fill = {
-        noNote = app.olauncher.data.MoodStore(ui).load().days[date.toString()]?.note.isNullOrBlank()
-        list.removeAllViews()
-        VoiceNotes.files(ui, date).forEach { list.addView(row(it)) }
-    }
-    fill()
-    dialog.setOnDismissListener { stopVoicePlayback() }
-    dialog.show()
 }
 
 /** A small outlined button with an optional pixel icon, doing [onTap] */
-private fun pillButton(context: Context, ink: Int, text: String, icon: String?, onTap: () -> Unit): TextView = TextView(context, null, 0, R.style.TextSmall).apply {
+internal fun pillButton(context: Context, ink: Int, text: String, icon: String?, onTap: () -> Unit): TextView = TextView(context, null, 0, R.style.TextSmall).apply {
     this.text = text
     textSize = 13f
     setTextColor(ink)
@@ -452,14 +376,13 @@ private fun pillButton(context: Context, ink: Int, text: String, icon: String?, 
 internal fun Fragment.voiceButton(ink: Int, onTap: () -> Unit): TextView =
     pillButton(requireContext(), ink, getString(R.string.voice_note_button), StatIcons.MIC, onTap)
 
-/** A button opening [date]'s recordings ([showVoiceNotes]), or null if there are none */
-internal fun Fragment.voiceListButton(ink: Int, date: LocalDate, onChange: () -> Unit): TextView? {
-    val count = VoiceNotes.files(requireContext(), date).size
-    if (count == 0) return null
-    return pillButton(requireContext(), ink, resources.getQuantityString(R.plurals.voice_note_count, count, count), StatIcons.PLAY) {
-        showVoiceNotes(date, onChange)
+/** A small "Journal" button opening [date]'s note on its own page, after [before] (saving the box, say) */
+internal fun Fragment.journalButton(ink: Int, date: LocalDate, before: () -> Unit): TextView =
+    pillButton(requireContext(), ink, getString(R.string.journal), StatIcons.BOOK) {
+        before()
+        androidx.navigation.fragment.NavHostFragment.findNavController(this)
+            .navigate(R.id.action_global_journalEntryFragment, JournalEntryFragment.args(date))
     }
-}
 
 /** [buttons] on the right, in their own row, for under a note box */
 internal fun Fragment.endRow(vararg buttons: View?): LinearLayout = LinearLayout(requireContext()).apply {
