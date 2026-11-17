@@ -1,5 +1,7 @@
 package app.olauncher.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -19,6 +21,8 @@ import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.Prefs
+import app.olauncher.helper.Lockdown
+import app.olauncher.helper.LockdownSystem
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
 
@@ -260,6 +264,80 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(12.dpToPx(), 0, 12.dpToPx(), 0)
         }
+    }
+
+    // --- Shared with the setup ---
+
+    internal fun pill(text: String, onTap: () -> Unit) = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
+        this.text = text
+        textSize = 14.5f
+        setTextColor(ink)
+        background = GradientDrawable().apply {
+            cornerRadius = 20.dpToPx().toFloat()
+            setColor(faint(36))
+        }
+        setPadding(18.dpToPx(), 9.dpToPx(), 18.dpToPx(), 9.dpToPx())
+        setOnClickListener { onTap() }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() }
+    }
+
+    internal fun unlockName(unlock: Lockdown.Unlock) = when (unlock) {
+        Lockdown.Unlock.NOTHING -> getString(R.string.lockdown_unlock_nothing)
+        Lockdown.Unlock.PASSWORD -> getString(R.string.lockdown_password)
+        Lockdown.Unlock.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(requireContext(), prefs.lockdownWaitMinutes * 60_000L))
+    }
+
+    /** Nothing, the password, or one of the waits. Anything but a stricter choice loosens lockdown. */
+    internal fun pickUnlock() {
+        val context = requireContext()
+        val current = Lockdown.unlock(prefs)
+        val waits = Lockdown.WAIT_CHOICES
+        val names = listOf(getString(R.string.lockdown_unlock_nothing), getString(R.string.lockdown_password)) +
+            waits.map { getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, it * 60_000L)) }
+        val selected = when (current) {
+            Lockdown.Unlock.NOTHING -> 0
+            Lockdown.Unlock.PASSWORD -> 1
+            Lockdown.Unlock.WAIT -> 2 + waits.indexOf(prefs.lockdownWaitMinutes)
+        }
+        choose(getString(R.string.lockdown_unlock_with), names, selected) { which ->
+            val stricter = current == Lockdown.Unlock.NOTHING ||
+                (current == Lockdown.Unlock.WAIT && which >= 2 && waits[which - 2] > prefs.lockdownWaitMinutes)
+            val change = {
+                when (which) {
+                    0 -> {
+                        gate.clearPassword()
+                        prefs.lockdownUnlock = Lockdown.Unlock.NOTHING.ordinal
+                        render()
+                    }
+                    1 -> gate.setNewPassword(warn = true) {
+                        prefs.lockdownUnlock = Lockdown.Unlock.PASSWORD.ordinal
+                        render()
+                    }
+                    else -> {
+                        gate.clearPassword()
+                        prefs.lockdownWaitMinutes = waits[which - 2]
+                        prefs.lockdownUnlock = Lockdown.Unlock.WAIT.ordinal
+                        Lockdown.cancelWait(prefs)
+                        render()
+                    }
+                }
+            }
+            if (stricter) change() else gate.loosen(change)
+        }
+    }
+
+    /** Grayscale needs a permission only a computer can give */
+    internal fun grayscaleSetup() {
+        val context = requireContext()
+        val command = LockdownSystem.grantCommand(context)
+        AlertDialog.Builder(context)
+            .setTitle(R.string.lockdown_grayscale)
+            .setMessage(getString(R.string.lockdown_grayscale_setup) + "\n\n" + command)
+            .setNegativeButton(R.string.lockdown_copy) { _, _ ->
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(command, command))
+            }
+            .setPositiveButton(R.string.okay, null)
+            .show()
     }
 
     // --- Choosing ---

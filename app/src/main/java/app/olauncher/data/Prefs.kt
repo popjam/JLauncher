@@ -101,6 +101,7 @@ class Prefs(context: Context) {
     private val LOCKDOWN_SYSTEM_SETTINGS = "LOCKDOWN_SYSTEM_SETTINGS"
     private val LOCKDOWN_STAGES = "LOCKDOWN_STAGES"
     private val LOCKDOWN_HOME_WIDGET = "LOCKDOWN_HOME_WIDGET"
+    private val LOCKDOWN_SETUP_OFFERED = "LOCKDOWN_SETUP_OFFERED"
     private val LOCKDOWN_WIDGET_MINUTES = "LOCKDOWN_WIDGET_MINUTES"
     private val LOCKDOWN_BLOCKED_DAYS = "LOCKDOWN_BLOCKED_DAYS"
     private val APP_LIMITS = "APP_LIMITS"
@@ -496,6 +497,11 @@ class Prefs(context: Context) {
         set(value) = prefs.edit { putString(LOCKDOWN_STAGES, value) }
 
     /** The lock on the home screen that adds time to a timed lockdown */
+    /** Whether the setup has been shown once, on first opening Lockdown */
+    var lockdownSetupOffered: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_SETUP_OFFERED, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_SETUP_OFFERED, value) }
+
     var lockdownHomeWidget: Boolean
         get() = prefs.getBoolean(LOCKDOWN_HOME_WIDGET, false)
         set(value) = prefs.edit { putBoolean(LOCKDOWN_HOME_WIDGET, value) }

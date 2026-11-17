@@ -170,6 +170,11 @@
         android:label="LockdownFragment" />
 
     <fragment
+        android:id="@+id/lockdownSetupFragment"
+        android:name="app.olauncher.ui.LockdownSetupFragment"
+        android:label="LockdownSetupFragment" />
+
+    <fragment
         android:id="@+id/lockdownPageFragment"
         android:name="app.olauncher.ui.LockdownPageFragment"
         android:label="LockdownPageFragment" />

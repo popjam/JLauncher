@@ -60,6 +60,11 @@ class LockdownFragment : LockdownBaseFragment() {
             arguments?.remove(LOCK_FOR)
             askLockFor()
         }
+        // The first time, with nothing set up, the setup opens
+        if (!prefs.lockdownSetupOffered) {
+            prefs.lockdownSetupOffered = true
+            if (LockdownSetupFragment.isFresh(prefs)) openSetup()
+        }
         // Times, stages and waits move on while the page is open
         main.removeCallbacks(refresh)
         main.postDelayed(refresh, 30_000)
@@ -122,28 +127,19 @@ class LockdownFragment : LockdownBaseFragment() {
             card.add(card.textView(14f, 165).apply { text = line; updatePadding(top = 10.dpToPx()) })
             card.add(StageBar(context, stages, used, ink, labels = true), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64.dpToPx()))
         }
-        val buttons = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
+        val buttons = FlowLayout(context).apply {
             updatePadding(top = 10.dpToPx())
             addView(pill(getString(R.string.lockdown_lock_for)) { askLockFor() })
             addView(pill(getString(if (prefs.lockdownModeOn) R.string.lockdown_turn_off else R.string.lockdown_turn_on)) { toggleManual() })
+            addView(pill(getString(R.string.lockdown_setup)) { openSetup() })
         }
         card.add(buttons)
     }
 
     private fun Card.add(view: View, params: LinearLayout.LayoutParams) = root.addView(view, root.indexOfChild(scene), params)
 
-    private fun pill(text: String, onTap: () -> Unit) = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
-        this.text = text
-        textSize = 14.5f
-        setTextColor(ink)
-        background = GradientDrawable().apply {
-            cornerRadius = 20.dpToPx().toFloat()
-            setColor(faint(36))
-        }
-        setPadding(18.dpToPx(), 9.dpToPx(), 18.dpToPx(), 9.dpToPx())
-        setOnClickListener { onTap() }
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() }
+    private fun openSetup() {
+        runCatching { androidx.navigation.fragment.NavHostFragment.findNavController(this).navigate(R.id.lockdownSetupFragment) }
     }
 
     /** Turning it on while a timer, schedule, place or stage has it on keeps it on past their end, so that's asked first */
@@ -350,51 +346,6 @@ class LockdownFragment : LockdownBaseFragment() {
         )
     }
 
-    private fun unlockName(unlock: Lockdown.Unlock) = when (unlock) {
-        Lockdown.Unlock.NOTHING -> getString(R.string.lockdown_unlock_nothing)
-        Lockdown.Unlock.PASSWORD -> getString(R.string.lockdown_password)
-        Lockdown.Unlock.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(requireContext(), prefs.lockdownWaitMinutes * 60_000L))
-    }
-
-    /** Nothing, the password, or one of the waits. Anything but a stricter choice loosens lockdown. */
-    private fun pickUnlock() {
-        val context = requireContext()
-        val current = Lockdown.unlock(prefs)
-        val waits = Lockdown.WAIT_CHOICES
-        val names = listOf(getString(R.string.lockdown_unlock_nothing), getString(R.string.lockdown_password)) +
-            waits.map { getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, it * 60_000L)) }
-        val selected = when (current) {
-            Lockdown.Unlock.NOTHING -> 0
-            Lockdown.Unlock.PASSWORD -> 1
-            Lockdown.Unlock.WAIT -> 2 + waits.indexOf(prefs.lockdownWaitMinutes)
-        }
-        choose(getString(R.string.lockdown_unlock_with), names, selected) { which ->
-            val stricter = current == Lockdown.Unlock.NOTHING ||
-                (current == Lockdown.Unlock.WAIT && which >= 2 && waits[which - 2] > prefs.lockdownWaitMinutes)
-            val change = {
-                when (which) {
-                    0 -> {
-                        gate.clearPassword()
-                        prefs.lockdownUnlock = Lockdown.Unlock.NOTHING.ordinal
-                        render()
-                    }
-                    1 -> gate.setNewPassword(warn = true) {
-                        prefs.lockdownUnlock = Lockdown.Unlock.PASSWORD.ordinal
-                        render()
-                    }
-                    else -> {
-                        gate.clearPassword()
-                        prefs.lockdownWaitMinutes = waits[which - 2]
-                        prefs.lockdownUnlock = Lockdown.Unlock.WAIT.ordinal
-                        Lockdown.cancelWait(prefs)
-                        render()
-                    }
-                }
-            }
-            if (stricter) change() else gate.loosen(change)
-        }
-    }
-
     private fun toggleClue() {
         if (prefs.recoveryClue) {
             prefs.recoveryClue = false
@@ -471,20 +422,6 @@ class LockdownFragment : LockdownBaseFragment() {
         Lockdown.Lock.LAUNCHER -> R.string.info_lock_launcher
         Lockdown.Lock.PROTECT -> R.string.info_lock_protect
         Lockdown.Lock.SYSTEM_SETTINGS -> R.string.info_lock_system
-    }
-
-    /** Grayscale needs a permission only a computer can give */
-    private fun grayscaleSetup() {
-        val context = requireContext()
-        val command = LockdownSystem.grantCommand(context)
-        AlertDialog.Builder(context)
-            .setTitle(R.string.lockdown_grayscale)
-            .setMessage(getString(R.string.lockdown_grayscale_setup) + "\n\n" + command)
-            .setNegativeButton(R.string.lockdown_copy) { _, _ ->
-                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(command, command))
-            }
-            .setPositiveButton(R.string.okay, null)
-            .show()
     }
 
     // --- Today ---
