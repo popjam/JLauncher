@@ -149,6 +149,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         isResumed = false
+        // Leaving JLauncher ends the few minutes the lockdown password was good for
+        app.olauncher.helper.Lockdown.endGrace()
         backToHomeScreen()
         super.onStop()
     }

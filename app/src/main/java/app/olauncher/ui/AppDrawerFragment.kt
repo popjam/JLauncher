@@ -218,7 +218,7 @@ class AppDrawerFragment : Fragment() {
         }
 
         binding.recyclerView.layoutManager = linearLayoutManager
-        adapter.longPressEnabled = !(prefs.lockdownModeOn && prefs.lockdownHoldApp)
+        adapter.longPressEnabled = !app.olauncher.helper.Lockdown.isLocked(requireContext(), app.olauncher.helper.Lockdown.Lock.APP_CHANGES, prefs)
         binding.recyclerView.adapter = adapter
         binding.recyclerView.addOnScrollListener(getRecyclerViewOnScrollListener())
         binding.recyclerView.itemAnimator = null

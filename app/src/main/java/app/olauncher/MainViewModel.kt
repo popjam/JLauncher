@@ -21,6 +21,7 @@ import app.olauncher.data.AppModel
 import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
+import app.olauncher.helper.Lockdown
 import app.olauncher.helper.Music
 import app.olauncher.helper.DeviceTime
 import app.olauncher.helper.PhoneHabits
@@ -93,7 +94,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectedApp(appModel: AppModel, flag: Int) {
         if (appModel is AppModel.PrivateSpaceHeader) return
-        if ((flag == Constants.FLAG_LAUNCH_APP || flag == Constants.FLAG_HIDDEN_APPS)
+        val launching = flag == Constants.FLAG_LAUNCH_APP || flag == Constants.FLAG_HIDDEN_APPS
+        if (launching && Lockdown.isBlocked(appContext, appModel.appPackage, prefs)) {
+            appContext.showToast(app.olauncher.ui.LockdownGate.blockedMessage(appContext, appModel.appLabel))
+            return
+        }
+        if (launching
             && AppPause.needsGate(prefs, appModel.appPackage)
         ) {
             pausedApp = appModel

@@ -41,8 +41,8 @@ import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Arrangement
+import app.olauncher.helper.Lockdown
 import app.olauncher.helper.AutoStats
-import app.olauncher.helper.PasswordHelper
 import app.olauncher.helper.People
 import app.olauncher.helper.Places
 import app.olauncher.helper.Social
@@ -231,10 +231,14 @@ class SettingsFragment : CardPageFragment() {
             prefs.lockModeOn = true
         }
         render()
+        // Lockdown's times and waits move on while the page is open
+        main.removeCallbacks(refreshStatus)
+        main.postDelayed(refreshStatus, 30_000)
     }
 
     override fun onPause() {
         info?.dismiss()
+        main.removeCallbacks(refreshStatus)
         super.onPause()
     }
 
@@ -698,7 +702,7 @@ class SettingsFragment : CardPageFragment() {
         val hidden = prefs.hiddenApps.size
         card.body(
             row(card, getString(R.string.hidden_apps), hidden.toString(), R.string.info_hidden_apps) {
-                if (prefs.lockdownModeOn && prefs.lockdownHiddenApps) return@row
+                if (LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)) return@row
                 if (prefs.hiddenApps.isEmpty()) return@row context.showToast(getString(R.string.no_hidden_apps))
                 viewModel.getHiddenApps()
                 findNavController().navigate(R.id.appListFragment, bundleOf(Constants.Key.FLAG to Constants.FLAG_HIDDEN_APPS))
@@ -745,10 +749,8 @@ class SettingsFragment : CardPageFragment() {
         )
     }
 
-    /** Anything that weakens a limit needs the lockdown password while lockdown is on */
-    private fun loosen(action: () -> Unit) {
-        if (prefs.lockdownModeOn) requirePasswordThen(action) else action()
-    }
+    /** Anything that weakens a limit needs lockdown's unlock while lockdown is on */
+    private fun loosen(action: () -> Unit) = gate.loosen(action)
 
     // --- Check-in ---
 
@@ -1034,47 +1036,266 @@ class SettingsFragment : CardPageFragment() {
 
     // --- Lockdown ---
 
+    private val gate by lazy { LockdownGate(this) { render() } }
+    private var lockdownCard: Card? = null
+    private var lockdownPhase: List<Any>? = null
+
+    /** What changes lockdown's rows: whether it's on, timed, and how far a wait has got */
+    private fun lockdownPhase(context: Context) = listOf(Lockdown.isActive(context, prefs), Lockdown.timedActive(context, prefs),
+        Lockdown.waitState(context, prefs)::class)
+
+    /** Keeps lockdown's status current while the page is open, and its rows when they change */
+    private val refreshStatus = object : Runnable {
+        override fun run() {
+            if (!isAdded) return
+            val context = requireContext()
+            if (lockdownPhase(context) != lockdownPhase) render() else lockdownCard?.subtitle(LockdownGate.status(context))
+            main.postDelayed(this, 30_000)
+        }
+    }
+
     private fun lockdownSection() {
+        val context = requireContext()
         val card = Card(getString(R.string.lockdown))
+        lockdownCard = card
+        lockdownPhase = lockdownPhase(context)
+        card.subtitle(LockdownGate.status(context))
         // Tapping the title 500 times shows the password, when that way of recovering it is on
         card.titleView.setOnClickListener {
-            if (!prefs.lockdownModeOn || !prefs.passwordRecoveryEnabled || !prefs.recoveryTap500 || !prefs.isLockdownPasswordSet) return@setOnClickListener
+            if (!prefs.passwordRecoveryEnabled || !prefs.recoveryTap500 || !prefs.isLockdownPasswordSet) return@setOnClickListener
             recoveryTaps++
             if (recoveryTaps >= 500) {
                 recoveryTaps = 0
-                showPassword()
-            } else if (recoveryTaps % 50 == 0) requireContext().showToast(getString(R.string.recovery_tap_progress, recoveryTaps))
+                gate.showPassword()
+            } else if (recoveryTaps % 50 == 0) context.showToast(getString(R.string.recovery_tap_progress, recoveryTaps))
         }
-        val on = prefs.lockdownModeOn
-        val recovery = on && prefs.passwordRecoveryEnabled
-        fun strict(title: Int, about: Int, get: () -> Boolean, set: (Boolean) -> Unit) = if (on) row(card, getString(title), onOff(get()), about, level = 1) {
-            if (get()) loosen { set(false); render() } else { set(true); render() }
-        } else null
+        val manual = prefs.lockdownModeOn
+        val timedEnd = Lockdown.timedEnd(context, prefs)
+        val schedules = Lockdown.schedules(prefs)
+        val locks = Lockdown.Lock.values()
+        val blocked = prefs.lockdownBlockedApps.count { context.isPackageInstalled(it) }
+        val unlock = Lockdown.unlock(prefs)
+        val needsService = blocked > 0 || prefs.lockdownProtect
+        val password = unlock == Lockdown.Unlock.PASSWORD
+        val recovery = password && prefs.passwordRecoveryEnabled
         fun method(title: Int, about: Int, get: () -> Boolean, toggle: () -> Unit) = if (recovery) row(card, getString(title), onOff(get()), about, level = 2) {
             loosen(toggle)
         } else null
         card.body(
-            row(card, getString(R.string.lockdown), onOff(on), R.string.info_lockdown) {
-                if (on) loosen { prefs.resetLockdownSettings(); render() }
+            // Switched on, or on by itself until a time
+            row(card, getString(R.string.lockdown), when {
+                manual -> getString(R.string.on)
+                Lockdown.isActive(context, prefs) -> Lockdown.activeUntil(context, prefs)?.let { getString(R.string.lockdown_until, LockdownGate.time(context, it)) }
+                    ?: getString(R.string.on)
+                else -> getString(R.string.off)
+            }, R.string.info_lockdown) {
+                if (manual) loosen { prefs.lockdownModeOn = false; render() }
                 else {
                     prefs.lockdownModeOn = true
                     render()
                 }
             },
-            if (on) row(card, getString(R.string.lockdown_password), onOff(prefs.isLockdownPasswordSet), R.string.info_lockdown_password, level = 1) {
-                if (prefs.isLockdownPasswordSet) requirePasswordThen { passwordOptions() } else passwordWarningThenSet()
+            row(card, getString(R.string.lockdown_lock_for), timedEnd?.let { getString(R.string.lockdown_until, LockdownGate.time(context, it)) } ?: getString(R.string.off),
+                R.string.info_lockdown_lock_for) { askLockFor() },
+            row(card, getString(R.string.lockdown_schedules), if (schedules.isEmpty()) getString(R.string.off) else schedules.size.toString(),
+                R.string.info_lockdown_schedules) { if (schedules.isEmpty()) addSchedule() else showSchedules() },
+            row(card, getString(R.string.lockdown_whats_locked), getString(R.string.lockdown_count_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size),
+                R.string.info_lockdown_whats_locked) { pickLocks() },
+            row(card, getString(R.string.blocked_apps), blocked.toString(), R.string.info_blocked_apps) {
+                findNavController().navigate(R.id.pausedAppsFragment, bundleOf(PausedAppsFragment.MODE to PausedAppsFragment.BLOCKED))
+            },
+            if (needsService) row(card, getString(R.string.accessibility), onOff(isAccessServiceEnabled(context)), R.string.info_lockdown_accessibility, level = 1) {
+                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
             } else null,
-            strict(R.string.lockdown_app_drawer, R.string.info_lockdown_drawer, { prefs.lockdownAppDrawer }) { prefs.lockdownAppDrawer = it },
-            strict(R.string.lockdown_hold_app, R.string.info_lockdown_hold, { prefs.lockdownHoldApp }) { prefs.lockdownHoldApp = it },
-            strict(R.string.lockdown_hidden_apps, R.string.info_lockdown_hidden, { prefs.lockdownHiddenApps }) { prefs.lockdownHiddenApps = it },
-            strict(R.string.lockdown_change_launcher, R.string.info_lockdown_launcher, { prefs.lockdownChangeLauncher }) { prefs.lockdownChangeLauncher = it },
-            if (on) row(card, getString(R.string.lockdown_password_recovery), onOff(prefs.passwordRecoveryEnabled), R.string.info_recovery, level = 1) {
+            row(card, getString(R.string.lockdown_unlock_with), unlockName(unlock), R.string.info_lockdown_unlock_with) { pickUnlock() },
+            if (password) row(card, getString(R.string.change_lockdown_password), null, R.string.info_change_password, level = 1) {
+                gate.requirePassword { gate.setNewPassword(warn = false) { render() } }
+            } else null,
+            if (password) row(card, getString(R.string.lockdown_password_recovery), onOff(prefs.passwordRecoveryEnabled), R.string.info_recovery, level = 1) {
                 loosen { prefs.passwordRecoveryEnabled = !prefs.passwordRecoveryEnabled; render() }
             } else null,
             method(R.string.recovery_tap_500, R.string.recovery_tap_500_info, { prefs.recoveryTap500 }) { prefs.recoveryTap500 = !prefs.recoveryTap500; render() },
             method(R.string.recovery_clue, R.string.recovery_clue_info, { prefs.recoveryClue }) { toggleClue() },
             method(R.string.recovery_essay, R.string.recovery_essay_info, { prefs.recoveryEssay }) { prefs.recoveryEssay = !prefs.recoveryEssay; render() },
         )
+    }
+
+    private fun unlockName(unlock: Lockdown.Unlock) = when (unlock) {
+        Lockdown.Unlock.NOTHING -> getString(R.string.lockdown_unlock_nothing)
+        Lockdown.Unlock.PASSWORD -> getString(R.string.lockdown_password)
+        Lockdown.Unlock.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(requireContext(), prefs.lockdownWaitMinutes * 60_000L))
+    }
+
+    /** Nothing, the password, or one of the waits. Anything but a stricter choice loosens lockdown. */
+    private fun pickUnlock() {
+        val context = requireContext()
+        val current = Lockdown.unlock(prefs)
+        val waits = Lockdown.WAIT_CHOICES
+        val names = listOf(getString(R.string.lockdown_unlock_nothing), getString(R.string.lockdown_password)) +
+            waits.map { getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, it * 60_000L)) }
+        val selected = when (current) {
+            Lockdown.Unlock.NOTHING -> 0
+            Lockdown.Unlock.PASSWORD -> 1
+            Lockdown.Unlock.WAIT -> 2 + waits.indexOf(prefs.lockdownWaitMinutes)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(R.string.lockdown_unlock_with)
+            .setSingleChoiceItems(names.toTypedArray(), selected) { dialog, which ->
+                dialog.dismiss()
+                if (which == selected) return@setSingleChoiceItems
+                val stricter = current == Lockdown.Unlock.NOTHING ||
+                    (current == Lockdown.Unlock.WAIT && which >= 2 && waits[which - 2] > prefs.lockdownWaitMinutes)
+                val change = {
+                    when (which) {
+                        0 -> {
+                            gate.clearPassword()
+                            prefs.lockdownUnlock = Lockdown.Unlock.NOTHING.ordinal
+                            render()
+                        }
+                        1 -> gate.setNewPassword(warn = true) {
+                            prefs.lockdownUnlock = Lockdown.Unlock.PASSWORD.ordinal
+                            render()
+                        }
+                        else -> {
+                            gate.clearPassword()
+                            prefs.lockdownWaitMinutes = waits[which - 2]
+                            prefs.lockdownUnlock = Lockdown.Unlock.WAIT.ordinal
+                            Lockdown.cancelWait(prefs)
+                            render()
+                        }
+                    }
+                }
+                if (stricter) change() else loosen(change)
+            }
+            .show()
+    }
+
+    private fun lockName(lock: Lockdown.Lock) = getString(when (lock) {
+        Lockdown.Lock.APP_LIST -> R.string.lockdown_lock_app_list
+        Lockdown.Lock.APP_CHANGES -> R.string.lockdown_lock_app_changes
+        Lockdown.Lock.HIDDEN_APPS -> R.string.lockdown_lock_hidden_apps
+        Lockdown.Lock.LAUNCHER -> R.string.lockdown_lock_launcher
+        Lockdown.Lock.PROTECT -> R.string.lockdown_lock_protect
+    })
+
+    /** A tick for each thing lockdown locks. Unticking one loosens lockdown. */
+    private fun pickLocks() {
+        val context = requireContext()
+        val locks = Lockdown.Lock.values()
+        val ticked = locks.map { Lockdown.enabled(prefs, it) }.toBooleanArray()
+        AlertDialog.Builder(context)
+            .setTitle(R.string.lockdown_whats_locked)
+            .setMultiChoiceItems(locks.map { lockName(it) }.toTypedArray(), ticked) { _, i, on -> ticked[i] = on }
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val loosens = locks.indices.any { Lockdown.enabled(prefs, locks[it]) && !ticked[it] }
+                val protectAdded = !prefs.lockdownProtect && ticked[locks.indexOf(Lockdown.Lock.PROTECT)]
+                val apply = {
+                    locks.forEachIndexed { i, lock -> Lockdown.setEnabled(prefs, lock, ticked[i]) }
+                    render()
+                    if (protectAdded && !isAccessServiceEnabled(context)) askAccessibility()
+                }
+                if (loosens) loosen(apply) else apply()
+            }
+            .show()
+    }
+
+    /** Starts a timed lockdown, or adds to the one running. It can't be shortened. */
+    private fun askLockFor() {
+        val context = requireContext()
+        val running = Lockdown.timedActive(context, prefs)
+        val minutes = listOf(15, 30, 60, 120, 240, 480, 1440)
+        val names = minutes.map { (if (running) "+" else "") + LockdownGate.duration(context, it * 60_000L) } + getString(R.string.lockdown_until_a_time)
+        AlertDialog.Builder(context)
+            .setTitle(if (running) R.string.lockdown_add_time else R.string.lockdown_lock_for)
+            .setItems(names.toTypedArray()) { _, which ->
+                val left = Lockdown.timedMsLeft(context, prefs)
+                if (which < minutes.size) return@setItems confirmLockFor(left + minutes[which] * 60_000L)
+                val now = LocalTime.now()
+                TimePickerDialog(context, { _, hour, minute ->
+                    val at = LocalDate.now().atTime(hour, minute).let { if (it.isAfter(java.time.LocalDateTime.now())) it else it.plusDays(1) }
+                    val total = java.time.Duration.between(java.time.LocalDateTime.now(), at).toMillis()
+                    if (total <= left) context.showToast(getString(R.string.lockdown_cant_shorten)) else confirmLockFor(total)
+                }, (now.hour + 1) % 24, 0, DateFormat.is24HourFormat(context)).show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** Asks before locking for [totalMs] from now, since it can't be undone */
+    private fun confirmLockFor(totalMs: Long) {
+        val context = requireContext()
+        AlertDialog.Builder(context)
+            .setTitle(getString(R.string.lockdown_lock_until_ask, LockdownGate.time(context, System.currentTimeMillis() + totalMs)))
+            .setMessage(R.string.lockdown_lock_until_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.lockdown_lock) { _, _ ->
+                Lockdown.lockForTotal(context, totalMs, prefs)
+                render()
+            }
+            .show()
+    }
+
+    private fun scheduleName(schedule: Lockdown.Schedule): String {
+        val context = requireContext()
+        val days = when (schedule.days) {
+            Lockdown.EVERY_DAY -> getString(R.string.lockdown_every_day)
+            Lockdown.WEEKDAYS -> getString(R.string.lockdown_weekdays)
+            Lockdown.WEEKENDS -> getString(R.string.lockdown_weekends)
+            else -> java.time.DayOfWeek.values().filter { schedule.on(it) }
+                .joinToString(", ") { it.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }
+        }
+        if (schedule.start == schedule.end) return days + " · " + getString(R.string.lockdown_all_day)
+        val pattern = if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm a"
+        fun time(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        return days + " · " + time(schedule.start) + "–" + time(schedule.end)
+    }
+
+    /** The schedules: tapping one removes it, which loosens lockdown */
+    private fun showSchedules() {
+        val schedules = Lockdown.schedules(prefs)
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.lockdown_schedules)
+            .setItems(schedules.map { scheduleName(it) }.toTypedArray()) { _, i ->
+                val schedule = schedules[i]
+                AlertDialog.Builder(requireContext())
+                    .setTitle(scheduleName(schedule))
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.lockdown_remove) { _, _ ->
+                        loosen {
+                            prefs.lockdownSchedules = Lockdown.formatSchedules(Lockdown.schedules(prefs) - schedule)
+                            render()
+                        }
+                    }
+                    .show()
+            }
+            .setNegativeButton(R.string.close, null)
+            .setPositiveButton(R.string.add) { _, _ -> addSchedule() }
+            .show()
+    }
+
+    /** The days, then when it starts and ends */
+    private fun addSchedule() {
+        val context = requireContext()
+        val days = java.time.DayOfWeek.values()
+        val ticked = days.map { it.value <= 5 }.toBooleanArray()
+        AlertDialog.Builder(context)
+            .setTitle(R.string.lockdown_schedule_days)
+            .setMultiChoiceItems(days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) }.toTypedArray(), ticked) { _, i, on -> ticked[i] = on }
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val bits = ticked.foldIndexed(0) { i, acc, on -> if (on) acc or (1 shl i) else acc }
+                if (bits == 0) return@setPositiveButton context.showToast(getString(R.string.lockdown_choose_a_day))
+                val is24 = DateFormat.is24HourFormat(context)
+                TimePickerDialog(context, { _, startHour, startMinute ->
+                    TimePickerDialog(context, { _, endHour, endMinute ->
+                        val schedule = Lockdown.Schedule(bits, startHour * 60 + startMinute, endHour * 60 + endMinute)
+                        prefs.lockdownSchedules = Lockdown.formatSchedules(Lockdown.schedules(prefs) + schedule)
+                        render()
+                    }, 7, 0, is24).apply { setTitle(R.string.lockdown_schedule_ends) }.show()
+                }, 22, 0, is24).apply { setTitle(R.string.lockdown_schedule_starts) }.show()
+            }
+            .show()
     }
 
     private fun toggleClue() {
@@ -1086,7 +1307,7 @@ class SettingsFragment : CardPageFragment() {
         val input = EditText(requireContext()).apply { hint = getString(R.string.enter_clue) }
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.enter_clue)
-            .setView(padded(input))
+            .setView(LockdownGate.padded(requireContext(), input))
             .setPositiveButton(R.string.okay) { _, _ ->
                 val clue = input.text.toString().trim()
                 if (clue.isNotEmpty()) {
@@ -1096,151 +1317,6 @@ class SettingsFragment : CardPageFragment() {
                 }
             }
             .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun padded(view: View) = FrameLayout(requireContext()).apply {
-        setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
-        addView(view)
-    }
-
-    private fun passwordWarningThenSet() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.catastrophic_warning)
-            .setMessage(R.string.lockdown_password_warning)
-            .setPositiveButton(R.string.proceed) { _, _ -> setNewPassword() }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun passwordOptions() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.lockdown_password)
-            .setItems(arrayOf(getString(R.string.change_lockdown_password), getString(R.string.remove_lockdown_password))) { _, which ->
-                if (which == 0) setNewPassword()
-                else {
-                    prefs.lockdownPasswordHash = ""
-                    render()
-                    requireContext().showToast(getString(R.string.password_removed))
-                }
-            }
-            .show()
-    }
-
-    private fun setNewPassword() {
-        askPassword(getString(R.string.set_lockdown_password), generate = true) { first ->
-            if (first.length < 4) return@askPassword requireContext().showToast(getString(R.string.password_too_short))
-            askPassword(getString(R.string.confirm_password)) { second ->
-                if (first != second) return@askPassword requireContext().showToast(getString(R.string.passwords_do_not_match))
-                savePassword(first)
-            }
-        }
-    }
-
-    private fun savePassword(password: String) {
-        prefs.lockdownPasswordHash = PasswordHelper.hashPassword(password)
-        prefs.lockdownPasswordPlaintext = password
-        render()
-        requireContext().showToast(getString(R.string.password_set_success))
-    }
-
-    private fun requirePasswordThen(action: () -> Unit) {
-        if (!prefs.isLockdownPasswordSet) return action()
-        askPassword(getString(R.string.enter_password)) { password ->
-            if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) action()
-            else requireContext().showToast(getString(R.string.password_incorrect))
-        }
-    }
-
-    private fun askPassword(title: String, generate: Boolean = false, onEntered: (String) -> Unit) {
-        val context = requireContext()
-        val input = EditText(context).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = getString(R.string.enter_password)
-        }
-        val show = android.widget.CheckBox(context).apply {
-            text = getString(R.string.show)
-            setOnCheckedChangeListener { _, checked ->
-                input.inputType = InputType.TYPE_CLASS_TEXT or if (checked) InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD else InputType.TYPE_TEXT_VARIATION_PASSWORD
-                input.setSelection(input.text.length)
-            }
-        }
-        val box = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
-            addView(input)
-            addView(show)
-        }
-        val builder = AlertDialog.Builder(context)
-            .setTitle(title)
-            .setView(box)
-            .setPositiveButton(R.string.okay) { _, _ -> onEntered(input.text.toString()) }
-            .setNegativeButton(R.string.close, null)
-        if (generate) builder.setNeutralButton(R.string.generate_password) { _, _ -> generatePassword() }
-        else if (prefs.passwordRecoveryEnabled) builder.setNeutralButton(R.string.recover_password) { _, _ -> recoveryOptions() }
-        builder.show()
-    }
-
-    private fun generatePassword() {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*"
-        val password = (1..32).map { chars.random() }.joinToString("")
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.catastrophic_warning)
-            .setMessage(getString(R.string.generated_password_warning, password))
-            .setPositiveButton(R.string.proceed) { _, _ -> savePassword(password) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun recoveryOptions() {
-        val context = requireContext()
-        val ways = mutableListOf<Pair<String, () -> Unit>>()
-        if (prefs.recoveryTap500) ways += getString(R.string.recovery_tap_500) to { context.showToast(getString(R.string.recovery_tap_500_info)) }
-        if (prefs.recoveryClue) ways += getString(R.string.recovery_clue) to {
-            AlertDialog.Builder(context).setTitle(R.string.your_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
-        }
-        if (prefs.recoveryEssay) ways += getString(R.string.recovery_essay) to { essay() }
-        if (ways.isEmpty()) return context.showToast(getString(R.string.no_recovery_methods))
-        AlertDialog.Builder(context)
-            .setTitle(R.string.recover_password)
-            .setItems(ways.map { it.first }.toTypedArray()) { _, which -> ways[which].second() }
-            .setNegativeButton(R.string.close, null)
-            .show()
-    }
-
-    private fun essay() {
-        val input = EditText(requireContext()).apply {
-            hint = getString(R.string.essay_prompt)
-            maxLines = 10
-            // No pasting it in
-            customSelectionActionModeCallback = object : android.view.ActionMode.Callback {
-                override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = true.also { menu?.removeItem(android.R.id.paste) }
-                override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = true.also { menu?.removeItem(android.R.id.paste) }
-                override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?) = false
-                override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
-            }
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.recovery_essay)
-            .setView(padded(input))
-            .setPositiveButton(R.string.okay) { _, _ ->
-                val text = input.text.toString()
-                if (text.length >= 500) showPassword() else requireContext().showToast(getString(R.string.essay_too_short, text.length))
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun showPassword() {
-        val password = prefs.lockdownPasswordPlaintext.ifEmpty { return }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.your_password_is)
-            .setView(padded(TextView(requireContext()).apply {
-                text = password
-                textSize = 20f
-                setTextIsSelectable(true)
-            }))
-            .setPositiveButton(R.string.okay, null)
             .show()
     }
 
@@ -1315,9 +1391,9 @@ class SettingsFragment : CardPageFragment() {
 
     private var lookingUpFolder: String? = null
 
-    /** Replaces everything with a backup. Needs the lockdown password, since it could loosen lockdown. */
+    /** Replaces everything with a backup. Loosens lockdown, since it could undo it. */
     private fun restoreBackup(backup: JSONObject, afterRestore: () -> Unit = {}) {
-        requirePasswordThen {
+        loosen {
             BackupManager.restore(requireContext(), backup)
             afterRestore()
             requireContext().showToast(getString(R.string.backup_restored))
@@ -1341,7 +1417,7 @@ class SettingsFragment : CardPageFragment() {
         val card = Card(getString(R.string.about))
         val isDefault = isOlauncherDefault(context)
         card.body(
-            if (!(prefs.lockdownModeOn && prefs.lockdownChangeLauncher)) row(card, getString(if (isDefault) R.string.change_default_launcher else R.string.set_as_default_launcher),
+            if (!Lockdown.isLocked(context, Lockdown.Lock.LAUNCHER, prefs)) row(card, getString(if (isDefault) R.string.change_default_launcher else R.string.set_as_default_launcher),
                 null, R.string.info_default) { viewModel.resetLauncherLiveData.call() } else null,
             row(card, getString(R.string.tutorial), null, R.string.info_tutorial) { Tutorial.show(requireActivity()) },
             row(card, getString(R.string.app_info), null, R.string.info_app_info) {

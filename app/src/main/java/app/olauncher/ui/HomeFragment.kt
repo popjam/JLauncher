@@ -36,6 +36,7 @@ import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentHomeBinding
 import app.olauncher.helper.Arrangement
+import app.olauncher.helper.Lockdown
 import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.Spending
 import app.olauncher.helper.SwipeTargets
@@ -160,7 +161,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             R.id.clock -> openClockApp()
             R.id.date -> openCalendarApp()
             R.id.setDefaultLauncher -> {
-                if (prefs.lockdownModeOn && prefs.lockdownChangeLauncher) return
+                if (LockdownGate.stopIfLocked(requireContext(), Lockdown.Lock.LAUNCHER)) return
                 viewModel.resetLauncherLiveData.call()
             }
             R.id.tvScreenTime -> openScreenTimeDigitalWellbeing()
@@ -204,6 +205,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     }
 
     override fun onLongClick(view: View): Boolean {
+        // Swapping a home app (or the clock's, date's or screen time's) is changing apps
+        val changesApp = view.id in HOME_APP_IDS || view.id == R.id.clock || view.id == R.id.date || view.id == R.id.tvScreenTime
+        if (changesApp && LockdownGate.stopIfLocked(requireContext(), Lockdown.Lock.APP_CHANGES)) return true
         when (view.id) {
             R.id.moodAvatar -> runCatching {
                 findNavController().navigate(R.id.action_mainFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to MoodStore.MOOD))
@@ -250,7 +254,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             if (binding.firstRunTips.isVisible) return@Observer
             binding.setDefaultLauncher.isVisible = it.not()
                     && prefs.hideSetDefaultLauncher.not()
-                    && !(prefs.lockdownModeOn && prefs.lockdownChangeLauncher)
+                    && !Lockdown.isLocked(requireContext(), Lockdown.Lock.LAUNCHER, prefs)
         })
         viewModel.homeAppAlignment.observe(viewLifecycleOwner) {
             setHomeAlignment(it)
@@ -1116,7 +1120,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
             override fun onSwipeUp() {
                 super.onSwipeUp()
-                if (!(prefs.lockdownModeOn && prefs.lockdownAppDrawer)) showAppList(Constants.FLAG_LAUNCH_APP)
+                if (!LockdownGate.stopIfLocked(requireContext(), Lockdown.Lock.APP_LIST)) showAppList(Constants.FLAG_LAUNCH_APP)
             }
 
             override fun onSwipeDown() {
@@ -1210,7 +1214,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
             override fun onSwipeUp() {
                 super.onSwipeUp()
-                if (!(prefs.lockdownModeOn && prefs.lockdownAppDrawer)) showAppList(Constants.FLAG_LAUNCH_APP)
+                if (!LockdownGate.stopIfLocked(requireContext(), Lockdown.Lock.APP_LIST)) showAppList(Constants.FLAG_LAUNCH_APP)
             }
 
             override fun onSwipeDown() {
@@ -1240,5 +1244,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         const val HIDE = "hide"
         const val TOP = "top"
         const val BOTTOM = "bottom"
+
+        val HOME_APP_IDS = setOf(R.id.homeApp1, R.id.homeApp2, R.id.homeApp3, R.id.homeApp4,
+            R.id.homeApp5, R.id.homeApp6, R.id.homeApp7, R.id.homeApp8)
     }
 }
