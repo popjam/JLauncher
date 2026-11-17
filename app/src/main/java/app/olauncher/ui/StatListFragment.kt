@@ -102,6 +102,10 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
             data.days.values.count { !it.note.isNullOrBlank() }.takeIf { it > 0 }?.toString()) {
             findNavController().navigate(R.id.action_statListFragment_to_journalFragment)
         })
+        rows.addView(row(getString(R.string.supplements), StatIcons.TABLET, context.getColorFromAttr(R.attr.primaryColor),
+            data.supplements.takeIf { it.isNotEmpty() }?.let { getString(R.string.supplements_today, app.olauncher.data.Supplements.takenCount(it, LocalDate.now())) }) {
+            findNavController().navigate(R.id.supplementsFragment)
+        })
         rows.addView(row(getString(R.string.battery), StatIcons.BATTERY, context.getColorFromAttr(R.attr.primaryColor),
             app.olauncher.helper.Battery.samples(context).lastOrNull()?.let { "${it.level}%" }) {
             findNavController().navigate(R.id.batteryFragment)

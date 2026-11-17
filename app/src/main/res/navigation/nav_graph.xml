@@ -139,6 +139,11 @@
     </fragment>
     <!-- The phone's battery -->
     <fragment
+        android:id="@+id/supplementsFragment"
+        android:name="app.olauncher.ui.SupplementsFragment"
+        android:label="SupplementsFragment" />
+
+    <fragment
         android:id="@+id/batteryFragment"
         android:name="app.olauncher.ui.BatteryFragment"
         android:label="BatteryFragment" />
