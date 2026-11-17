@@ -166,6 +166,8 @@ class JournalEntryFragment : Fragment() {
 
     override fun onPause() {
         save()
+        // A long note changed here gets its summary made again (nothing happens if it didn't change)
+        app.olauncher.helper.JournalSummaries.refreshLater(requireContext(), date)
         super.onPause()
     }
 

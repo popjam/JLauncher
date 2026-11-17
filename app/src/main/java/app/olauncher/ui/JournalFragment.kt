@@ -25,6 +25,7 @@ import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.MoodStore
+import app.olauncher.helper.JournalSummaries
 import app.olauncher.helper.JournalText
 import app.olauncher.helper.Transcript
 import app.olauncher.helper.VoiceNotes
@@ -128,6 +129,7 @@ class JournalFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         VoiceNotes.addListener(voiceAdded)
         VoiceNotes.addPendingListener(pendingChanged)
+        JournalSummaries.addListener(summaryMade)
     }
 
     override fun onResume() {
@@ -139,12 +141,18 @@ class JournalFragment : Fragment() {
         handler.removeCallbacksAndMessages(null)
         VoiceNotes.removeListener(voiceAdded)
         VoiceNotes.removePendingListener(pendingChanged)
+        JournalSummaries.removeListener(summaryMade)
         search.hideKeyboard()
         super.onDestroyView()
     }
 
     private val voiceAdded: (LocalDate, String) -> Unit = { _, _ -> if (view != null) refresh() }
     private val pendingChanged: () -> Unit = { if (view != null) fillPending(pending) }
+    private val summaryMade: (LocalDate) -> Unit = { if (view != null) refresh() }
+
+    /** What a note shows in the list: its summary if it has one, otherwise its start */
+    private fun gist(date: LocalDate, note: String, max: Int): String =
+        JournalSummaries.get(requireContext(), date, note) ?: JournalText.preview(note, max)
 
     private fun refresh() {
         load()
@@ -195,7 +203,7 @@ class JournalFragment : Fragment() {
                 addView(voiceButton(ink) { recordVoiceNote(date) })
             })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = if (note.isBlank()) getString(R.string.journal_today_hint) else JournalText.preview(note, 400)
+                text = if (note.isBlank()) getString(R.string.journal_today_hint) else gist(date, note, 400)
                 textSize = 15f
                 setTextColor(ink)
                 alpha = if (note.isBlank()) 0.45f else 1f
@@ -259,7 +267,7 @@ class JournalFragment : Fragment() {
                     })
                     addView(TextView(context, null, 0, R.style.TextSmall).apply {
                         // The start of it; while searching, the parts around the words searched for
-                        text = if (words.isEmpty()) JournalText.preview(note) else marked(JournalText.snippet(note, words), words)
+                        text = if (words.isEmpty()) gist(date, note, 280) else marked(JournalText.snippet(note, words), words)
                         textSize = 15f
                         setTextColor(ink)
                         setPadding(0, 3.dpToPx(), 0, 0)

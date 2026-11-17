@@ -24,6 +24,9 @@ object Transcript {
     private val COMMA_RUN = Regex(",(\\s*,)+")
     private val SENTENCE_START = Regex("([.!?]\\s+)(\\p{Ll})")
 
+    /** A capitalised word straight after a lower-case word or a comma: mid-sentence */
+    private val MID_CAPITAL = Regex("(?<=[\\p{Ll},;]\\s)(\\p{Lu})(\\p{Ll}*)\\b")
+
     /**
      * Words a sentence doesn't end on: a pause after one is someone thinking mid-sentence, so the
      * next stretch of speech carries on the same sentence
@@ -87,6 +90,8 @@ object Transcript {
             if (word.lowercase() in KEEP_DOUBLED) match.value else word
         }
         text = LONE_I.replace(text, "I")
+        // The recogniser capitalises the word after a pause; an everyday one goes back to lower case (names stay)
+        text = MID_CAPITAL.replace(text) { m -> if ((m.value.lowercase()) in EVERYDAY && m.value != "I") m.value.lowercase() else m.value }
         text = text.replace(SPACE_BEFORE_MARK, "$1").replace(COMMA_RUN, ",").replace(SPACES, " ").trim().trim(',', ' ')
         if (text.none { it.isLetterOrDigit() }) return null
         val saidWithCapital = text.first().isUpperCase()
@@ -99,6 +104,9 @@ object Transcript {
     private val WORD = Regex("[\\p{L}\\p{N}']+")
 
     fun wordCount(text: String) = WORD.findAll(text).count()
+
+    /** Whether [summary] is short enough to be one */
+    fun acceptSummary(summary: String): Boolean = wordCount(summary) in 1..80
 
     /**
      * Whether [tidied], the AI's version of [local], can stand in for it: about the same number of words

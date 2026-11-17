@@ -309,7 +309,17 @@ internal fun Fragment.fillPending(into: LinearLayout) {
     fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
     into.removeAllViews()
     val files = VoiceNotes.pending(ui)
-    into.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
+    val writing = VoiceNotes.writing > 0
+    into.visibility = if (files.isEmpty() && !writing) View.GONE else View.VISIBLE
+    // Being written out now
+    if (writing) into.addView(TextView(ui, null, 0, R.style.TextSmall).apply {
+        setText(R.string.voice_writing)
+        textSize = 13f
+        setTextColor(ink)
+        alpha = 0.6f
+        setTypeface(null, Typeface.BOLD)
+        setPadding(4.dpToPx(), 0, 0, if (files.isEmpty()) 0 else 10.dpToPx())
+    })
     if (files.isEmpty()) return
     into.addView(TextView(ui, null, 0, R.style.TextSmall).apply {
         text = resources.getQuantityString(R.plurals.voice_not_written, files.size, files.size)

@@ -4,12 +4,10 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.text.InputType
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -34,7 +32,6 @@ import app.olauncher.helper.allStats
 import app.olauncher.helper.bindFaceLabels
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
-import app.olauncher.helper.hideKeyboard
 import app.olauncher.helper.statAmount
 import java.time.Instant
 import java.time.LocalDate
@@ -55,8 +52,6 @@ class DayPageFragment : CardPageFragment() {
     private lateinit var title: TextView
     private lateinit var store: MoodStore
     private lateinit var date: LocalDate
-    private var noteInput: EditText? = null
-    private var noteShown: String? = null
     private lateinit var scroll: ScrollView
 
     /** The stat the top card edits: Mood until another is tapped */
@@ -95,6 +90,7 @@ class DayPageFragment : CardPageFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         app.olauncher.helper.VoiceNotes.addListener(voiceAdded)
+        app.olauncher.helper.JournalSummaries.addListener(summaryMade)
         render()
     }
 
@@ -107,23 +103,10 @@ class DayPageFragment : CardPageFragment() {
     /** When the stats it was drawn from were saved */
     private var renderedAt = -1L
 
-    override fun onPause() {
-        saveNote()
-        super.onPause()
-    }
-
     override fun onDestroyView() {
         app.olauncher.helper.VoiceNotes.removeListener(voiceAdded)
-        noteInput?.hideKeyboard()
-        noteInput = null
+        app.olauncher.helper.JournalSummaries.removeListener(summaryMade)
         super.onDestroyView()
-    }
-
-    private fun saveNote() {
-        val text = noteInput?.text?.toString() ?: return
-        if (text.trim() == noteShown?.trim().orEmpty()) return
-        store.setNote(date, text)
-        noteShown = text
     }
 
     private fun render() {
@@ -163,7 +146,6 @@ class DayPageFragment : CardPageFragment() {
             card.subtitle(getString(R.string.day_back_to_mood))
             card.headerEnd.getChildAt(0)?.setOnClickListener {
                 editing = MoodStore.MOOD
-                saveNote()
                 render()
             }
         }
@@ -183,7 +165,6 @@ class DayPageFragment : CardPageFragment() {
                     contentDescription = faceName(stat, face)
                     setOnClickListener {
                         store.setFace(date, stat.id, if (chosen == face) null else face)
-                        saveNote()
                         render()
                     }
                 }, LinearLayout.LayoutParams(0, 44.dpToPx(), 1f))
@@ -196,53 +177,61 @@ class DayPageFragment : CardPageFragment() {
         }
         card.addBody(body)
         val note = day?.note.orEmpty()
-        noteShown = note
-        noteInput = EditText(context).apply {
-            setText(note)
+        // A long note's summary above it
+        app.olauncher.helper.JournalSummaries.get(context, date, note)?.let { summary ->
+            card.root.addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                text = summary
+                textSize = 15f
+                setTextColor(ink)
+                alpha = 0.7f
+                setTypeface(null, Typeface.ITALIC)
+                setLineSpacing(2.dpToPx().toFloat(), 1.05f)
+                setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 14.dpToPx()
+            })
+        }
+        // The note, in a box that scrolls once it's long; tapping it opens the note on its own page to
+        // read and write, holding it records
+        val noteText = TextView(context, null, 0, R.style.TextSmall).apply {
+            text = note
             hint = getString(R.string.day_note_hint)
-            textSize = 15f
+            textSize = 17f
             setTextColor(ink)
             setHintTextColor(faint(110))
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            minLines = 2
-            gravity = Gravity.TOP
-            background = GradientDrawable().apply {
-                cornerRadius = 16.dpToPx().toFloat()
-                setColor(faint(18))
-            }
+            setLineSpacing(3.dpToPx().toFloat(), 1.05f)
             setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
-            setOnFocusChangeListener { _, focused -> if (!focused) saveNote() }
-            // Holding it while not typing records a voice note, written into the note
+            isClickable = true
+            setOnClickListener {
+                findNavController().navigate(R.id.action_global_journalEntryFragment, JournalEntryFragment.args(date))
+            }
             setOnLongClickListener {
-                if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
-                saveNote()
                 recordVoiceNote(date)
                 true
             }
         }
-        card.root.addView(noteInput, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        card.root.addView(CappedScrollView(context, 280.dpToPx()).apply {
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            background = GradientDrawable().apply {
+                cornerRadius = 16.dpToPx().toFloat()
+                setColor(faint(18))
+            }
+            clipToOutline = true
+            addView(noteText)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 14.dpToPx()
         })
-        card.root.addView(endRow(journalButton(ink, date) { saveNote() }, voiceButton(ink) {
-            saveNote()
-            recordVoiceNote(date)
-        }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        card.root.addView(endRow(voiceButton(ink) { recordVoiceNote(date) }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 8.dpToPx()
         })
     }
 
-    /**
-     * A voice note's words, already added to the day's note in the store ([VoiceNotes.writeOut]): onto
-     * the end of the box too, keeping anything typed meanwhile
-     */
-    private val voiceAdded: (LocalDate, String) -> Unit = { day, text ->
-        val input = noteInput
-        if (day == date && input != null && view != null) {
-            val now = input.text?.toString().orEmpty().trim()
-            input.setText(if (now.isEmpty()) text else now + "\n\n" + text)
-            noteShown = store.load().days[date.toString()]?.note.orEmpty()
-        }
-    }
+    /** Spoken words, already added to the day's note in the store ([VoiceNotes.writeOut]): shown here too */
+    private val voiceAdded: (LocalDate, String) -> Unit = { day, _ -> if (day == date && view != null) render() }
+
+    /** A new summary for the day: shown above the note */
+    private val summaryMade: (LocalDate) -> Unit = { day -> if (day == date && view != null) render() }
 
     /** Every stat with its face that day; tapping one edits it in the top card, holding one opens its page */
     private fun statsCard(stats: List<StatInfo>, day: MoodStore.Day?) {
@@ -280,7 +269,6 @@ class DayPageFragment : CardPageFragment() {
                 addView(card.textView(14f, if (value == null) 90 else 190).apply { text = value ?: "–" })
                 if (editable) setOnClickListener {
                     editing = stat.id
-                    saveNote()
                     render()
                     scroll.post { scroll.smoothScrollTo(0, 0) }
                 }

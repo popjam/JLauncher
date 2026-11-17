@@ -67,6 +67,27 @@ class TranscriptTest {
     }
 
     @Test
+    fun everydayWordsCapitalisedMidSentenceAreLowered() {
+        assertEquals("So I do feel better today but you know, it's fine.", clean("So I do feel better today but You know, it's fine"))
+        assertEquals("I went with Sarah to the shop.", clean("I went with Sarah to The shop"))
+    }
+
+    @Test
+    fun summariesAreShort() {
+        assertTrue(Transcript.acceptSummary("Felt better and calmer."))
+        assertFalse(Transcript.acceptSummary("word ".repeat(100)))
+        assertFalse(Transcript.acceptSummary(" "))
+    }
+
+    @Test
+    fun claudesReplyIsReadFromItsTags() {
+        assertEquals("I felt better today.", AiTidy.tagged("<entry>\nI felt better today.\n</entry>", "entry"))
+        assertEquals("Felt better.", AiTidy.tagged("Here it is: <summary>Felt better.</summary>", "summary"))
+        assertEquals(null, AiTidy.tagged("Just text", "entry"))
+        assertEquals(null, AiTidy.tagged("<entry> </entry>", "entry"))
+    }
+
+    @Test
     fun onlyFillersIsNothing() {
         assertEquals("", clean("um", "uh, erm"))
         assertEquals("Fine.", clean("um", "fine"))

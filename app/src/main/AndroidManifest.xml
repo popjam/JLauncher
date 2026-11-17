@@ -58,11 +58,14 @@
 
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Speaking today's note from anywhere: in the app list, so a programmable key can open it -->
+        <!--
+            Speaking today's note from anywhere. It's the app's only entry in app lists (the home screen
+            is reached as home), so a programmable key set to open JLauncher, like the Jelly Star's,
+            opens this.
+        -->
         <activity
             android:name=".VoiceNoteActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"

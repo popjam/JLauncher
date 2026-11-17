@@ -213,6 +213,9 @@ object VoiceNotes {
 
     // --- Writing out ---
 
+    /** How long the recogniser has to finish once the whole recording has been fed in */
+    private const val FINISH_MS = 90_000L
+
     /** Quieter than this (of full scale) counts as silence when shortening pauses */
     private const val QUIET = 900
 
@@ -306,6 +309,13 @@ object VoiceNotes {
                         // A moment of quiet so the last words are heard out
                         out.write(ByteArray(RATE))
                         fedAll.set(true)
+                        // All of it is in: the recogniser has a while to finish, rather than as long again
+                        main.post {
+                            if (!finished) {
+                                main.removeCallbacks(giveUp)
+                                main.postDelayed(giveUp, FINISH_MS)
+                            }
+                        }
                     }
                 }
             }
@@ -345,6 +355,9 @@ object VoiceNotes {
     private val queue = ArrayDeque<Triple<LocalDate, File, ((String?) -> Unit)?>>()
     private var busy = false
 
+    /** How many recordings are being written out or waiting to be. Main thread. */
+    val writing get() = queue.size + if (busy) 1 else 0
+
     /**
      * Writes [file] out as tidy text and adds it to the end of [date]'s note, whatever page is open by
      * then, then deletes the recording; [done] gets the words. It gets null if it couldn't be written out
@@ -360,7 +373,12 @@ object VoiceNotes {
     }
 
     private fun next(app: Context) {
-        val (date, file, done) = queue.removeFirstOrNull() ?: run { busy = false; return }
+        val (date, file, done) = queue.removeFirstOrNull() ?: run {
+            busy = false
+            // Nothing being written out now
+            pendingListeners.toList().forEach { it() }
+            return
+        }
         busy = true
         fun failed() {
             synchronized(working) { working -= file.name }
@@ -397,6 +415,7 @@ object VoiceNotes {
                     val now = store.load().days[date.toString()]?.note.orEmpty().trim()
                     store.setNote(date, if (now.isEmpty()) text else now + "\n\n" + text)
                     listeners.toList().forEach { it(date, text) }
+                    JournalSummaries.refreshLater(app, date)
                     Toast.makeText(app, if (date == LocalDate.now()) R.string.voice_added else R.string.voice_added_day, Toast.LENGTH_SHORT).show()
                 } else Toast.makeText(app, R.string.voice_nothing_heard, Toast.LENGTH_SHORT).show()
                 file.delete()
