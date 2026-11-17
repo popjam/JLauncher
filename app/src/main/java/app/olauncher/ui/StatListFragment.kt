@@ -41,6 +41,9 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
     private lateinit var rows: LinearLayout
     private lateinit var scroll: ScrollView
     private var stats = emptyList<StatInfo>()
+    /** The draggable rows' ids as shown (the stats and Supplements), and where the first one is */
+    private var shownOrder = emptyList<String>()
+    private var firstStatRow = 1
 
     /** The row being dragged, and where the finger is in the scroll view */
     private var dragged: View? = null
@@ -102,22 +105,29 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
             data.days.values.count { !it.note.isNullOrBlank() }.takeIf { it > 0 }?.toString()) {
             findNavController().navigate(R.id.action_statListFragment_to_journalFragment)
         })
-        rows.addView(row(getString(R.string.supplements), StatIcons.TABLET, context.getColorFromAttr(R.attr.primaryColor),
-            data.supplements.takeIf { it.isNotEmpty() }?.let { getString(R.string.supplements_today, app.olauncher.data.Supplements.takenCount(it, LocalDate.now())) }) {
-            findNavController().navigate(R.id.supplementsFragment)
-        })
         rows.addView(row(getString(R.string.battery), StatIcons.BATTERY, context.getColorFromAttr(R.attr.primaryColor),
             app.olauncher.helper.Battery.samples(context).lastOrNull()?.let { "${it.level}%" }) {
             findNavController().navigate(R.id.batteryFragment)
         })
+        firstStatRow = rows.childCount
         val values = todayValues(data)
-        stats.forEach { stat ->
-            rows.addView(row(stat.name, StatIcons.forStat(stat), stat.color, values[stat.id]) {
+        val statRows = stats.map { stat ->
+            row(stat.name, StatIcons.forStat(stat), stat.color, values[stat.id]) {
                 findNavController().navigate(R.id.action_statListFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to stat.id))
-            }.apply {
-                tag = stat.id
-                setOnLongClickListener { startDrag(it) }
-            })
+            }.apply { tag = stat.id }
+        }.toMutableList()
+        // Supplements sits among the stats where it was dragged to, at the top until then
+        val supplementsRow = row(getString(R.string.supplements), StatIcons.TABLET, MoodStore.SUPPLEMENTS_COLOR,
+            data.supplements.takeIf { it.isNotEmpty() }?.let { getString(R.string.supplements_today, app.olauncher.data.Supplements.takenCount(it, LocalDate.now())) }) {
+            findNavController().navigate(R.id.supplementsFragment)
+        }.apply { tag = MoodStore.SUPPLEMENTS }
+        val supplementsPlace = data.order.indexOf(MoodStore.SUPPLEMENTS).takeIf { it >= 0 }
+            ?.let { place -> stats.count { data.order.indexOf(it.id) in 0 until place } } ?: 0
+        statRows.add(supplementsPlace, supplementsRow)
+        shownOrder = statRows.map { it.tag as String }
+        statRows.forEach { statRow ->
+            statRow.setOnLongClickListener { startDrag(it) }
+            rows.addView(statRow)
         }
         rows.addView(row(getString(R.string.stats_settings), StatIcons.GEAR, context.getColorFromAttr(R.attr.primaryColor),
             problems.size.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.tracking_problems, it, it) }, faded = true) {
@@ -236,8 +246,8 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
     /** Puts the dragged row after every other stat row whose middle is above the finger. */
     private fun moveDragged(row: View) {
         val y = dragY + scroll.scrollY - rows.top
-        val first = 1
-        val last = rows.childCount - 2
+        val first = firstStatRow
+        val last = rows.childCount - 3
         var target = first
         for (i in first..last) {
             val other = rows.getChildAt(i)
@@ -256,9 +266,10 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         scrollSpeed = 0
         row.alpha = 1f
         if (view == null) return
-        val ids = (1 until rows.childCount - 1).mapNotNull { rows.getChildAt(it).tag as? String }
-        if (ids != stats.map { it.id }) {
+        val ids = (0 until rows.childCount).mapNotNull { rows.getChildAt(it).tag as? String }
+        if (ids != shownOrder) {
             MoodStore(requireContext()).setOrder(ids)
+            shownOrder = ids
             stats = requireContext().allStats(MoodStore(requireContext()).load())
         }
     }
