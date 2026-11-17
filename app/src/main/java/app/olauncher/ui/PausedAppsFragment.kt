@@ -16,17 +16,31 @@ import app.olauncher.data.AppModel
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentPausedAppsBinding
 import app.olauncher.helper.AppPause
+import app.olauncher.helper.Lockdown
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getAppsList
 import app.olauncher.helper.getColorFromAttr
 import kotlinx.coroutines.launch
 
-/** Every app with an On/Off switch for the wellness pause. Paused apps are listed first. */
+/**
+ * Every app with an On/Off switch: for the wellness pause, or, with [MODE] [BLOCKED], for being
+ * blocked during lockdown. The apps that are on are listed first.
+ */
 class PausedAppsFragment : Fragment() {
+
+    companion object {
+        const val MODE = "mode"
+        const val BLOCKED = "blocked"
+    }
 
     private var _binding: FragmentPausedAppsBinding? = null
     private val binding get() = _binding!!
     private lateinit var prefs: Prefs
+    private val blocking get() = arguments?.getString(MODE) == BLOCKED
+    private val gate by lazy { LockdownGate(this) }
+
+    /** Apps blocked since this page opened, which can be unblocked again freely */
+    private val blockedHere = mutableSetOf<String>()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentPausedAppsBinding.inflate(inflater, container, false)
@@ -36,17 +50,24 @@ class PausedAppsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         prefs = Prefs(requireContext())
+        if (blocking) {
+            binding.pausedAppsTitle.setText(R.string.blocked_apps)
+            binding.pausedAppsDescription.setText(R.string.blocked_apps_description)
+        }
         viewLifecycleOwner.lifecycleScope.launch {
-            val paused = prefs.pausedApps
+            val chosen = chosen()
             val apps = getAppsList(requireContext(), prefs, includeRegularApps = true, includeHiddenApps = true)
                 .filterIsInstance<AppModel.App>()
-                // The pause works per app, so an app in two profiles is listed once
+                // Both work per app, so an app in two profiles is listed once
                 .distinctBy { it.appPackage }
+                .filter { !blocking || Lockdown.canBlock(requireContext(), it.appPackage) }
                 // Sorting is stable, so each group stays alphabetical
-                .sortedBy { it.appPackage !in paused }
+                .sortedBy { it.appPackage !in chosen }
             apps.forEach { addRow(it) }
         }
     }
+
+    private fun chosen() = if (blocking) prefs.lockdownBlockedApps else prefs.pausedApps
 
     private fun addRow(app: AppModel.App) {
         val context = requireContext()
@@ -65,12 +86,30 @@ class PausedAppsFragment : Fragment() {
             setPadding(24.dpToPx(), 8.dpToPx(), 8.dpToPx(), 8.dpToPx())
         }
         fun render() {
-            status.text = getString(if (app.appPackage in prefs.pausedApps) R.string.on else R.string.off)
+            status.text = getString(if (app.appPackage in chosen()) R.string.on else R.string.off)
         }
         render()
         row.setOnClickListener {
-            AppPause.setPaused(prefs, app.appPackage, app.appPackage !in prefs.pausedApps)
-            render()
+            val on = app.appPackage in chosen()
+            if (!blocking) {
+                AppPause.setPaused(prefs, app.appPackage, !on)
+                return@setOnClickListener render()
+            }
+            // Blocking more is always allowed; unblocking loosens lockdown, unless it was blocked by mistake just now
+            val unblock = {
+                prefs.lockdownBlockedApps = prefs.lockdownBlockedApps - app.appPackage
+                blockedHere -= app.appPackage
+                if (isAdded) render()
+            }
+            when {
+                !on -> {
+                    prefs.lockdownBlockedApps = prefs.lockdownBlockedApps + app.appPackage
+                    blockedHere += app.appPackage
+                    render()
+                }
+                app.appPackage in blockedHere -> unblock()
+                else -> gate.loosen(unblock)
+            }
         }
         row.addView(label, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT

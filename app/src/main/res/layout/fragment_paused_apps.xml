@@ -29,6 +29,7 @@
                 android:padding="12dp">
 
                 <TextView
+                    android:id="@+id/pausedAppsTitle"
                     style="@style/TextLarge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -39,6 +40,7 @@
                     android:textColor="?attr/primaryColor" />
 
                 <TextView
+                    android:id="@+id/pausedAppsDescription"
                     style="@style/TextSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

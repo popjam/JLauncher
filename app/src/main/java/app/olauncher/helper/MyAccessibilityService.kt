@@ -20,6 +20,7 @@ import app.olauncher.MainActivity
 import app.olauncher.R
 import app.olauncher.data.Prefs
 import app.olauncher.databinding.FragmentPauseBinding
+import app.olauncher.ui.LockdownGate
 import app.olauncher.ui.PauseScreen
 
 /**
@@ -45,6 +46,21 @@ class MyAccessibilityService : AccessibilityService() {
         instance = this
         keyboardPackages = (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .enabledInputMethodList.map { it.packageName }.toSet()
+        main.postDelayed(recheck, RECHECK_MS)
+    }
+
+    /**
+     * Lockdown can start by itself (a schedule) while a blocked app is already open, and that app may
+     * not open another window for a long time, so the app on screen is checked again now and then.
+     */
+    private val recheck = object : Runnable {
+        override fun run() {
+            foregroundPackage?.takeIf { it != packageName && Lockdown.isBlocked(this@MyAccessibilityService, it) }?.let {
+                removeGate()
+                block(it)
+            }
+            main.postDelayed(this, RECHECK_MS)
+        }
     }
 
     /** The voice note key: held, it records for today; while settings is picking one, the next key pressed */
@@ -81,7 +97,11 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> onWindowChanged(event)
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                onWindowChanged(event)
+                guardSoon(event)
+            }
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> guardSoon(event)
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (event.packageName == packageName) onLauncherClick(event)
         }
     }
@@ -117,9 +137,104 @@ class MyAccessibilityService : AccessibilityService() {
         }
         if (pkg == SYSTEM_UI || pkg in keyboardPackages) return
         foregroundPackage = pkg
+        if (Lockdown.isBlocked(this, pkg)) {
+            removeGate()
+            block(pkg)
+            return
+        }
         // Left for another app (or recents) without choosing
         if (gatePackage != null && gatePackage != pkg) removeGate()
         if (gatePackage == null && AppPause.needsGate(Prefs(this), pkg)) showGate(pkg)
+    }
+
+    // --- Lockdown ---
+
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var lastBlocked: String? = null
+    private var lastBlockedAt = 0L
+
+    /** Sends a blocked app away, saying why (once, not for every window it opens) */
+    private fun block(pkg: String) {
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        val now = android.os.SystemClock.uptimeMillis()
+        if (pkg == lastBlocked && now - lastBlockedAt < 3_000) return
+        lastBlocked = pkg
+        lastBlockedAt = now
+        showToast(LockdownGate.blockedMessage(this, appLabel(pkg)))
+    }
+
+    private val guard = Runnable { guardNow() }
+
+    /**
+     * When the settings or an installer changes what it shows, checks it once things settle, since
+     * pages change many times as they draw.
+     */
+    private fun guardSoon(event: AccessibilityEvent) {
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg !in SETTINGS_PACKAGES && pkg !in INSTALLER_PACKAGES) return
+        main.removeCallbacks(guard)
+        main.postDelayed(guard, 250)
+    }
+
+    /** While lockdown protects JLauncher, leaves its app info, accessibility and uninstall pages */
+    private fun guardNow() {
+        if (!Lockdown.isLocked(this, Lockdown.Lock.PROTECT)) return
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        val pkg = root.packageName?.toString() ?: return
+        val installer = pkg in INSTALLER_PACKAGES
+        if (!installer && pkg !in SETTINGS_PACKAGES) return
+        if (!showsJLauncher(root, pkg, installer)) return
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        showToast(LockdownGate.lockedMessage(this))
+    }
+
+    /**
+     * Whether the page is about JLauncher: an installer asking to uninstall it (not to update it), or
+     * a settings page with its name and either its accessibility description or an app info button
+     * (Uninstall, Force stop).
+     */
+    private fun showsJLauncher(root: AccessibilityNodeInfo, pkg: String, installer: Boolean): Boolean {
+        val label = appLabel(packageName)
+        val description = getString(R.string.accessibility_service_description)
+        val words = if (installer) words(pkg, listOf("uninstall_application_text", "uninstall_application_text_all_users",
+            "uninstall_application_text_user", "uninstall_update_text", "uninstall_application_title"), "Uninstall")
+        else words("com.android.settings", listOf("uninstall_text", "force_stop"), "Uninstall", "Force stop")
+        var named = false
+        var aboutApp = false
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var seen = 0
+        while (queue.isNotEmpty() && seen < 400) {
+            val node = queue.removeFirst()
+            seen++
+            listOfNotNull(node.text?.toString(), node.contentDescription?.toString()).map { it.trim() }.forEach { text ->
+                if (if (installer) text.contains(label) else text == label) named = true
+                if (installer) {
+                    if (words.any { text.contains(it, ignoreCase = true) }) aboutApp = true
+                } else if (text == description || words.any { it.equals(text, ignoreCase = true) }) aboutApp = true
+            }
+            if (named && aboutApp) return true
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        return false
+    }
+
+    private val words = HashMap<String, Pair<java.util.Locale, List<String>>>()
+
+    /** The strings [names] as the app [pkg] words them in the phone's language, and [fallback] */
+    private fun words(pkg: String, names: List<String>, vararg fallback: String): List<String> {
+        val locale = resources.configuration.locales[0]
+        words[pkg]?.takeIf { it.first == locale }?.let { return it.second }
+        val found = runCatching {
+            val res = packageManager.getResourcesForApplication(pkg)
+            names.mapNotNull { name -> res.getIdentifier(name, "string", pkg).takeIf { it != 0 }?.let { res.getString(it) } }
+        }.getOrDefault(emptyList())
+            // Some are formats with the app's name in them; the words before it are enough
+            .map { it.substringBefore("%").trim() }.filter { it.length >= 4 }
+        val list = (found + fallback).distinct()
+        words[pkg] = locale to list
+        return list
     }
 
     // --- Wellness screen ---
@@ -213,6 +328,8 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        main.removeCallbacks(guard)
+        main.removeCallbacks(recheck)
         VoiceKey.cancel(this)
         removeGate()
         return super.onUnbind(intent)
@@ -220,12 +337,20 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
+        main.removeCallbacks(guard)
+        main.removeCallbacks(recheck)
         removeGate()
         super.onDestroy()
     }
 
     companion object {
         private const val SYSTEM_UI = "com.android.systemui"
+        private const val RECHECK_MS = 15_000L
+
+        /** Where JLauncher can be turned off or uninstalled from */
+        private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.miui.securitycenter")
+        private val INSTALLER_PACKAGES = setOf("com.google.android.packageinstaller", "com.android.packageinstaller",
+            "com.samsung.android.packageinstaller")
 
         /** Keys never taken for the voice note key */
         private val RESERVED_KEYS = setOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_APP_SWITCH, KeyEvent.KEYCODE_POWER)

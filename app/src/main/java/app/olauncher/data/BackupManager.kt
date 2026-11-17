@@ -37,6 +37,12 @@ object BackupManager {
         SYNC_FAILED,
         "FIRST_OPEN",                   // first-run setup state
         "LOCKDOWN_PASSWORD_PLAINTEXT",  // the password itself, kept only on the phone
+        "LOCKDOWN_UNTIL_ELAPSED",       // timed lockdown's end by this phone's clock since it started (its wall clock end is kept)
+        "LOCKDOWN_UNTIL_BOOT",
+        // A wait to unlock is only for this phone
+        "LOCKDOWN_WAIT_REQUESTED_AT",
+        "LOCKDOWN_WAIT_REQUESTED_ELAPSED",
+        "LOCKDOWN_WAIT_BOOT",
         "HOME_PAGE",                    // page currently shown on the home screen
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
         "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone

@@ -81,6 +81,17 @@ class Prefs(context: Context) {
     private val RECOVERY_ESSAY = "RECOVERY_ESSAY"
     private val RECOVERY_PAY = "RECOVERY_PAY"
     private val RECOVERY_PAY_AMOUNT = "RECOVERY_PAY_AMOUNT"
+    private val LOCKDOWN_PROTECT = "LOCKDOWN_PROTECT"
+    private val LOCKDOWN_BLOCKED_APPS = "LOCKDOWN_BLOCKED_APPS"
+    private val LOCKDOWN_SCHEDULES = "LOCKDOWN_SCHEDULES"
+    private val LOCKDOWN_UNLOCK = "LOCKDOWN_UNLOCK"
+    private val LOCKDOWN_WAIT_MINUTES = "LOCKDOWN_WAIT_MINUTES"
+    private val LOCKDOWN_WAIT_REQUESTED_AT = "LOCKDOWN_WAIT_REQUESTED_AT"
+    private val LOCKDOWN_WAIT_REQUESTED_ELAPSED = "LOCKDOWN_WAIT_REQUESTED_ELAPSED"
+    private val LOCKDOWN_WAIT_BOOT = "LOCKDOWN_WAIT_BOOT"
+    private val LOCKDOWN_UNTIL = "LOCKDOWN_UNTIL"
+    private val LOCKDOWN_UNTIL_ELAPSED = "LOCKDOWN_UNTIL_ELAPSED"
+    private val LOCKDOWN_UNTIL_BOOT = "LOCKDOWN_UNTIL_BOOT"
 
     private val APP_NAME_1 = "APP_NAME_1"
     private val APP_NAME_2 = "APP_NAME_2"
@@ -376,22 +387,62 @@ class Prefs(context: Context) {
         get() = prefs.getInt(RECOVERY_PAY_AMOUNT, 0)
         set(value) = prefs.edit { putInt(RECOVERY_PAY_AMOUNT, value).apply() }
 
-    fun resetLockdownSettings() {
-        lockdownModeOn = false
-        lockdownPasswordHash = ""
-        lockdownPasswordPlaintext = ""
-        lockdownAppDrawer = true
-        lockdownHoldApp = true
-        lockdownHiddenApps = true
-        lockdownChangeLauncher = true
-        passwordRecoveryEnabled = false
-        recoveryTap500 = false
-        recoveryClue = false
-        recoveryClueText = ""
-        recoveryEssay = false
-        recoveryPay = false
-        recoveryPayAmount = 0
-    }
+    /** Lockdown also guards JLauncher's own app info and accessibility pages */
+    var lockdownProtect: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_PROTECT, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_PROTECT, value) }
+
+    /** Apps that can't be opened while lockdown is on. Copies, since the set SharedPreferences returns mustn't be changed. */
+    var lockdownBlockedApps: Set<String>
+        get() = prefs.getStringSet(LOCKDOWN_BLOCKED_APPS, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(LOCKDOWN_BLOCKED_APPS, value.toSet()) }
+
+    /** When lockdown turns on by itself, as written by [app.olauncher.helper.Lockdown.formatSchedules] */
+    var lockdownSchedules: String
+        get() = prefs.getString(LOCKDOWN_SCHEDULES, "").orEmpty()
+        set(value) = prefs.edit { putString(LOCKDOWN_SCHEDULES, value) }
+
+    /**
+     * How lockdown is loosened, a [app.olauncher.helper.Lockdown.Unlock] ordinal. Before there was a
+     * choice, a password set meant the password.
+     */
+    var lockdownUnlock: Int
+        get() = prefs.getInt(LOCKDOWN_UNLOCK, -1).takeIf { it >= 0 }
+            ?: (if (isLockdownPasswordSet) app.olauncher.helper.Lockdown.Unlock.PASSWORD else app.olauncher.helper.Lockdown.Unlock.NOTHING).ordinal
+        set(value) = prefs.edit { putInt(LOCKDOWN_UNLOCK, value) }
+
+    var lockdownWaitMinutes: Int
+        get() = prefs.getInt(LOCKDOWN_WAIT_MINUTES, 15)
+        set(value) = prefs.edit { putInt(LOCKDOWN_WAIT_MINUTES, value) }
+
+    /** When the current wait to unlock was started (wall clock), or 0 */
+    var lockdownWaitRequestedAt: Long
+        get() = prefs.getLong(LOCKDOWN_WAIT_REQUESTED_AT, 0L)
+        set(value) = prefs.edit { putLong(LOCKDOWN_WAIT_REQUESTED_AT, value) }
+
+    /** The same start on the clock that can't be changed, and the boot count it belongs to */
+    var lockdownWaitRequestedElapsed: Long
+        get() = prefs.getLong(LOCKDOWN_WAIT_REQUESTED_ELAPSED, 0L)
+        set(value) = prefs.edit { putLong(LOCKDOWN_WAIT_REQUESTED_ELAPSED, value) }
+
+    var lockdownWaitBoot: Int
+        get() = prefs.getInt(LOCKDOWN_WAIT_BOOT, -1)
+        set(value) = prefs.edit { putInt(LOCKDOWN_WAIT_BOOT, value) }
+
+    /** When a timed lockdown ends (wall clock), or 0 */
+    var lockdownUntil: Long
+        get() = prefs.getLong(LOCKDOWN_UNTIL, 0L)
+        set(value) = prefs.edit { putLong(LOCKDOWN_UNTIL, value) }
+
+    /** The same end on the clock that can't be changed, for as long as the phone isn't restarted */
+    var lockdownUntilElapsed: Long
+        get() = prefs.getLong(LOCKDOWN_UNTIL_ELAPSED, 0L)
+        set(value) = prefs.edit { putLong(LOCKDOWN_UNTIL_ELAPSED, value) }
+
+    /** The phone's boot count when [lockdownUntilElapsed] was set */
+    var lockdownUntilBoot: Int
+        get() = prefs.getInt(LOCKDOWN_UNTIL_BOOT, -1)
+        set(value) = prefs.edit { putInt(LOCKDOWN_UNTIL_BOOT, value) }
 
     var hiddenApps: MutableSet<String>
         get() = prefs.getStringSet(HIDDEN_APPS, mutableSetOf()) as MutableSet<String>
