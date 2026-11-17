@@ -96,10 +96,10 @@
     </fragment>
 
 
-    <!-- One day's note on its own page, to read or write at length -->
+    <!-- Each day's note on its own page, to read or write at length, swiped through -->
     <fragment
         android:id="@+id/journalEntryFragment"
-        android:name="app.olauncher.ui.JournalEntryFragment"
+        android:name="app.olauncher.ui.JournalEntriesFragment"
         android:label="JournalEntryFragment" />
 
     <!-- Everything about one day, and changing it -->
@@ -189,15 +189,6 @@
     <action
         android:id="@+id/action_global_statFragment"
         app:destination="@id/statFragment"
-        app:enterAnim="@anim/fade_enter"
-        app:exitAnim="@anim/fade_exit"
-        app:popEnterAnim="@anim/fade_enter"
-        app:popExitAnim="@anim/fade_exit" />
-
-    <!-- A day's note, from the journal or a day's page -->
-    <action
-        android:id="@+id/action_global_journalEntryFragment"
-        app:destination="@id/journalEntryFragment"
         app:enterAnim="@anim/fade_enter"
         app:exitAnim="@anim/fade_exit"
         app:popEnterAnim="@anim/fade_enter"

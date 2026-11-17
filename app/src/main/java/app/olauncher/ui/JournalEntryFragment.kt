@@ -37,7 +37,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * One day's note on a page of its own, to read or write at length: the whole page scrolls with the
+ * One day's note on a page of its own (a page of [JournalEntriesFragment]), to read or write at length: the whole page scrolls with the
  * text, the line being typed stays above the keyboard, and it's saved as it's written. Record adds
  * spoken words to the end. Opened from a search, the search's words are marked until it's changed.
  */
@@ -79,7 +79,7 @@ class JournalEntryFragment : Fragment() {
             addView(words, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(pillButton(context, ink, getString(R.string.journal_open_day), null) {
                 save()
-                findNavController().navigate(R.id.action_global_dayFragment, DayFragment.args(date))
+                openDayFromNote(date)
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() })
             addView(voiceButton(ink) { record() })
         }
@@ -143,10 +143,7 @@ class JournalEntryFragment : Fragment() {
             isClickable = true
             addView(scroll)
         }
-        return PullDismissLayout(context).apply {
-            addView(page)
-            onDismiss = { if (isAdded) close() }
-        }
+        return page
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

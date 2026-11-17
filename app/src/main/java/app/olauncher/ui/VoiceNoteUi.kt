@@ -390,8 +390,7 @@ internal fun Fragment.voiceButton(ink: Int, onTap: () -> Unit): TextView =
 internal fun Fragment.journalButton(ink: Int, date: LocalDate, before: () -> Unit): TextView =
     pillButton(requireContext(), ink, getString(R.string.journal), StatIcons.BOOK) {
         before()
-        androidx.navigation.fragment.NavHostFragment.findNavController(this)
-            .navigate(R.id.action_global_journalEntryFragment, JournalEntryFragment.args(date))
+        openNote(date)
     }
 
 /** [buttons] on the right, in their own row, for under a note box */

@@ -170,7 +170,7 @@ class JournalFragment : Fragment() {
 
     private fun open(date: LocalDate, query: String = "") {
         search.hideKeyboard()
-        findNavController().navigate(R.id.action_global_journalEntryFragment, JournalEntryFragment.args(date, query))
+        openNote(date, query)
     }
 
     /** Today: the start of its note (or a line to start one), opening it, and Record */

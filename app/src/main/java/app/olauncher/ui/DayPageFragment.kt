@@ -203,7 +203,7 @@ class DayPageFragment : CardPageFragment() {
             setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
             isClickable = true
             setOnClickListener {
-                findNavController().navigate(R.id.action_global_journalEntryFragment, JournalEntryFragment.args(date))
+                openNote(date, fromDay = true)
             }
             setOnLongClickListener {
                 recordVoiceNote(date)
