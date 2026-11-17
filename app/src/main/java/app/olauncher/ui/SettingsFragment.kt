@@ -627,7 +627,36 @@ class SettingsFragment : CardPageFragment() {
                 render()
             },
             row(card, getString(R.string.voice_tidy), onOff(app.olauncher.helper.AiTidy.isOn(context)), R.string.info_voice_tidy) { setTidyKey() },
+            if (app.olauncher.helper.AiTidy.isOn(context))
+                row(card, getString(R.string.journal_summarise_all), summarising, R.string.info_journal_summarise_all, level = 1) { summariseAll() }
+            else null,
         )
+    }
+
+    /** Shown beside "Summarise all notes" while it's going */
+    private var summarising: String? = null
+
+    /** Summarises every long journal note again, after saying how many that is */
+    private fun summariseAll() {
+        if (summarising != null) return
+        val context = requireContext().applicationContext
+        val count = app.olauncher.helper.JournalSummaries.longNotes(context).size
+        if (count == 0) return android.widget.Toast.makeText(context, R.string.journal_summarise_none, android.widget.Toast.LENGTH_SHORT).show()
+        AlertDialog.Builder(requireContext())
+            .setMessage(resources.getQuantityString(R.plurals.journal_summarise_ask, count, count))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.journal_summarise) { _, _ ->
+                summarising = getString(R.string.journal_summarising)
+                render()
+                app.olauncher.helper.JournalSummaries.redoAll(context) { made, failed ->
+                    summarising = null
+                    if (isAdded) render()
+                    val text = if (failed == 0) context.resources.getQuantityString(R.plurals.journal_summarised, made, made)
+                    else context.resources.getQuantityString(R.plurals.journal_summarise_failed, failed, failed)
+                    android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
     }
 
     /** The Anthropic API key dictated notes are tidied with; none turns it off */

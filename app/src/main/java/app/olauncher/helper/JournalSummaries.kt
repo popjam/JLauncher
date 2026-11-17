@@ -53,14 +53,38 @@ object JournalSummaries {
     fun refreshLater(context: Context, date: LocalDate) {
         val app = context.applicationContext
         if (!AiTidy.isOn(app)) return
+        work.execute { make(app, date, again = false) }
+    }
+
+    /** The days whose notes are long enough for a summary */
+    fun longNotes(context: Context): List<LocalDate> = MoodStore(context.applicationContext).load().days
+        .filterValues { Transcript.wordCount(it.note.orEmpty()) >= WORDS }
+        .keys.map { LocalDate.parse(it) }
+
+    /**
+     * Summarises every long note again, even ones that have a summary already, one after another.
+     * [onDone] (on the main thread) gets how many were made and how many couldn't be.
+     */
+    fun redoAll(context: Context, onDone: (made: Int, failed: Int) -> Unit) {
+        val app = context.applicationContext
         work.execute {
-            val note = MoodStore(app).load().days[date.toString()]?.note.orEmpty()
-            if (Transcript.wordCount(note) < WORDS || get(app, date, note) != null) return@execute
-            val summary = AiTidy.summarise(app, note)?.replace(Regex("\\s+"), " ")?.trim()
-                ?.takeIf { Transcript.acceptSummary(it) } ?: return@execute
-            prefs(app).edit().putString(date.toString(), fingerprint(note) + "\n" + summary).apply()
-            BackupManager.requestSync(app)
-            main.post { listeners.toList().forEach { it(date) } }
+            var made = 0
+            var failed = 0
+            for (date in longNotes(app)) if (make(app, date, again = true)) made++ else failed++
+            main.post { onDone(made, failed) }
         }
+    }
+
+    /** Makes [date]'s summary ([again]: even if there's one for the note as it is); whether there's one now */
+    private fun make(app: Context, date: LocalDate, again: Boolean): Boolean {
+        val note = MoodStore(app).load().days[date.toString()]?.note.orEmpty()
+        if (Transcript.wordCount(note) < WORDS) return false
+        if (!again && get(app, date, note) != null) return true
+        val summary = AiTidy.summarise(app, note)?.replace(Regex("\\s+"), " ")?.trim()
+            ?.takeIf { Transcript.acceptSummary(it) } ?: return false
+        prefs(app).edit().putString(date.toString(), fingerprint(note) + "\n" + summary).apply()
+        BackupManager.requestSync(app)
+        main.post { listeners.toList().forEach { it(date) } }
+        return true
     }
 }
