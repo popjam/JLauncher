@@ -644,12 +644,19 @@ class SettingsFragment : CardPageFragment() {
             .setPositiveButton(R.string.journal_summarise) { _, _ ->
                 summarising = getString(R.string.journal_summarising)
                 render()
-                app.olauncher.helper.JournalSummaries.redoAll(context) { made, failed ->
+                app.olauncher.helper.JournalSummaries.redoAll(context) { made, failed, why ->
                     summarising = null
                     if (isAdded) render()
-                    val text = if (failed == 0) context.resources.getQuantityString(R.plurals.journal_summarised, made, made)
-                    else context.resources.getQuantityString(R.plurals.journal_summarise_failed, failed, failed)
-                    android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_LONG).show()
+                    if (failed == 0) return@redoAll android.widget.Toast.makeText(context,
+                        context.resources.getQuantityString(R.plurals.journal_summarised, made, made), android.widget.Toast.LENGTH_LONG).show()
+                    // A dialog, so the reason can be read in full
+                    val text = context.resources.getQuantityString(R.plurals.journal_summarise_failed, failed, failed)
+                    if (isAdded) AlertDialog.Builder(requireContext())
+                        .setTitle(text)
+                        .setMessage(why ?: "")
+                        .setPositiveButton(R.string.okay, null)
+                        .show()
+                    else android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_LONG).show()
                 }
             }
             .show()

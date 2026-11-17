@@ -61,9 +61,15 @@ object AiTidy {
     fun tagged(reply: String, tag: String): String? =
         Regex("<$tag>(.*?)</$tag>", RegexOption.DOT_MATCHES_ALL).find(reply)?.groupValues?.get(1)?.trim()?.ifEmpty { null }
 
+    /** Why the last request came back with nothing, to show when something couldn't be done */
+    @Volatile
+    var lastError: String? = null
+        private set
+
     /** Claude's reply to [message] under [system]; null if there's no key, it failed, or it didn't finish */
     private fun ask(context: Context, system: String, message: String): String? {
-        val key = key(context) ?: return null
+        lastError = null
+        val key = key(context) ?: return null.also { lastError = "No API key" }
         val client = AnthropicOkHttpClient.builder()
             .apiKey(key)
             .timeout(Duration.ofMinutes(3))
@@ -80,10 +86,17 @@ object AiTidy {
                 .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
                 .build()
             val reply = client.beta().messages().create(params)
-            if (reply.stopReason().orElse(null) != BetaStopReason.END_TURN) return null
+            val stop = reply.stopReason().orElse(null)
+            if (stop != BetaStopReason.END_TURN) return null.also { lastError = "Stopped early ($stop)" }
             reply.content().mapNotNull { block -> block.text().orElse(null)?.text() }.joinToString("")
         } catch (e: Exception) {
             e.printStackTrace()
+            lastError = when (e) {
+                is com.anthropic.errors.UnauthorizedException -> "API key not accepted"
+                is com.anthropic.errors.AnthropicIoException -> "No connection"
+                // Its message carries the API's own reason (no credit, unknown model, a bad parameter)
+                else -> (e.message ?: e.javaClass.simpleName).replace(Regex("\\s+"), " ").take(300)
+            }
             null
         } finally {
             client.close()

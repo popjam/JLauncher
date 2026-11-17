@@ -63,25 +63,40 @@ object JournalSummaries {
 
     /**
      * Summarises every long note again, even ones that have a summary already, one after another.
-     * [onDone] (on the main thread) gets how many were made and how many couldn't be.
+     * [onDone] (on the main thread) gets how many were made, how many couldn't be, and why the
+     * first of those couldn't.
      */
-    fun redoAll(context: Context, onDone: (made: Int, failed: Int) -> Unit) {
+    fun redoAll(context: Context, onDone: (made: Int, failed: Int, why: String?) -> Unit) {
         val app = context.applicationContext
         work.execute {
             var made = 0
             var failed = 0
-            for (date in longNotes(app)) if (make(app, date, again = true)) made++ else failed++
-            main.post { onDone(made, failed) }
+            var why: String? = null
+            for (date in longNotes(app)) {
+                if (make(app, date, again = true)) made++
+                else {
+                    failed++
+                    if (why == null) why = lastError
+                }
+            }
+            main.post { onDone(made, failed, why) }
         }
     }
 
+    /** Why the last summary couldn't be made */
+    @Volatile
+    private var lastError: String? = null
+
     /** Makes [date]'s summary ([again]: even if there's one for the note as it is); whether there's one now */
     private fun make(app: Context, date: LocalDate, again: Boolean): Boolean {
+        lastError = null
         val note = MoodStore(app).load().days[date.toString()]?.note.orEmpty()
-        if (Transcript.wordCount(note) < WORDS) return false
+        if (Transcript.wordCount(note) < WORDS) return false.also { lastError = "Note too short" }
         if (!again && get(app, date, note) != null) return true
-        val summary = AiTidy.summarise(app, note)?.replace(Regex("\\s+"), " ")?.trim()
-            ?.takeIf { Transcript.acceptSummary(it) } ?: return false
+        val made = AiTidy.summarise(app, note)?.replace(Regex("\\s+"), " ")?.trim()
+        if (made == null) lastError = AiTidy.lastError ?: "Reply had no summary"
+        val summary = made?.takeIf { Transcript.acceptSummary(it) }
+            ?: return false.also { if (made != null) lastError = "Summary too long (${Transcript.wordCount(made)} words)" }
         prefs(app).edit().putString(date.toString(), fingerprint(note) + "\n" + summary).apply()
         BackupManager.requestSync(app)
         main.post { listeners.toList().forEach { it(date) } }
