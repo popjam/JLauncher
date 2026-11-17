@@ -106,17 +106,21 @@ object Transcript {
     fun wordCount(text: String) = WORD.findAll(text).count()
 
     /** Whether [summary] is short enough to be one */
-    fun acceptSummary(summary: String): Boolean = wordCount(summary) in 1..80
+    fun acceptSummary(summary: String): Boolean = wordCount(summary) in 1..SUMMARY_WORDS
+
+    /** The longest summary kept: about three lines of the Journal list */
+    const val SUMMARY_WORDS = 30
 
     /**
      * Whether [tidied], the AI's version of [local], can stand in for it: about the same number of words
-     * (filler and repeats gone, nothing summarised away or made up).
+     * (filler and repeats gone, nothing summarised away or made up). A note written before Claude tidied
+     * dictation ([fromOld]) still has its "you know"s and "like"s in, so more can go.
      */
-    fun acceptTidy(local: String, tidied: String?): Boolean {
+    fun acceptTidy(local: String, tidied: String?, fromOld: Boolean = false): Boolean {
         if (tidied.isNullOrBlank()) return false
         val before = wordCount(local)
         val after = wordCount(tidied)
         if (before == 0) return false
-        return after >= before * 0.75 && after <= before * 1.25 + 10
+        return after >= before * (if (fromOld) 0.6 else 0.75) && after <= before * 1.25 + 10
     }
 }

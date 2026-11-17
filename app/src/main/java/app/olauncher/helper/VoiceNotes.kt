@@ -409,13 +409,15 @@ object VoiceNotes {
     private fun tidyAndAdd(app: Context, date: LocalDate, file: File, segments: List<String>, done: ((String?) -> Unit)?) {
         background.execute {
             val local = Transcript.clean(segments)
-            val text = if (local.isEmpty()) local
-            else AiTidy.tidy(app, local)?.takeIf { Transcript.acceptTidy(local, it) } ?: local
+            val byClaude = if (local.isEmpty()) null else AiTidy.tidy(app, local)?.takeIf { Transcript.acceptTidy(local, it) }
+            val text = byClaude ?: local
             main.post {
                 if (text.isNotEmpty()) {
                     val store = MoodStore(app)
                     val now = store.load().days[date.toString()]?.note.orEmpty().trim()
-                    store.setNote(date, if (now.isEmpty()) text else now + "\n\n" + text)
+                    val note = if (now.isEmpty()) text else now + "\n\n" + text
+                    store.setNote(date, note)
+                    if (byClaude != null) JournalSummaries.addedTidied(app, date, now, note)
                     listeners.toList().forEach { it(date, text) }
                     JournalSummaries.refreshLater(app, date)
                     Toast.makeText(app, if (date == LocalDate.now()) R.string.voice_added else R.string.voice_added_day, Toast.LENGTH_SHORT).show()

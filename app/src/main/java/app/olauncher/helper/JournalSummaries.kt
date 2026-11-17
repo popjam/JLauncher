@@ -56,31 +56,76 @@ object JournalSummaries {
         work.execute { make(app, date, again = false) }
     }
 
-    /** The days whose notes are long enough for a summary */
-    fun longNotes(context: Context): List<LocalDate> = MoodStore(context.applicationContext).load().days
-        .filterValues { Transcript.wordCount(it.note.orEmpty()) >= WORDS }
-        .keys.map { LocalDate.parse(it) }
+    /** Notes at least this many words long are tidied by [redoAll]; shorter ones are left as typed */
+    const val TIDY_WORDS = 40
+
+    private fun tidiedKey(date: LocalDate) = "tidied:$date"
+
+    /** Whether [note] is [date]'s note as Claude last tidied it (nothing added or changed since) */
+    private fun isTidied(app: Context, date: LocalDate, note: String) =
+        prefs(app).getString(tidiedKey(date), null) == fingerprint(note)
+
+    private fun markTidied(app: Context, date: LocalDate, note: String) =
+        prefs(app).edit().putString(tidiedKey(date), fingerprint(note)).apply()
 
     /**
-     * Summarises every long note again, even ones that have a summary already, one after another.
-     * [onDone] (on the main thread) gets how many were made, how many couldn't be, and why the
-     * first of those couldn't.
+     * A tidied recording was added to [date]'s note, [before] becoming [after]: if the note was all
+     * tidied before, it still is.
      */
-    fun redoAll(context: Context, onDone: (made: Int, failed: Int, why: String?) -> Unit) {
+    fun addedTidied(context: Context, date: LocalDate, before: String, after: String) {
+        val app = context.applicationContext
+        if (before.isBlank() || isTidied(app, date, before)) markTidied(app, date, after)
+    }
+
+    /** The days [redoAll] would work on: notes to tidy, and notes long enough for a summary */
+    fun toRedo(context: Context): List<LocalDate> {
+        val app = context.applicationContext
+        return MoodStore(app).load().days.filter { (key, day) ->
+            val note = day.note.orEmpty()
+            val words = Transcript.wordCount(note)
+            words >= WORDS || (words >= TIDY_WORDS && !isTidied(app, LocalDate.parse(key), note))
+        }.keys.map { LocalDate.parse(it) }
+    }
+
+    /**
+     * Tidies each note that hasn't been since it was last changed, then summarises every long note
+     * again, even ones that have a summary already, one after another. [onDone] (on the main thread)
+     * gets how many notes were done, how many couldn't be, and why the first of those couldn't.
+     */
+    fun redoAll(context: Context, onDone: (done: Int, failed: Int, why: String?) -> Unit) {
         val app = context.applicationContext
         work.execute {
-            var made = 0
+            var done = 0
             var failed = 0
             var why: String? = null
-            for (date in longNotes(app)) {
-                if (make(app, date, again = true)) made++
+            for (date in toRedo(app)) {
+                val ok = tidy(app, date) && (Transcript.wordCount(noteOf(app, date)) < WORDS || make(app, date, again = true))
+                if (ok) done++
                 else {
                     failed++
                     if (why == null) why = lastError
                 }
             }
-            main.post { onDone(made, failed, why) }
+            main.post { onDone(done, failed, why) }
         }
+    }
+
+    private fun noteOf(app: Context, date: LocalDate) = MoodStore(app).load().days[date.toString()]?.note.orEmpty()
+
+    /** Tidies [date]'s note with Claude unless it's short or already tidied; whether it's all right to go on */
+    private fun tidy(app: Context, date: LocalDate): Boolean {
+        lastError = null
+        val note = noteOf(app, date)
+        if (Transcript.wordCount(note) < TIDY_WORDS || isTidied(app, date, note)) return true
+        val tidied = AiTidy.tidy(app, note)?.trim()
+            ?: return false.also { lastError = AiTidy.lastError ?: "Reply had no tidied note" }
+        if (!Transcript.acceptTidy(note, tidied, fromOld = true))
+            return false.also { lastError = "Tidied note left out too much (${Transcript.wordCount(note)} words to ${Transcript.wordCount(tidied)})" }
+        // Changed while Claude was at it (typed in, or a recording added): left for next time
+        if (!MoodStore(app).replaceNote(date, note, tidied)) return false.also { lastError = "Note changed while it was being tidied" }
+        markTidied(app, date, noteOf(app, date))
+        main.post { listeners.toList().forEach { it(date) } }
+        return true
     }
 
     /** Why the last summary couldn't be made */
@@ -90,7 +135,7 @@ object JournalSummaries {
     /** Makes [date]'s summary ([again]: even if there's one for the note as it is); whether there's one now */
     private fun make(app: Context, date: LocalDate, again: Boolean): Boolean {
         lastError = null
-        val note = MoodStore(app).load().days[date.toString()]?.note.orEmpty()
+        val note = noteOf(app, date)
         if (Transcript.wordCount(note) < WORDS) return false.also { lastError = "Note too short" }
         if (!again && get(app, date, note) != null) return true
         val made = AiTidy.summarise(app, note)?.replace(Regex("\\s+"), " ")?.trim()

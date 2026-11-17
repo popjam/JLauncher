@@ -636,7 +636,7 @@ class SettingsFragment : CardPageFragment() {
     private fun summariseAll() {
         if (summarising != null) return
         val context = requireContext().applicationContext
-        val count = app.olauncher.helper.JournalSummaries.longNotes(context).size
+        val count = app.olauncher.helper.JournalSummaries.toRedo(context).size
         if (count == 0) return android.widget.Toast.makeText(context, R.string.journal_summarise_none, android.widget.Toast.LENGTH_SHORT).show()
         AlertDialog.Builder(requireContext())
             .setMessage(resources.getQuantityString(R.plurals.journal_summarise_ask, count, count))

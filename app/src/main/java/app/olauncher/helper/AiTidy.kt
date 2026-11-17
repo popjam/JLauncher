@@ -34,7 +34,7 @@ object AiTidy {
     private val SUMMARY = """
         You summarise someone's journal entry for the day, so that scrolling back through their journal they can see at a glance what the day held.
 
-        Write one or two plain sentences in the first person, as if they wrote it: how they felt, what happened, and anything they decided or want to change. Use their own words where you can. Don't add advice, judgement or anything they didn't say.
+        Write one short sentence of at most 20 words, in the first person, as if they wrote it: the main thing they felt or that happened, and anything they decided. Use their own words where you can. Leave out the rest rather than cramming it in. Don't add advice, judgement or anything they didn't say.
 
         Reply with the summary inside <summary></summary> and nothing else.
     """.trimIndent()

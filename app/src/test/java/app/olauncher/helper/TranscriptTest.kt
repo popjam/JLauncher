@@ -76,6 +76,9 @@ class TranscriptTest {
     fun summariesAreShort() {
         assertTrue(Transcript.acceptSummary("Felt better and calmer."))
         assertFalse(Transcript.acceptSummary("word ".repeat(100)))
+        // About three lines of the Journal list at most
+        assertTrue(Transcript.acceptSummary("word ".repeat(30)))
+        assertFalse(Transcript.acceptSummary("word ".repeat(31)))
         assertFalse(Transcript.acceptSummary(" "))
     }
 
@@ -106,5 +109,15 @@ class TranscriptTest {
         assertFalse(Transcript.acceptTidy(local, ""))
         assertFalse(Transcript.acceptTidy(local, null))
         assertFalse(Transcript.acceptTidy(local, local + " " + local))
+    }
+
+    @Test
+    fun oldNotesCanLoseMoreFiller() {
+        // 20 words to 13: too few for a fresh recording (15), fine for an old note (12)
+        val old = "I you know went to the you know shops and like bought some bread you know and then came home"
+        val tidied = "I went to the shops and bought some bread, and then came home."
+        assertFalse(Transcript.acceptTidy(old, tidied))
+        assertTrue(Transcript.acceptTidy(old, tidied, fromOld = true))
+        assertFalse(Transcript.acceptTidy(old, "Went shopping.", fromOld = true))
     }
 }

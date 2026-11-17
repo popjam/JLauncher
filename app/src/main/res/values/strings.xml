@@ -1187,22 +1187,22 @@
     <string name="voice_tidy">Tidy dictation with Claude</string>
     <string name="voice_tidy_key">Anthropic API key</string>
     <string name="voice_tidy_off">Turn off</string>
-    <string name="journal_summarise_all">Summarise all notes</string>
-    <string name="journal_summarise">Summarise</string>
+    <string name="journal_summarise_all">Tidy and summarise notes</string>
+    <string name="journal_summarise">Go</string>
     <string name="journal_summarising">Working…</string>
-    <string name="journal_summarise_none">No notes long enough to summarise</string>
-    <string name="info_journal_summarise_all">Makes the summary of every journal note over 250 words again, from the note as it is now. Each note is sent to Claude.</string>
+    <string name="journal_summarise_none">No notes to tidy or summarise</string>
+    <string name="info_journal_summarise_all">Tidies every journal note of 40 words or more that Claude hasn\'t tidied since it last changed, then makes the summary of every note over 250 words again. Each note is sent to Claude.</string>
     <plurals name="journal_summarise_ask">
-        <item quantity="one">Summarise %d note again?</item>
-        <item quantity="other">Summarise %d notes again?</item>
+        <item quantity="one">Tidy and summarise %d note?</item>
+        <item quantity="other">Tidy and summarise %d notes?</item>
     </plurals>
     <plurals name="journal_summarised">
-        <item quantity="one">%d note summarised</item>
-        <item quantity="other">%d notes summarised</item>
+        <item quantity="one">%d note done</item>
+        <item quantity="other">%d notes done</item>
     </plurals>
     <plurals name="journal_summarise_failed">
-        <item quantity="one">%d note couldn\'t be summarised</item>
-        <item quantity="other">%d notes couldn\'t be summarised</item>
+        <item quantity="one">%d note couldn\'t be done</item>
+        <item quantity="other">%d notes couldn\'t be done</item>
     </plurals>
     <string name="info_voice_tidy">Spoken notes are written out on the phone, with filler words taken out. With an Anthropic API key, the written-out text is also sent to Claude, which adds punctuation and paragraphs and keeps your words. The key stays on this phone.</string>
     <string name="journal_day_hint">Write about the day</string>

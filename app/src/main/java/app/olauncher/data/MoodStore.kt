@@ -241,6 +241,19 @@ class MoodStore(context: Context) {
         data.editDay(date.toString()) { it.copy(note = sanitizeNote(note)) }
     }
 
+    /** Sets [date]'s note to [note] only if it's still [expected] (nothing written since it was read); whether it did */
+    fun replaceNote(date: LocalDate, expected: String, note: String): Boolean {
+        var replaced = false
+        update { data ->
+            val now = data.days[date.toString()]?.note.orEmpty()
+            if (now.trim() == expected.trim()) {
+                data.editDay(date.toString()) { it.copy(note = sanitizeNote(note)) }
+                replaced = true
+            }
+        }
+        return replaced
+    }
+
     /**
      * Keeps the larger value, so a partial snapshot never overwrites a complete day.
      * Not backed up straight away: [BackupManager.syncIfStale] and other changes pick it up.
