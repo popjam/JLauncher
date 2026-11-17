@@ -326,9 +326,13 @@ class MoodStore(context: Context) {
         }
     }
 
+    /** Supplements' row keeps its place when [ids] leaves it out. */
     fun setOrder(ids: List<String>) = update { data ->
+        val supplements = data.order.indexOf(SUPPLEMENTS)
+        val order = ids.toMutableList()
+        if (SUPPLEMENTS !in order && supplements >= 0) order.add(supplements.coerceAtMost(order.size), SUPPLEMENTS)
         data.order.clear()
-        data.order.addAll(ids)
+        data.order.addAll(order)
     }
 
     /**
@@ -736,6 +740,8 @@ class MoodStore(context: Context) {
         /** The check-in's supplements question and the list after "Changed": steps, never stats */
         const val SUPPLEMENTS = "supplements"
         const val SUPPLEMENT_CHANGES = "supplementChanges"
+        /** Supplements' colour in the stats list and the check-in */
+        const val SUPPLEMENTS_COLOR = 0xFF26A69A.toInt()
 
         val SCALES = listOf(2, 3, 5)
         const val DEFAULT_MOOD_COLOR = 0xFFF2B33D.toInt()

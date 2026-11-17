@@ -255,8 +255,7 @@ object MoodPrompt {
 
     private fun View.setPadding(px: Int) = setPadding(px, px, px, px)
 
-    /** Supplements' purple, like a medicine's */
-    private const val SUPPLEMENT_COLOR = 0xFF9575CD.toInt()
+    private const val SUPPLEMENT_COLOR = MoodStore.SUPPLEMENTS_COLOR
 
     /** The check-in's supplements question: two faces, the same as usual or changed */
     private fun supplementStep(context: Context) = StatInfo(
