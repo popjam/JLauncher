@@ -50,15 +50,24 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Lockdown can start by itself (a schedule) while a blocked app is already open, and that app may
-     * not open another window for a long time, so the app on screen is checked again now and then.
+     * Lockdown can start by itself (a schedule, a stage) and limits run out while an app is open, and
+     * that app may not open another window for a long time, so the app on screen is checked again now
+     * and then. Grayscale and the notification are kept up to date at the same time.
      */
     private val recheck = object : Runnable {
         override fun run() {
-            foregroundPackage?.takeIf { it != packageName && Lockdown.isBlocked(this@MyAccessibilityService, it) }?.let {
-                removeGate()
-                block(it)
+            val service = this@MyAccessibilityService
+            Limits.refresh(service)
+            checkSystemOnTop()
+            foregroundPackage?.takeIf { it != packageName && blockView == null && !systemOnTop }?.let { pkg ->
+                val prefs = Prefs(service)
+                val block = Lockdown.blockFor(service, pkg, opening = false, prefs)
+                if (block != null) {
+                    removeGate()
+                    showBlock(appLabel(pkg), block, pkg)
+                } else warnIfLow(pkg, prefs)
             }
+            LockdownSystem.sync(service)
             main.postDelayed(this, RECHECK_MS)
         }
     }
@@ -68,8 +77,12 @@ class MyAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 onWindowChanged(event)
                 guardSoon(event)
+                siteSoon(event)
             }
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> guardSoon(event)
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                guardSoon(event)
+                siteSoon(event)
+            }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (event.packageName == packageName) onLauncherClick(event)
         }
     }
@@ -99,36 +112,184 @@ class MyAccessibilityService : AccessibilityService() {
             // Only the home screen counts, not the launcher's other windows such as the overlay
             if (event.className != MainActivity::class.java.name) return
             foregroundPackage = pkg
+            systemOnTop = false
             AppPause.onHomeShown()
             removeGate()
+            removeBlock()
             return
         }
         if (pkg == SYSTEM_UI || pkg in keyboardPackages) return
-        foregroundPackage = pkg
-        if (Lockdown.isBlocked(this, pkg)) {
-            removeGate()
-            block(pkg)
+        if (!Lockdown.canBlock(this, pkg)) {
+            // A system screen (a call, a permission dialog, the share sheet, recents) isn't an app: it's
+            // never covered, and going back to the app from it isn't a new open. An app that was blocked
+            // is blocked again when it comes back.
+            blockPackage?.let { coveredBefore = it }
+            systemOnTop = true
+            removeBlock()
+            if (gatePackage != null) removeGate()
             return
         }
+        val opening = pkg != foregroundPackage || pkg == coveredBefore
+        coveredBefore = null
+        systemOnTop = false
+        foregroundPackage = pkg
+        // The block screen is already over this app
+        if (blockPackage == pkg) return
+        removeBlock()
+        val prefs = Prefs(this)
+        Lockdown.blockFor(this, pkg, opening, prefs)?.let { block ->
+            removeGate()
+            showBlock(appLabel(pkg), block, pkg)
+            return
+        }
+        if (opening && Limits.rule(prefs, pkg).opens > 0) Limits.countOpen(this, pkg)
+        warnIfLow(pkg, prefs)
         // Left for another app (or recents) without choosing
         if (gatePackage != null && gatePackage != pkg) removeGate()
-        if (gatePackage == null && AppPause.needsGate(Prefs(this), pkg)) showGate(pkg)
+        if (gatePackage == null && AppPause.needsGate(this, prefs, pkg)) showGate(pkg)
     }
 
     // --- Lockdown ---
 
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
-    private var lastBlocked: String? = null
-    private var lastBlockedAt = 0L
 
-    /** Sends a blocked app away, saying why (once, not for every window it opens) */
-    private fun block(pkg: String) {
-        performGlobalAction(GLOBAL_ACTION_HOME)
+    /** Says once a day when an app has only a few minutes of its limit left */
+    private fun warnIfLow(pkg: String, prefs: Prefs) {
+        val rule = Limits.rule(prefs, pkg)
+        if (!Limits.shouldWarn(rule, Limits.usedToday(this, pkg), Limits.warnedToday(this, pkg))) return
+        Limits.setWarned(this, pkg)
+        val left = rule.minutes * 60_000L - Limits.usedToday(this, pkg)
+        showToast(getString(R.string.lockdown_left_today, appLabel(pkg), LockdownGate.duration(this, left)))
+    }
+
+    // The block screen: over a blocked app or site, with why and until when, and Close
+    private var blockView: View? = null
+    private var blockPackage: String? = null
+    /** The app the block screen was over when a system screen came up */
+    private var coveredBefore: String? = null
+    /** A system screen (a call, a permission dialog) is in front of the app, so nothing is put over it */
+    private var systemOnTop = false
+
+    /**
+     * Closing a dialog such as the share sheet gives the app back its focus without a new window, so
+     * whether a system screen is still in front is checked against the active window.
+     */
+    private fun checkSystemOnTop() {
+        if (!systemOnTop) return
+        val active = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull() ?: return
+        if (active == SYSTEM_UI || active in keyboardPackages) return
+        if (active == packageName || Lockdown.canBlock(this, active)) {
+            systemOnTop = false
+            foregroundPackage = active
+            // Back to the app the block screen was over: it's checked as an open, as when its window comes back
+            if (active == coveredBefore) {
+                coveredBefore = null
+                Lockdown.blockFor(this, active, opening = true)?.let { block ->
+                    removeGate()
+                    showBlock(appLabel(active), block, active)
+                }
+            }
+        }
+    }
+    private var lastCounted: String? = null
+    private var lastCountedAt = 0L
+
+    private fun showBlock(name: String, block: Lockdown.Block, pkg: String?) {
+        removeBlock()
+        // One attempt, not one for every window the app opens
+        val key = pkg ?: name
         val now = android.os.SystemClock.uptimeMillis()
-        if (pkg == lastBlocked && now - lastBlockedAt < 3_000) return
-        lastBlocked = pkg
-        lastBlockedAt = now
-        showToast(LockdownGate.blockedMessage(this, appLabel(pkg)))
+        if (key != lastCounted || now - lastCountedAt > 5_000) Lockdown.countBlocked(this)
+        lastCounted = key
+        lastCountedAt = now
+        try {
+            val context = themedContext()
+            val root = object : FrameLayout(context) {
+                override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+                    if (event.keyCode != KeyEvent.KEYCODE_BACK) return super.dispatchKeyEvent(event)
+                    if (event.action == KeyEvent.ACTION_UP) closeBlock()
+                    return true
+                }
+            }
+            root.setBackgroundColor(Color.BLACK)
+            root.addView(BlockScreen.view(context, name, LockdownGate.reasonText(this, block), LockdownGate.detailText(this, block, pkg)) { closeBlock() },
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.OPAQUE
+            )
+            (getSystemService(Context.WINDOW_SERVICE) as WindowManager).addView(root, params)
+            blockView = root
+            holdAudio()
+            blockPackage = pkg ?: foregroundPackage
+        } catch (e: Exception) {
+            e.printStackTrace()
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        }
+    }
+
+    private fun closeBlock() {
+        removeBlock()
+        performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+
+    private fun removeBlock() {
+        val view = blockView ?: return
+        blockView = null
+        blockPackage = null
+        releaseAudio()
+        runCatching { (getSystemService(Context.WINDOW_SERVICE) as WindowManager).removeView(view) }
+    }
+
+    // Taking audio focus while the block screen shows stops a blocked app's video or music playing underneath
+    private var audioFocus: Any? = null
+
+    private fun holdAudio() {
+        if (audioFocus != null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        val request = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
+            .setOnAudioFocusChangeListener { }
+            .build()
+        runCatching { (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).requestAudioFocus(request) }
+        audioFocus = request
+    }
+
+    private fun releaseAudio() {
+        val request = audioFocus ?: return
+        audioFocus = null
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        runCatching { (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).abandonAudioFocusRequest(request as android.media.AudioFocusRequest) }
+    }
+
+    /** Shows the block screen from the launcher, for an app it was asked to open */
+    private fun blockFromLauncher(name: String, block: Lockdown.Block, pkg: String) {
+        removeGate()
+        showBlock(name, block, pkg)
+        // So leaving the launcher for the app (if it opens anyway) doesn't count as a new open
+        blockPackage = pkg
+    }
+
+    // Websites: the address in Chrome or Firefox, once the page settles
+    private val siteCheck = Runnable { checkSite() }
+
+    private fun siteSoon(event: AccessibilityEvent) {
+        if (event.packageName?.toString() !in BROWSERS) return
+        main.removeCallbacks(siteCheck)
+        main.postDelayed(siteCheck, 400)
+    }
+
+    private fun checkSite() {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        val ids = BROWSERS[root.packageName?.toString()] ?: return
+        val bar = ids.asSequence().flatMap { runCatching { root.findAccessibilityNodeInfosByViewId(it) }.getOrNull().orEmpty().asSequence() }.firstOrNull()
+            ?: return
+        // Not while an address is being typed
+        if (bar.isFocused) return
+        val host = Limits.host(bar.text?.toString() ?: return) ?: return
+        if (blockView != null) return
+        Lockdown.blockForSite(this, host)?.let { showBlock(host, it, null) }
     }
 
     private val guard = Runnable { guardNow() }
@@ -144,17 +305,52 @@ class MyAccessibilityService : AccessibilityService() {
         main.postDelayed(guard, 250)
     }
 
-    /** While lockdown protects JLauncher, leaves its app info, accessibility and uninstall pages */
+    /**
+     * While lockdown protects JLauncher, leaves its app info, accessibility and uninstall pages; while
+     * it locks system settings, leaves the pages that could undo it (Date & time and the like).
+     */
     private fun guardNow() {
-        if (!Lockdown.isLocked(this, Lockdown.Lock.PROTECT)) return
+        val protect = Lockdown.isLocked(this, Lockdown.Lock.PROTECT)
+        val system = Lockdown.isLocked(this, Lockdown.Lock.SYSTEM_SETTINGS)
+        if (!protect && !system) return
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
         val pkg = root.packageName?.toString() ?: return
         val installer = pkg in INSTALLER_PACKAGES
         if (!installer && pkg !in SETTINGS_PACKAGES) return
-        if (!showsJLauncher(root, pkg, installer)) return
+        val leave = (protect && showsJLauncher(root, pkg, installer)) || (system && !installer && showsSystemPage(root))
+        if (!leave) return
         performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)
         showToast(LockdownGate.lockedMessage(this))
+    }
+
+    /** Whether a settings page's title is one of the pages that could undo lockdown */
+    private fun showsSystemPage(root: AccessibilityNodeInfo): Boolean {
+        val titles = words("com.android.settings", listOf("date_and_time", "development_settings_title", "manage_device_admin",
+            "high_power_apps", "home_app", "default_home_app_title", "usage_access_title", "usage_access"),
+            "Date & time", "Developer options", "Device admin apps", "Battery optimization", "Battery optimisation", "Home app", "Default home app",
+            "Usage access", "Device & app usage")
+        return pageTitles(root).any { title -> titles.any { it.equals(title, ignoreCase = true) } }
+    }
+
+    /** What a settings page shows as its title: the collapsing toolbar's or action bar's, and the first text on the page */
+    private fun pageTitles(root: AccessibilityNodeInfo): List<String> {
+        val found = mutableListOf<String>()
+        var first: String? = null
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var seen = 0
+        while (queue.isNotEmpty() && seen < 300) {
+            val node = queue.removeFirst()
+            seen++
+            val id = node.viewIdResourceName.orEmpty()
+            val text = node.text?.toString()?.trim().orEmpty()
+            if (id.endsWith("collapsing_toolbar")) node.contentDescription?.toString()?.trim()?.let { found += it }
+            if ((id.endsWith("action_bar_title") || id.endsWith("toolbar_title")) && text.isNotEmpty()) found += text
+            if (first == null && text.isNotEmpty()) first = text
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        return found + listOfNotNull(first)
     }
 
     /**
@@ -225,8 +421,8 @@ class MyAccessibilityService : AccessibilityService() {
                 binding,
                 pkg,
                 appLabel(pkg),
-                pauseSeconds = if (prefs.pauseAppsOn) prefs.pauseSeconds else null,
-                askUseFor = AppPause.useForActive(prefs),
+                pauseSeconds = if (AppPause.pauses(this, prefs, pkg)) prefs.pauseSeconds else null,
+                askUseFor = AppPause.asksUseFor(prefs, pkg),
                 onOpen = { minutes ->
                     AppPause.grantPass(pkg, minutes)
                     removeGate()
@@ -271,7 +467,8 @@ class MyAccessibilityService : AccessibilityService() {
 
     /** Closes [pkg] if it's still on screen when its time runs out. */
     private fun timeUp(pkg: String) {
-        if (foregroundPackage != pkg) return
+        checkSystemOnTop()
+        if (foregroundPackage != pkg || systemOnTop) return
         removeGate()
         performGlobalAction(GLOBAL_ACTION_HOME)
         showToast(getString(R.string.time_up, appLabel(pkg)))
@@ -298,6 +495,8 @@ class MyAccessibilityService : AccessibilityService() {
         instance = null
         main.removeCallbacks(guard)
         main.removeCallbacks(recheck)
+        main.removeCallbacks(siteCheck)
+        removeBlock()
         removeGate()
         return super.onUnbind(intent)
     }
@@ -306,6 +505,8 @@ class MyAccessibilityService : AccessibilityService() {
         instance = null
         main.removeCallbacks(guard)
         main.removeCallbacks(recheck)
+        main.removeCallbacks(siteCheck)
+        removeBlock()
         removeGate()
         super.onDestroy()
     }
@@ -316,6 +517,12 @@ class MyAccessibilityService : AccessibilityService() {
 
         /** Where JLauncher can be turned off or uninstalled from */
         private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.miui.securitycenter")
+        /** Browsers whose address bar is read for blocked sites, with the bar's view ids */
+        private val BROWSERS = mapOf(
+            "com.android.chrome" to listOf("com.android.chrome:id/url_bar"),
+            "org.mozilla.firefox" to listOf("org.mozilla.firefox:id/mozac_browser_toolbar_url_view", "org.mozilla.firefox:id/url_bar_title"),
+        )
+
         private val INSTALLER_PACKAGES = setOf("com.google.android.packageinstaller", "com.android.packageinstaller",
             "com.samsung.android.packageinstaller")
 
@@ -331,6 +538,13 @@ class MyAccessibilityService : AccessibilityService() {
 
         fun closeIfShowing(packageName: String) {
             instance?.timeUp(packageName)
+        }
+
+        /** Shows the block screen for an app the launcher was asked to open; false when the service isn't running */
+        fun showBlock(name: String, block: Lockdown.Block, packageName: String): Boolean {
+            val service = instance ?: return false
+            service.blockFromLauncher(name, block, packageName)
+            return true
         }
     }
 }

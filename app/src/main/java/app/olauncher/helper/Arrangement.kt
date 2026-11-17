@@ -16,11 +16,15 @@ object Arrangement {
     const val WEATHER = "weather"
     const val SCREEN_TIME = "screenTime"
     const val MONEY = "money"
-    val HOME_ITEMS = listOf(WEATHER, SCREEN_TIME, MONEY)
+    const val LOCKDOWN = "lockdown"
+    val HOME_ITEMS = listOf(WEATHER, SCREEN_TIME, LOCKDOWN, MONEY)
 
-    /** Which of [HOME_ITEMS] sit in the row under the one beside the clock; money does at first */
-    fun underClock(context: Context): Set<String> =
-        prefs(context).getString("$HOME.under", null)?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: setOf(MONEY)
+    /** Which of [HOME_ITEMS] sit in the row under the one beside the clock; money and lockdown do at first */
+    fun underClock(context: Context): Set<String> {
+        val saved = prefs(context).getString("$HOME.under", null)?.split(',')?.filter { it.isNotEmpty() }?.toSet() ?: return setOf(LOCKDOWN, MONEY)
+        // Lockdown came later: it joins money's row unless it's been moved
+        return if (LOCKDOWN !in prefs(context).getString("$HOME.order", "").orEmpty().split(',') && MONEY in saved) saved + LOCKDOWN else saved
+    }
 
     fun setUnderClock(context: Context, keys: Set<String>) {
         prefs(context).edit().putString("$HOME.under", keys.joinToString(",")).apply()

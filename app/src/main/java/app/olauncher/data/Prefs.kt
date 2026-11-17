@@ -29,7 +29,6 @@ class Prefs(context: Context) {
     private val HOME_PAGE = "HOME_PAGE"
     private val PAUSE_APPS_ON = "PAUSE_APPS_ON"
     private val PAUSED_APPS = "PAUSED_APPS"
-    private val PAUSE_APPS_REVIEWED = "PAUSE_APPS_REVIEWED"
     private val PAUSE_SECONDS = "PAUSE_SECONDS"
     private val USE_FOR_ON = "USE_FOR_ON"
     private val AUTO_SHOW_KEYBOARD = "AUTO_SHOW_KEYBOARD"
@@ -91,6 +90,23 @@ class Prefs(context: Context) {
     private val LOCKDOWN_UNTIL = "LOCKDOWN_UNTIL"
     private val LOCKDOWN_UNTIL_ELAPSED = "LOCKDOWN_UNTIL_ELAPSED"
     private val LOCKDOWN_UNTIL_BOOT = "LOCKDOWN_UNTIL_BOOT"
+    private val LOCKDOWN_APP_MODE = "LOCKDOWN_APP_MODE"
+    private val LOCKDOWN_ALLOWED_APPS = "LOCKDOWN_ALLOWED_APPS"
+    private val LOCKDOWN_ESSENTIALS = "LOCKDOWN_ESSENTIALS"
+    private val LOCKDOWN_SITES = "LOCKDOWN_SITES"
+    private val LOCKDOWN_PLACES = "LOCKDOWN_PLACES"
+    private val LOCKDOWN_GRAYSCALE = "LOCKDOWN_GRAYSCALE"
+    private val LOCKDOWN_GRAYSCALE_APPLIED = "LOCKDOWN_GRAYSCALE_APPLIED"
+    private val LOCKDOWN_NOTIFICATION = "LOCKDOWN_NOTIFICATION"
+    private val LOCKDOWN_SYSTEM_SETTINGS = "LOCKDOWN_SYSTEM_SETTINGS"
+    private val LOCKDOWN_STAGES = "LOCKDOWN_STAGES"
+    private val LOCKDOWN_HOME_WIDGET = "LOCKDOWN_HOME_WIDGET"
+    private val LOCKDOWN_SETUP_OFFERED = "LOCKDOWN_SETUP_OFFERED"
+    private val LOCKDOWN_WIDGET_MINUTES = "LOCKDOWN_WIDGET_MINUTES"
+    private val LOCKDOWN_BLOCKED_DAYS = "LOCKDOWN_BLOCKED_DAYS"
+    private val APP_LIMITS = "APP_LIMITS"
+    private val USE_FOR_APPS = "USE_FOR_APPS"
+    private val APP_RULES_MIGRATED = "APP_RULES_MIGRATED"
 
     private val APP_NAME_1 = "APP_NAME_1"
     private val APP_NAME_2 = "APP_NAME_2"
@@ -433,6 +449,87 @@ class Prefs(context: Context) {
         get() = prefs.getLong(LOCKDOWN_UNTIL_ELAPSED, 0L)
         set(value) = prefs.edit { putLong(LOCKDOWN_UNTIL_ELAPSED, value) }
 
+    /** During lockdown: 0 blocks [lockdownBlockedApps], 1 allows only [lockdownAllowedApps] */
+    var lockdownAppMode: Int
+        get() = prefs.getInt(LOCKDOWN_APP_MODE, 0)
+        set(value) = prefs.edit { putInt(LOCKDOWN_APP_MODE, value) }
+
+    var lockdownAllowedApps: Set<String>
+        get() = prefs.getStringSet(LOCKDOWN_ALLOWED_APPS, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(LOCKDOWN_ALLOWED_APPS, value.toSet()) }
+
+    /** Apps that still work at screen time stage 3 and with the allowlist */
+    var lockdownEssentials: Set<String>
+        get() = prefs.getStringSet(LOCKDOWN_ESSENTIALS, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(LOCKDOWN_ESSENTIALS, value.toSet()) }
+
+    /** Websites blocked during lockdown, as hosts ("reddit.com") */
+    var lockdownSites: Set<String>
+        get() = prefs.getStringSet(LOCKDOWN_SITES, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(LOCKDOWN_SITES, value.toSet()) }
+
+    /** Places (Social's ids) where lockdown is on */
+    var lockdownPlaces: Set<Int>
+        get() = prefs.getStringSet(LOCKDOWN_PLACES, emptySet())!!.mapNotNull { it.toIntOrNull() }.toSet()
+        set(value) = prefs.edit { putStringSet(LOCKDOWN_PLACES, value.map { it.toString() }.toSet()) }
+
+    var lockdownGrayscale: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_GRAYSCALE, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_GRAYSCALE, value) }
+
+    /** Whether JLauncher turned grayscale on, so it only turns off what it turned on */
+    var lockdownGrayscaleApplied: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_GRAYSCALE_APPLIED, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_GRAYSCALE_APPLIED, value) }
+
+    var lockdownNotification: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_NOTIFICATION, true)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_NOTIFICATION, value) }
+
+    /** Lockdown also leaves Date & time, Default home app, Device admin, battery and Developer options */
+    var lockdownSystemSettings: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_SYSTEM_SETTINGS, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_SYSTEM_SETTINGS, value) }
+
+    /** Screen time stages' minutes, as written by [app.olauncher.helper.Limits.formatStages] */
+    var lockdownStages: String
+        get() = prefs.getString(LOCKDOWN_STAGES, "").orEmpty()
+        set(value) = prefs.edit { putString(LOCKDOWN_STAGES, value) }
+
+    /** The lock on the home screen that adds time to a timed lockdown */
+    /** Whether the setup has been shown once, on first opening Lockdown */
+    var lockdownSetupOffered: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_SETUP_OFFERED, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_SETUP_OFFERED, value) }
+
+    var lockdownHomeWidget: Boolean
+        get() = prefs.getBoolean(LOCKDOWN_HOME_WIDGET, false)
+        set(value) = prefs.edit { putBoolean(LOCKDOWN_HOME_WIDGET, value) }
+
+    /** How much a tap on the home widget adds */
+    var lockdownWidgetMinutes: Int
+        get() = prefs.getInt(LOCKDOWN_WIDGET_MINUTES, 30)
+        set(value) = prefs.edit { putInt(LOCKDOWN_WIDGET_MINUTES, value) }
+
+    /** Blocked attempts by day, as {"2026-11-17": 14} */
+    var lockdownBlockedDays: String
+        get() = prefs.getString(LOCKDOWN_BLOCKED_DAYS, "").orEmpty()
+        set(value) = prefs.edit { putString(LOCKDOWN_BLOCKED_DAYS, value) }
+
+    /** Apps' daily limits, as written by [app.olauncher.helper.Limits.formatRules] */
+    var appLimits: String
+        get() = prefs.getString(APP_LIMITS, "").orEmpty()
+        set(value) = prefs.edit { putString(APP_LIMITS, value) }
+
+    /** Apps that ask how long they'll be used for */
+    var useForApps: Set<String>
+        get() = prefs.getStringSet(USE_FOR_APPS, emptySet())!!.toSet()
+        set(value) = prefs.edit { putStringSet(USE_FOR_APPS, value.toSet()) }
+
+    var appRulesMigrated: Boolean
+        get() = prefs.getBoolean(APP_RULES_MIGRATED, false)
+        set(value) = prefs.edit { putBoolean(APP_RULES_MIGRATED, value) }
+
     /** The phone's boot count when [lockdownUntilElapsed] was set */
     var lockdownUntilBoot: Int
         get() = prefs.getInt(LOCKDOWN_UNTIL_BOOT, -1)
@@ -442,26 +539,22 @@ class Prefs(context: Context) {
         get() = prefs.getStringSet(HIDDEN_APPS, mutableSetOf()) as MutableSet<String>
         set(value) = prefs.edit { putStringSet(HIDDEN_APPS, value).apply() }
 
-    /** Wellness: make chosen apps wait [pauseSeconds] before opening. */
+    /** The pause's old on/off for every chosen app, read once to carry it over to each app's own choice (see AppPause.migrate) */
     var pauseAppsOn: Boolean
         get() = prefs.getBoolean(PAUSE_APPS_ON, false)
         set(value) = prefs.edit { putBoolean(PAUSE_APPS_ON, value) }
 
-    /** Package names that get the pause. Copies, since the set SharedPreferences returns mustn't be changed. */
+    /** Apps that get the pause before opening. Copies, since the set SharedPreferences returns mustn't be changed. */
     var pausedApps: Set<String>
         get() = prefs.getStringSet(PAUSED_APPS, emptySet())!!.toSet()
         set(value) = prefs.edit { putStringSet(PAUSED_APPS, value.toSet()) }
 
-    /** Known addictive apps already added (or deliberately removed), so they aren't added again. */
-    var pauseAppsReviewed: Set<String>
-        get() = prefs.getStringSet(PAUSE_APPS_REVIEWED, emptySet())!!.toSet()
-        set(value) = prefs.edit { putStringSet(PAUSE_APPS_REVIEWED, value.toSet()) }
 
     var pauseSeconds: Int
         get() = prefs.getInt(PAUSE_SECONDS, 10)
         set(value) = prefs.edit { putInt(PAUSE_SECONDS, value) }
 
-    /** Wellness: ask how long to use a chosen app for, and close it when the time is up. */
+    /** "Use for a set time"'s old on/off for every chosen app, read once to carry it over (see AppPause.migrate) */
     var useForOn: Boolean
         get() = prefs.getBoolean(USE_FOR_ON, false)
         set(value) = prefs.edit { putBoolean(USE_FOR_ON, value) }

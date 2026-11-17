@@ -113,6 +113,7 @@ class MainActivity : AppCompatActivity() {
         setupOrientation()
 
         window.addFlags(FLAG_LAYOUT_NO_LIMITS)
+        if (savedInstanceState == null) openLockdownIfAsked(intent)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             profileReceiver = object : BroadcastReceiver() {
@@ -145,6 +146,8 @@ class MainActivity : AppCompatActivity() {
         }
         // Backs up the day's usage, which doesn't trigger a backup itself
         BackupManager.syncIfStale(this)
+        app.olauncher.helper.Limits.refresh(this)
+        app.olauncher.helper.LockdownSystem.sync(this)
     }
 
     override fun onStop() {
@@ -161,11 +164,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onNewIntent(intent: Intent?) {
+        if (openLockdownIfAsked(intent)) return super.onNewIntent(intent)
         val alreadyHome = navController.currentDestination?.id == R.id.mainFragment
         backToHomeScreen()
         if (alreadyHome && isResumed && prefs.homeButtonShowRecents)
             viewModel.showRecentApps.call()
         super.onNewIntent(intent)
+    }
+
+    /** From lockdown's notification or tile: opens the Lockdown page, at "Lock for a set time" if asked */
+    private fun openLockdownIfAsked(intent: Intent?): Boolean {
+        if (intent?.getBooleanExtra(app.olauncher.helper.LockdownSystem.EXTRA_OPEN, false) != true) return false
+        val lockFor = intent.getBooleanExtra(app.olauncher.helper.LockdownSystem.EXTRA_LOCK_FOR, false)
+        intent.removeExtra(app.olauncher.helper.LockdownSystem.EXTRA_OPEN)
+        if (navController.currentDestination?.id != R.id.mainFragment) navController.popBackStack(R.id.mainFragment, false)
+        runCatching {
+            navController.navigate(R.id.lockdownFragment, androidx.core.os.bundleOf(app.olauncher.ui.LockdownFragment.LOCK_FOR to lockFor))
+        }
+        return true
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

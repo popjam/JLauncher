@@ -129,6 +129,16 @@
             android:orientation="horizontal"
             android:visibility="gone" />
 
+        <!-- The supplements to change, in place of the faces, after "Changed" -->
+        <LinearLayout
+            android:id="@+id/moodPromptList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
         <!-- Thoughts, and a voice note to write them out instead -->
         <LinearLayout
             android:layout_width="match_parent"

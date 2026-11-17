@@ -34,6 +34,7 @@ object StatIcons {
             stat.kind == StatKind.WORK -> BRIEFCASE
             stat.kind == StatKind.WEATHER -> SUN
             stat.kind == StatKind.PEOPLE -> CHAT
+            stat.kind == StatKind.LOCKDOWN -> LOCK
             "energy" in name -> BOLT
             "anxi" in name || "stress" in name -> ANXIETY
             "ocd" in name || "compuls" in name -> LOOP
@@ -92,6 +93,19 @@ object StatIcons {
 
     private fun icon(vararg rows: String) = rows.joinToString("\n")
 
+    val LOCK = icon(
+        "...XXXXX...",
+        "..XX...XX..",
+        "..X.....X..",
+        "..X.....X..",
+        ".XXXXXXXXX.",
+        ".XXXXXXXXX.",
+        ".XXXX.XXXX.",
+        ".XXXX.XXXX.",
+        ".XXXXXXXXX.",
+        ".XXXXXXXXX.",
+        "...........",
+    )
     val GEAR = icon(
         ".....X.....",
         "..X.XXX.X..",

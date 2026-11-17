@@ -75,6 +75,8 @@ class LockdownTest {
         // Friday night, then nothing until Monday night
         assertEquals(at(23, 22), evenings.nextStart(at(20, 23)))
         assertNull(Schedule(0, 0, 60).nextStart(at(16, 0)))
+        // An all-day schedule saved as 22:00–22:00 starts at midnight
+        assertEquals(at(22, 0), Schedule(1 shl 6, 22 * 60, 22 * 60).nextStart(at(20, 12)))
     }
 
     @Test

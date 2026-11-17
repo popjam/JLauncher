@@ -22,6 +22,7 @@ import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Lockdown
+import app.olauncher.helper.MyAccessibilityService
 import app.olauncher.helper.Music
 import app.olauncher.helper.DeviceTime
 import app.olauncher.helper.PhoneHabits
@@ -95,12 +96,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectedApp(appModel: AppModel, flag: Int) {
         if (appModel is AppModel.PrivateSpaceHeader) return
         val launching = flag == Constants.FLAG_LAUNCH_APP || flag == Constants.FLAG_HIDDEN_APPS
-        if (launching && Lockdown.isBlocked(appContext, appModel.appPackage, prefs)) {
-            appContext.showToast(app.olauncher.ui.LockdownGate.blockedMessage(appContext, appModel.appLabel))
+        if (launching) Lockdown.blockFor(appContext, appModel.appPackage, opening = true, prefs)?.let { block ->
+            // The block screen, over the launcher; without the service, a line saying why
+            if (!MyAccessibilityService.showBlock(appModel.appLabel, block, appModel.appPackage))
+                appContext.showToast(appModel.appLabel + ": " + app.olauncher.ui.LockdownGate.reasonText(appContext, block))
             return
         }
         if (launching
-            && AppPause.needsGate(prefs, appModel.appPackage)
+            && AppPause.needsGate(appContext, prefs, appModel.appPackage)
         ) {
             pausedApp = appModel
             // Posted, so it runs after callers like the app drawer have gone back to the home screen
@@ -446,7 +449,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getAppList(includeHiddenApps: Boolean = false) {
         viewModelScope.launch {
             val apps = getAppsList(appContext, prefs, includeRegularApps = true, includeHiddenApps)
-            appList.value = apps
+            // With lockdown's allowlist, only the allowed apps are listed
+            appList.value = apps.filterNot { it is AppModel.App && Lockdown.hides(appContext, it.appPackage, prefs) }
         }
         getPrivateSpaceAppList()
     }

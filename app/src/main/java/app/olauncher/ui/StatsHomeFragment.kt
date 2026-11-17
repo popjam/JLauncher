@@ -766,6 +766,7 @@ class StatsHomeFragment : CardPageFragment() {
             }
         }
         list.forEach { phrase(it) }
+        supplementComparables(list)
         val steps = app.olauncher.helper.Steps.days(context)
         if (steps.isNotEmpty()) list.add(Measured(STEPS_KEY, getString(R.string.steps_title), 0xFF4DB6AC.toInt(), StatIcons.STEPS, ValueKind.AMOUNT,
             steps.mapValues { it.value.toFloat() }, { v -> if (v >= 1000) String.format(Locale.getDefault(), "%.1fk", v / 1000) else Math.round(v).toString() }).also {
@@ -776,6 +777,64 @@ class StatsHomeFragment : CardPageFragment() {
     }
 
     private fun percentText(v: Float) = "${Math.round(v * 100)}%"
+
+    /** Each supplement taken or not (from its first start), and its amount once there's been more than one */
+    private fun supplementComparables(list: MutableList<Measured>) {
+        val today = LocalDate.now()
+        data.supplements.forEach { s ->
+            val (taken, not) = app.olauncher.data.Supplements.takenAndNot(s, today)
+            if (taken.isEmpty()) return@forEach
+            val key = SUPPLEMENT_KEY + s.id
+            list.add(Measured(key, s.name, s.color, StatIcons.TABLET, ValueKind.YES_NO, taken.associateWith { 1f } + not.associateWith { 0f },
+                ::percentText, getString(R.string.compare_not_taken) to getString(R.string.compare_taken_short)).also { m ->
+                m.cond = { label, short ->
+                    getString(if (label == m.yesNo.second) R.string.cond_medicine_yes else R.string.cond_medicine_no, s.name)
+                        .let { if (short) getString(R.string.cond_short_on, it) else it }
+                }
+            })
+            val amounts = taken.associateWith { s.amountOn(it) ?: 0f }
+            if (amounts.values.distinct().size >= 2) list.add(Measured("$key:amount", getString(R.string.compare_supplement_amount, s.name), s.color,
+                StatIcons.TABLET, ValueKind.AMOUNT, amounts, { v -> SupplementDialog.amountText(s, v) }).also { m ->
+                m.cond = { label, short -> if (short) getString(R.string.cond_short_on, label) else getString(R.string.cond_dose, label, s.name) }
+                m.outcome = { amount, up -> getString(R.string.out_dose, amount, getString(if (up) R.string.word_more else R.string.word_less), s.name) }
+                m.says = { high -> getString(if (high) R.string.ins_supplement_more else R.string.ins_supplement_less, s.name) }
+            })
+        }
+    }
+
+    /** Since starting (or starting again) a supplement, how each rated stat has gone against the weeks before */
+    private fun supplementStartInsights(outcomes: List<Measured>): List<Insight> {
+        val found = mutableListOf<Insight>()
+        val last = lastDay()
+        val dateFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+        data.supplements.forEach { s ->
+            // The latest start that's had time to show
+            val index = s.changes.indices.lastOrNull { i ->
+                val c = s.changes[i]
+                !c.stopped && (i == 0 || s.changes[i - 1].stopped) && c.from <= last
+            } ?: return@forEach
+            val start = s.changes[index].from
+            val stop = s.changes.drop(index + 1).firstOrNull { it.stopped }?.from?.minusDays(1)
+            val end = minOf(listOfNotNull(last, stop).min(), start.plusDays(DOSE_WINDOW - 1))
+            val from = start.minusDays(DOSE_WINDOW)
+            outcomes.forEach { y ->
+                val was = y.values.filterKeys { it >= from && it < start }.values.toList()
+                val now = y.values.filterKeys { it >= start && it <= end }.values.toList()
+                if (was.size < INSIGHT_DAYS || now.size < INSIGHT_DAYS) return@forEach
+                val strength = strengthOf(now, was)
+                if (strength < INSIGHT_STRENGTH) return@forEach
+                val text = getString(R.string.ins_supplement_started, s.name, start.format(dateFormat), feel(y, average(now) > average(was)))
+                val detail = getString(R.string.ins_detail_before, y.name, y.format(average(now)), y.format(average(was)), now.size, was.size)
+                val id = s.id
+                found += Insight(StatIcons.TABLET, s.color, strength, text, detail, "start:" + s.id, onTap = { openSupplement(id) })
+            }
+        }
+        return found
+    }
+
+    private fun openSupplement(id: String) {
+        runCatching { findNavController().navigate(R.id.supplementsFragment, androidx.core.os.bundleOf(SupplementsFragment.SELECTED to id)) }
+    }
 
     /** How [m] reads in a sentence, by what it is: the days in its groups, and what a difference in it means */
     private fun phrase(m: Measured) {
@@ -1002,6 +1061,7 @@ class StatsHomeFragment : CardPageFragment() {
     private fun capital(text: String) = text.replaceFirstChar { it.uppercase() }
 
     private fun openIfStat(id: String?) {
+        if (id != null && id.startsWith(SUPPLEMENT_KEY)) return openSupplement(id.removePrefix(SUPPLEMENT_KEY).substringBefore(':'))
         stats.firstOrNull { it.id == id }?.let { openStat(it.id) }
     }
 
@@ -1030,6 +1090,7 @@ class StatsHomeFragment : CardPageFragment() {
         safely { pairInsights(comparables, outcomes, extraMeasures(context).map { finished(it) }) }
         safely { doseChangeInsights(outcomes) }
         safely { missedDoseInsights(comparables, outcomes) }
+        safely { supplementStartInsights(outcomes) }
         safely { lowDayInsights(context, comparables) }
         safely { weekdayInsights(outcomes) }
         safely { stretchInsights(outcomes) }
@@ -1665,6 +1726,9 @@ class StatsHomeFragment : CardPageFragment() {
         /** A dose counts as changed once it's been kept this many days; before and after are looked at this far */
         private const val DOSE_SETTLED = 7
         private const val DOSE_WINDOW = 42L
+
+        /** Compare's key for a supplement: this, then its id */
+        private const val SUPPLEMENT_KEY = "supplement."
 
         /** Days logged in each fortnight, and in a week for it to count towards a record, and weeks to beat */
         private const val STRETCH_DAYS = 7

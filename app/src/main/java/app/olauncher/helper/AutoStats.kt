@@ -19,6 +19,7 @@ object AutoStats {
     const val WORK = "work"
     const val WEATHER = "weather"
     const val PEOPLE = "people"
+    const val LOCKDOWN = "lockdown"
 
     /** Which of these [id] is ([SLEEP], [MUSIC] and so on), or null for a stat filled in by hand. */
     fun keyOf(context: Context, id: String): String? =

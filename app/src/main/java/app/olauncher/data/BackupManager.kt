@@ -43,6 +43,7 @@ object BackupManager {
         "LOCKDOWN_WAIT_REQUESTED_AT",
         "LOCKDOWN_WAIT_REQUESTED_ELAPSED",
         "LOCKDOWN_WAIT_BOOT",
+        "LOCKDOWN_GRAYSCALE_APPLIED",     // whether this phone's grayscale was turned on by lockdown
         "HOME_PAGE",                    // page currently shown on the home screen
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
         "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone

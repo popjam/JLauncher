@@ -17,7 +17,13 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import app.olauncher.R
 import app.olauncher.data.MoodStore
+import app.olauncher.data.Supplements
 import app.olauncher.ui.PixelFaceView
+import app.olauncher.ui.SupplementDialog
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
+import android.view.ViewGroup
+import java.time.LocalDate
 
 object MoodPrompt {
 
@@ -36,6 +42,7 @@ object MoodPrompt {
         data: MoodStore.Data,
         today: MoodStore.Day?,
         yesterday: Boolean = false,
+        date: LocalDate? = null,
         onVoice: ((addText: (String) -> Unit) -> Unit)? = null,
         onResult: (faces: Map<String, Int>?, note: String?) -> Unit,
     ) {
@@ -50,46 +57,144 @@ object MoodPrompt {
         val prev = root.findViewById<View>(R.id.moodPromptPrev)
         val next = root.findViewById<View>(R.id.moodPromptNext)
 
-        val stats = context.dailyStats(data)
+        val day = date ?: if (yesterday) LocalDate.now().minusDays(1) else LocalDate.now()
+        val store = MoodStore(context)
+        val list = root.findViewById<LinearLayout>(R.id.moodPromptList)
         val answers = mutableMapOf<String, Int>()
-        stats.forEach { stat -> today?.face(stat.id)?.let { answers[stat.id] = it } }
-        var index = stats.indexOfFirst { it.id !in answers }.coerceAtLeast(0)
+        // The stats with faces, then supplements when any are being taken that day: whether anything changed
+        val faceStats = context.dailyStats(data) + listOfNotNull(supplementStep(context).takeIf {
+            Supplements.asked(data.supplements, day) || today?.supplementsChanged != null
+        })
+        val changesStep = StatInfo(MoodStore.SUPPLEMENT_CHANGES, context.getString(R.string.supplements), SUPPLEMENT_COLOR, 2,
+            context.getString(R.string.supplement_what_changed))
+        // "Changed" adds a step after it, listing them to change
+        fun steps() = if (answers[MoodStore.SUPPLEMENTS] == MoodStore.HAPPY) faceStats + changesStep else faceStats
+        fun answered(step: StatInfo) = step.id == MoodStore.SUPPLEMENT_CHANGES || step.id in answers
+        faceStats.forEach { stat -> today?.face(stat.id)?.let { answers[stat.id] = it } }
+        today?.supplementsChanged?.let { answers[MoodStore.SUPPLEMENTS] = if (it) MoodStore.HAPPY else MoodStore.SAD }
+        var index = faceStats.indexOfFirst { it.id !in answers }.coerceAtLeast(0)
 
-        val multiple = stats.size > 1
-        val anyLabels = stats.any { it.labels.isNotEmpty() }
-        labelRow.isVisible = anyLabels
-        nav.isVisible = multiple
+        val anyLabels = faceStats.any { it.labels.isNotEmpty() }
         val title = root.findViewById<TextView>(R.id.moodPromptTitle)
+        fun multiple() = steps().size > 1
         val defaultTitle = context.getString(
             when {
                 yesterday -> R.string.how_was_yesterday
-                multiple -> R.string.how_was_today
+                faceStats.size > 1 -> R.string.how_was_today
                 else -> R.string.how_are_you_feeling
             }
         )
-        row.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = (if (multiple) 8 else 24).dpToPx() }
+        row.updateLayoutParams<LinearLayout.LayoutParams> { topMargin = (if (faceStats.size > 1) 8 else 24).dpToPx() }
 
         lateinit var onFace: (statId: String, face: Int) -> Unit
         var advance: Runnable? = null
+        lateinit var render: () -> Unit
 
-        fun nextUnanswered(): Int? = (1..stats.size).map { (index + it) % stats.size }.firstOrNull { stats[it].id !in answers }
+        fun nextUnanswered(): Int? {
+            val steps = steps()
+            return (1..steps.size).map { (index + it) % steps.size }.firstOrNull { !answered(steps[it]) }
+        }
 
-        fun render() {
-            val stat = stats[index]
+        /** The supplements taken that day (and any stopped from it, to undo): change the amount, stop, or add one */
+        fun fillList() {
+            list.removeAllViews()
+            val ink = note.currentTextColor
+            fun text(size: Float, alpha: Float, value: String) = TextView(context, null, 0, R.style.TextSmall).apply {
+                textSize = size
+                setTextColor(ink)
+                this.alpha = alpha
+                text = value
+            }
+            val supplements = store.load().supplements.filter { s -> s.isActive(day) || s.changes.any { it.from == day && it.stopped } }
+            supplements.forEach { s ->
+                val stopped = !s.isActive(day)
+                val line = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
+                }
+                line.addView(View(context).apply {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(s.color)
+                    }
+                    alpha = if (stopped) 0.4f else 1f
+                }, LinearLayout.LayoutParams(10.dpToPx(), 10.dpToPx()).apply { marginEnd = 12.dpToPx() })
+                line.addView(text(15.5f, if (stopped) 0.5f else 1f, s.name).apply {
+                    isSingleLine = true
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                if (stopped) {
+                    line.addView(text(13.5f, 0.6f, context.getString(R.string.supplement_stopped) + " · "))
+                    line.addView(text(13.5f, 1f, context.getString(R.string.supplement_undo)).apply {
+                        setPadding(4.dpToPx(), 6.dpToPx(), 4.dpToPx(), 6.dpToPx())
+                        setOnClickListener {
+                            store.editSupplement(s.id) { Supplements.undoStop(it, day) }
+                            render()
+                        }
+                    })
+                } else {
+                    line.addView(text(13.5f, 1f, SupplementDialog.amountText(s, s.changeOn(day)!!.amount)).apply {
+                        setBackgroundResource(R.drawable.bg_stat_chip)
+                        setPadding(12.dpToPx(), 5.dpToPx(), 12.dpToPx(), 5.dpToPx())
+                        setOnClickListener { SupplementDialog.askAmount(context, store, s, day) { render() } }
+                    })
+                    line.addView(text(13.5f, 0.6f, context.getString(R.string.supplement_stop)).apply {
+                        setPadding(16.dpToPx(), 6.dpToPx(), 4.dpToPx(), 6.dpToPx())
+                        setOnClickListener {
+                            store.editSupplement(s.id) { Supplements.stop(it, day) }
+                            render()
+                        }
+                    })
+                }
+                list.addView(line)
+            }
+            list.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 8.dpToPx(), 0, 8.dpToPx())
+                addView(text(16f, 0.6f, "+").apply { setPadding(0, 0, 12.dpToPx(), 0) })
+                addView(text(15.5f, 0.7f, context.getString(R.string.supplement_add)))
+                setOnClickListener { SupplementDialog.show(context, store, null, day) { render() } }
+            })
+        }
+
+        render = render@{
+            val steps = steps()
+            index = index.coerceIn(0, steps.lastIndex)
+            val stat = steps[index]
             val selected = answers[stat.id]
+            nav.isVisible = multiple()
             title.text = stat.question.ifEmpty { defaultTitle }
-            label.text = context.getString(R.string.stat_step, stat.name, index + 1, stats.size)
+            label.text = context.getString(R.string.stat_step, stat.name, index + 1, steps.size)
             label.setStatDot(stat.color)
+            listOf(prev, next).forEach {
+                it.isEnabled = multiple()
+                it.alpha = 0.6f
+            }
+            val done = faceStats.all { it.id in answers }
+            confirm.isEnabled = done
+            confirm.alpha = if (done) 1f else 0.3f
 
+            val isList = stat.id == MoodStore.SUPPLEMENT_CHANGES
+            row.isVisible = !isList
+            labelRow.isVisible = anyLabels && !isList
+            list.isVisible = isList
+            if (isList) {
+                row.tag = null
+                fillList()
+                return@render
+            }
             val faces = stat.faces
             if (row.childCount != faces.size || row.tag != stat.id) {
                 row.removeAllViews()
                 row.tag = stat.id
-                faces.forEach { face ->
+                faces.forEachIndexed { place, face ->
                     row.addView(PixelFaceView(context).apply {
-                        mood = face
+                        // Supplements' "Same as usual" is a plain face rather than a sad one
+                        mood = if (stat.id == MoodStore.SUPPLEMENTS && face == MoodStore.SAD) MoodStore.NEUTRAL else face
                         color = stat.faceColor(context, face)
-                        contentDescription = names[face]
+                        contentDescription = stat.labels.getOrNull(place)?.takeIf { it.isNotEmpty() } ?: names[face]
                         setPadding(6.dpToPx())
                         isClickable = true
                         isFocusable = true
@@ -100,13 +205,6 @@ object MoodPrompt {
             val alphas = faces.map { face -> if (selected == null || selected == face) 1f else 0.3f }
             alphas.forEachIndexed { i, alpha -> row.getChildAt(i).alpha = alpha }
             if (anyLabels) bindFaceLabels(labelRow, stat.labels.ifEmpty { List(faces.size) { "" } }, alphas)
-            listOf(prev, next).forEach {
-                it.isEnabled = multiple
-                it.alpha = 0.6f
-            }
-            val done = stats.all { it.id in answers }
-            confirm.isEnabled = done
-            confirm.alpha = if (done) 1f else 0.3f
         }
 
         fun finish(faces: Map<String, Int>?, text: String?) {
@@ -119,19 +217,22 @@ object MoodPrompt {
         onFace = { statId, face ->
             answers[statId] = face
             render()
-            nextUnanswered()?.let { target ->
+            // "Changed" goes on to the list of them; anything else to the next one not answered
+            val target = if (statId == MoodStore.SUPPLEMENTS && face == MoodStore.HAPPY) steps().indexOfFirst { it.id == MoodStore.SUPPLEMENT_CHANGES }
+            else nextUnanswered()
+            target?.takeIf { it >= 0 }?.let { to ->
                 advance?.let { row.removeCallbacks(it) }
                 advance = Runnable {
                     // Skip if another stat was picked in the meantime
-                    if (stats[index].id == statId) {
-                        index = target
+                    if (steps().getOrNull(index)?.id == statId) {
+                        index = to
                         render()
                     }
                 }.also { row.postDelayed(it, ADVANCE_DELAY_MS) }
             }
         }
-        prev.setOnClickListener { index = (index - 1 + stats.size) % stats.size; render() }
-        next.setOnClickListener { index = (index + 1) % stats.size; render() }
+        prev.setOnClickListener { val n = steps().size; index = (index - 1 + n) % n; render() }
+        next.setOnClickListener { val n = steps().size; index = (index + 1) % n; render() }
 
         // The day's note so far, so answering keeps it rather than replacing it
         note.setText(today?.note.orEmpty())
@@ -147,12 +248,23 @@ object MoodPrompt {
             }
         }
         liftAboveKeyboard(root, note)
-        confirm.setOnClickListener { if (stats.all { it.id in answers }) finish(answers.toMap(), note.text?.toString()) }
+        confirm.setOnClickListener { if (faceStats.all { it.id in answers }) finish(answers.toMap(), note.text?.toString()) }
         root.findViewById<View>(R.id.moodPromptClose).setOnClickListener { finish(null, null) }
         render()
     }
 
     private fun View.setPadding(px: Int) = setPadding(px, px, px, px)
+
+    /** Supplements' purple, like a medicine's */
+    private const val SUPPLEMENT_COLOR = 0xFF9575CD.toInt()
+
+    /** The check-in's supplements question: two faces, the same as usual or changed */
+    private fun supplementStep(context: Context) = StatInfo(
+        MoodStore.SUPPLEMENTS, context.getString(R.string.supplements), SUPPLEMENT_COLOR, 2,
+        context.getString(R.string.supplement_checkin_question),
+        listOf(context.getString(R.string.supplement_checkin_same), context.getString(R.string.supplement_checkin_changed)),
+        medicine = true, kind = StatKind.MEDICINE,
+    )
 
     /**
      * While the keyboard is up for the thoughts box, the prompt slides up so the box (and Confirm, if

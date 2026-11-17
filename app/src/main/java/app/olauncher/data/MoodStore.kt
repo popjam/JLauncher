@@ -33,10 +33,12 @@ class MoodStore(context: Context) {
         val topAppMs: Long? = null,
         val weatherCode: Int? = null,
         val deviceMs: Map<String, Long> = emptyMap(),
+        /** The check-in's supplements answer: false for the same as usual, true for changed; null when not asked */
+        val supplementsChanged: Boolean? = null,
     ) {
         val isEmpty
             get() = mood == null && usageMs == null && note == null && values.isEmpty() && topApp == null && weatherCode == null &&
-                deviceMs.isEmpty()
+                deviceMs.isEmpty() && supplementsChanged == null
 
         /** Screen time: the phone's and every other device's */
         val totalUsageMs: Long?
@@ -104,6 +106,8 @@ class MoodStore(context: Context) {
         var catchUpEnabled: Boolean = true,
         var catchUpMinutes: Int = DEFAULT_CATCH_UP_MINUTES,
         var backupFolder: String = "",
+        /** Supplements, in the order added; not stats, so not in [stats] */
+        val supplements: MutableList<Supplement> = mutableListOf(),
     ) {
         fun stat(id: String): Stat? = stats.firstOrNull { it.id == id }
 
@@ -122,10 +126,13 @@ class MoodStore(context: Context) {
         /** Custom stats asked in the daily prompt, after the mood. */
         val dailyStats get() = stats.filter { it.daily }
 
-        /** A day is done when its mood and every daily stat are in. */
+        fun supplement(id: String): Supplement? = supplements.firstOrNull { it.id == id }
+
+        /** A day is done when its mood and every daily stat are in, and the supplements question if it's asked. */
         fun isComplete(date: LocalDate): Boolean {
             val day = days[date.toString()] ?: return false
-            return day.mood != null && dailyStats.all { day.values[it.id] != null }
+            return day.mood != null && dailyStats.all { day.values[it.id] != null } &&
+                (day.supplementsChanged != null || !Supplements.asked(supplements, date))
         }
     }
 
@@ -402,19 +409,57 @@ class MoodStore(context: Context) {
      * Saves the prompt's answers for [date]. [faces] maps [MOOD] and the daily stat ids to faces. Null
      * means the prompt was dismissed, so it comes back after [PROMPT_SNOOZE_MINUTES].
      */
-    fun answerPrompt(date: LocalDate, faces: Map<String, Int>?, note: String? = null) = update { data ->
+    fun answerPrompt(date: LocalDate, faces: Map<String, Int>?, note: String? = null, supplementsChanged: Boolean? = null) = update { data ->
         if (faces == null) {
             data.promptSnoozedUntil = LocalDateTime.now().plusMinutes(PROMPT_SNOOZE_MINUTES).withNano(0).toString()
         } else {
+            // The supplements answer is kept on its own, not as a stat
+            val changed = supplementsChanged ?: faces[SUPPLEMENTS]?.let { it == HAPPY }
             data.editDay(date.toString()) { day ->
                 day.copy(
                     mood = faces[MOOD] ?: day.mood,
                     note = sanitizeNote(note) ?: day.note,
-                    values = day.values + (faces - MOOD),
+                    values = day.values + (faces - MOOD - SUPPLEMENTS - SUPPLEMENT_CHANGES),
+                    supplementsChanged = changed ?: day.supplementsChanged,
                 )
             }
         }
     }
+
+    // --- Supplements ---
+
+    /** A new supplement, taking [amount] on [schedule] from [from] */
+    fun addSupplement(name: String, unit: String, amount: Float, schedule: Supplement.Schedule, from: LocalDate): Supplement? {
+        var added: Supplement? = null
+        update { data ->
+            val used = data.supplements.map { it.color }
+            val color = SUPPLEMENT_COLORS.firstOrNull { it !in used } ?: SUPPLEMENT_COLORS[used.size % SUPPLEMENT_COLORS.size]
+            added = Supplement("p" + System.currentTimeMillis().toString(36), sanitizeName(name), sanitizeUnit(unit), color,
+                listOf(Supplement.Change(from, amount, schedule))).also { data.supplements.add(it) }
+        }
+        return added
+    }
+
+    /** Changes the supplement [id] with [block], if it's there */
+    fun editSupplement(id: String, block: (Supplement) -> Supplement) = update { data ->
+        val index = data.supplements.indexOfFirst { it.id == id }
+        if (index >= 0) data.supplements[index] = block(data.supplements[index])
+    }
+
+    /**
+     * A supplement added or started again from [from]: days since then already checked in count it as
+     * a change, so the check-in isn't asked again for them.
+     */
+    fun markSupplementsChanged(from: LocalDate, today: LocalDate = LocalDate.now()) = update { data ->
+        data.days.keys.toList().forEach { key ->
+            val date = runCatching { LocalDate.parse(key) }.getOrNull() ?: return@forEach
+            val day = data.days[key] ?: return@forEach
+            if (date in from..today && day.mood != null && day.supplementsChanged == null) data.days[key] = day.copy(supplementsChanged = true)
+        }
+    }
+
+    /** Removes the supplement and everything about it */
+    fun deleteSupplement(id: String) = update { data -> data.supplements.removeAll { it.id == id } }
 
     // --- Backup ---
 
@@ -453,7 +498,13 @@ class MoodStore(context: Context) {
                     (local?.deviceMs.orEmpty().keys + day.deviceMs.keys).associateWith { key ->
                         maxOf(local?.deviceMs?.get(key) ?: 0L, day.deviceMs[key] ?: 0L)
                     },
+                    day.supplementsChanged ?: local?.supplementsChanged,
                 )
+            }
+            // Supplements from the backup win, like stats
+            backup.supplements.forEach { supplement ->
+                val index = data.supplements.indexOfFirst { it.id == supplement.id }
+                if (index >= 0) data.supplements[index] = supplement else data.supplements.add(supplement)
             }
             if (json.has("moodColor")) data.moodColor = backup.moodColor
             if (json.has("usageColor")) data.usageColor = backup.usageColor
@@ -511,6 +562,7 @@ class MoodStore(context: Context) {
                 })
             }
         })
+        if (data.supplements.isNotEmpty()) put("supplements", JSONArray().apply { data.supplements.forEach { put(supplementJson(it)) } })
         put("days", JSONObject().apply {
             data.days.forEach { (key, day) ->
                 put(key, JSONObject().apply {
@@ -521,6 +573,7 @@ class MoodStore(context: Context) {
                     day.topAppMs?.let { put("topAppMs", it) }
                     day.weatherCode?.let { put("weather", it) }
                     if (day.deviceMs.isNotEmpty()) put("devices", JSONObject().apply { day.deviceMs.forEach { (key, ms) -> put(key, ms) } })
+                    day.supplementsChanged?.let { put("supplements", it) }
                     if (day.values.isNotEmpty()) put("values", JSONObject().apply { day.values.forEach { (id, face) -> put(id, face) } })
                 })
             }
@@ -546,7 +599,7 @@ class MoodStore(context: Context) {
         json.optJSONArray("stats")?.let { stats ->
             for (i in 0 until stats.length()) {
                 val stat = stats.optJSONObject(i) ?: continue
-                val id = stat.optString("id").takeIf { it.isNotEmpty() && it != MOOD && it != USAGE && it != ALL } ?: continue
+                val id = stat.optString("id").takeIf { it.isNotEmpty() && it != MOOD && it != USAGE && it != ALL && it != SUPPLEMENTS && it != SUPPLEMENT_CHANGES } ?: continue
                 if (data.stat(id) != null) continue
                 val scale = stat.optInt("scale", 5).takeIf { it in SCALES } ?: 5
                 val name = sanitizeName(stat.optString("name")).ifEmpty { "?" }
@@ -575,6 +628,12 @@ class MoodStore(context: Context) {
             data.comparedInGraph.clear()
             for (i in 0 until compared.length()) compared.optString(i).takeIf { it.isNotEmpty() }?.let { data.comparedInGraph.add(it) }
         }
+        json.optJSONArray("supplements")?.let { list ->
+            for (i in 0 until list.length()) {
+                val supplement = list.optJSONObject(i)?.let { runCatching { supplementFromJson(it) }.getOrNull() } ?: continue
+                if (data.supplement(supplement.id) == null) data.supplements.add(supplement)
+            }
+        }
         val days = json.optJSONObject("days") ?: return data
         days.keys().forEach { key ->
             val day = days.optJSONObject(key) ?: return@forEach
@@ -591,10 +650,60 @@ class MoodStore(context: Context) {
                 topAppMs = if (day.has("topAppMs")) day.getLong("topAppMs") else null,
                 weatherCode = if (day.has("weather")) day.getInt("weather") else null,
                 deviceMs = day.optJSONObject("devices")?.let { d -> d.keys().asSequence().associateWith { d.getLong(it) } }.orEmpty(),
+                supplementsChanged = if (day.has("supplements")) day.optBoolean("supplements") else null,
             )
             if (!parsed.isEmpty) data.days[key] = parsed
         }
         return data
+    }
+
+    private fun supplementJson(s: Supplement) = JSONObject().apply {
+        put("id", s.id)
+        put("name", s.name)
+        put("unit", s.unit)
+        put("color", s.color)
+        put("changes", JSONArray().apply {
+            s.changes.forEach { c ->
+                put(JSONObject().apply {
+                    put("from", c.from.toString())
+                    put("amount", c.amount.toDouble())
+                    put("kind", c.schedule.kind.name)
+                    put("on", c.schedule.on)
+                    put("off", c.schedule.off)
+                    put("weekdays", JSONArray(c.schedule.weekdays.map { it.value }.sorted()))
+                    put("cycleStart", c.cycleStart.toString())
+                    if (c.stopped) put("stopped", true)
+                })
+            }
+        })
+        if (s.fixes.isNotEmpty()) put("fixes", JSONObject().apply { s.fixes.forEach { (date, taken) -> put(date.toString(), taken) } })
+    }
+
+    /** A supplement as saved; null when it hasn't an id or any changes that read */
+    private fun supplementFromJson(json: JSONObject): Supplement? {
+        val id = json.optString("id").takeIf { it.isNotEmpty() } ?: return null
+        val changes = mutableListOf<Supplement.Change>()
+        json.optJSONArray("changes")?.let { list ->
+            for (i in 0 until list.length()) {
+                val c = list.optJSONObject(i) ?: continue
+                val from = runCatching { LocalDate.parse(c.optString("from")) }.getOrNull() ?: continue
+                val amount = c.optDouble("amount", 0.0).toFloat().takeIf { it > 0f && it.isFinite() } ?: continue
+                val kind = runCatching { Supplement.Kind.valueOf(c.optString("kind")) }.getOrNull() ?: Supplement.Kind.DAILY
+                val weekdays = c.optJSONArray("weekdays")?.let { days ->
+                    (0 until days.length()).mapNotNull { j -> days.optInt(j).takeIf { it in 1..7 }?.let { java.time.DayOfWeek.of(it) } }.toSet()
+                }.orEmpty()
+                val schedule = Supplement.Schedule(kind, c.optInt("on", 1), c.optInt("off", 0), weekdays)
+                    .takeIf { it.isValid } ?: Supplement.Schedule(Supplement.Kind.DAILY)
+                val cycleStart = runCatching { LocalDate.parse(c.optString("cycleStart")) }.getOrNull() ?: from
+                changes.add(Supplement.Change(from, amount, schedule, cycleStart, c.optBoolean("stopped")))
+            }
+        }
+        if (changes.isEmpty()) return null
+        val fixes = json.optJSONObject("fixes")?.let { f ->
+            f.keys().asSequence().mapNotNull { key -> runCatching { LocalDate.parse(key) }.getOrNull()?.let { it to f.optBoolean(key) } }.toMap()
+        }.orEmpty()
+        return Supplement(id, sanitizeName(json.optString("name")).ifEmpty { "?" }, sanitizeUnit(json.optString("unit")),
+            json.optInt("color", SUPPLEMENT_COLORS[0]), changes.distinctBy { it.from }.sortedBy { it.from }, fixes)
     }
 
     companion object {
@@ -624,6 +733,10 @@ class MoodStore(context: Context) {
         const val MOOD = "mood"
         const val USAGE = "usage"
 
+        /** The check-in's supplements question and the list after "Changed": steps, never stats */
+        const val SUPPLEMENTS = "supplements"
+        const val SUPPLEMENT_CHANGES = "supplementChanges"
+
         val SCALES = listOf(2, 3, 5)
         const val DEFAULT_MOOD_COLOR = 0xFFF2B33D.toInt()
         const val DEFAULT_USAGE_COLOR = 0xFFB388FF.toInt()
@@ -633,6 +746,14 @@ class MoodStore(context: Context) {
             0xFF5B8DEF.toInt(), 0xFF4FC3A1.toInt(), 0xFFE05FA8.toInt(),
             0xFF4DD0E1.toInt(), 0xFFFF8A65.toInt(), 0xFFAED581.toInt(),
         )
+
+        /** New supplements take the next of these */
+        val SUPPLEMENT_COLORS = listOf(0xFFFFB74D, 0xFF4DB6AC, 0xFF64B5F6, 0xFFAED581, 0xFFF06292, 0xFF9575CD).map { it.toInt() }
+        const val MAX_UNIT_LENGTH = 12
+
+        /** One line, capped at [MAX_UNIT_LENGTH]. */
+        fun sanitizeUnit(unit: String?): String =
+            sanitizeNote(unit?.replace('\n', ' '))?.take(MAX_UNIT_LENGTH)?.trim().orEmpty()
 
         private val LOCK = Any()
 
