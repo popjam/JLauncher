@@ -287,10 +287,18 @@ class SettingsFragment : CardPageFragment() {
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_FILTER
         background = GradientDrawable().apply {
             cornerRadius = 22.dpToPx().toFloat()
-            setColor(faint(18))
+            // Solid like the sections, so it reads over a light wallpaper
+            setColor(panelColor)
         }
         setPadding(18.dpToPx(), 11.dpToPx(), 18.dpToPx(), 11.dpToPx())
         setText(query)
+        // Built without the usual text box style, so it has to be told it can take focus from a tap
+        isFocusable = true
+        isFocusableInTouchMode = true
+        setOnClickListener {
+            requestFocus()
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(this, 0)
+        }
         addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -357,11 +365,12 @@ class SettingsFragment : CardPageFragment() {
                 marginStart = if (l == 1) 6.dpToPx() else 12.dpToPx()
                 if (l == level) marginEnd = 12.dpToPx()
             })
-            addView(card.textView(if (level == 0) 15.5f else 14.5f, if (level == 0) 245 else 200).apply {
+            addView(card.textView(if (level == 0) 16f else 15f, if (level == 0) 255 else 230).apply {
                 text = title
-                setPadding(0, 11.dpToPx(), 0, 11.dpToPx())
+                if (level == 0) typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(card.textView(14f, 150).apply {
+            if (value != null) addView(card.textView(15f, 215).apply {
                 text = value
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -410,15 +419,34 @@ class SettingsFragment : CardPageFragment() {
         }
     }
 
+    /** Whether the page is light text on dark */
+    private val darkPage get() = androidx.core.graphics.ColorUtils.calculateLuminance(ink) > 0.5
+
+    /** The solid colour behind each section and the search box */
+    private val panelColor get() = if (darkPage) 0xFF151716.toInt() else 0xFFF4F5F4.toInt()
+
     private fun Card.body(vararg rows: View?) {
         scene.visibility = View.GONE
-        // The section's name in small spaced capitals, so it reads as a heading over its settings rather than one of them
+        // A solid panel, so the wallpaper doesn't show through the settings
+        root.background = GradientDrawable().apply {
+            cornerRadius = 20.dpToPx().toFloat()
+            setColor(panelColor)
+        }
+        // The section's name in small spaced capitals and in colour, so it reads as a heading over its settings
         titleView.textSize = 12.5f
         titleView.isAllCaps = true
         titleView.letterSpacing = 0.12f
         titleView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
-        titleView.setTextColor(faint(140))
-        val list = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL }
+        titleView.setTextColor(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt())
+        val list = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            // A thin line between settings
+            dividerDrawable = GradientDrawable().apply {
+                setColor(faint(30))
+                setSize(0, 1.dpToPx())
+            }
+            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+        }
         val shown = rows.filterNotNull()
         shown.forEach { list.addView(it) }
         root.addView(list, root.indexOfChild(scene))
