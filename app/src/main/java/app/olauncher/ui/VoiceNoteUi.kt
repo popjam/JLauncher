@@ -26,6 +26,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import app.olauncher.R
+import app.olauncher.helper.Dictation
 import app.olauncher.helper.VoiceNotes
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
@@ -36,28 +37,37 @@ import java.time.LocalDate
 
 const val MIC_REQUEST = 41
 
+/** The permissions a recording needs that aren't given yet: the mic, and (Android 13 on) its notification */
+fun missingForRecording(context: Context): Array<String> = listOfNotNull(
+    Manifest.permission.RECORD_AUDIO.takeIf { !VoiceNotes.canRecord(context) },
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !app.olauncher.helper.DictationService.canNotify(context))
+        Manifest.permission.POST_NOTIFICATIONS else null,
+).toTypedArray()
+
 /** Records a note for [date] from a page; [onText] gets its words once they're in the note */
 fun Fragment.recordVoiceNote(date: LocalDate, onText: ((String) -> Unit)? = null) {
-    if (!VoiceNotes.canRecord(requireContext())) {
+    val missing = missingForRecording(requireContext())
+    if (missing.isNotEmpty()) {
         @Suppress("DEPRECATION")
-        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MIC_REQUEST)
-        Toast.makeText(requireContext(), R.string.voice_allow_mic, Toast.LENGTH_LONG).show()
-        return
+        requestPermissions(missing, MIC_REQUEST)
+        // Without the mic there's nothing to do; without the notification it still records
+        if (!VoiceNotes.canRecord(requireContext())) return Toast.makeText(requireContext(), R.string.voice_allow_mic, Toast.LENGTH_LONG).show()
     }
     showRecorder(requireContext(), viewLifecycleOwner.lifecycle, date, onText)
 }
 
 /**
- * The recording popup, over [ui] (an activity's context), for [date]. Done writes it out ([onText]
- * gets the words); Cancel throws it away. [onClosed] runs once it's gone either way.
+ * The recording popup, over [ui] (an activity's context): the recording going on ([Dictation]), or a
+ * new one for [date]. Done writes it out ([onText] gets the words); Cancel throws it away. [onClosed]
+ * runs once the popup's gone.
  *
- * Leaving [lifecycle] (home pressed, screen off) pauses it, so the mic isn't left on; it's still there
- * on coming back. [lifecycle] ending altogether keeps what was said, unless it was only a few seconds.
+ * The recording carries on with the screen off or the page left (its notification can pause or
+ * finish it, and so can headphones); the popup closes with [lifecycle], and comes back from the
+ * notification.
  */
 fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((String) -> Unit)? = null, onClosed: () -> Unit = {}) {
     val context = ui.applicationContext
-    val recorder = VoiceNotes.Recorder(context, date)
-    if (!recorder.start()) {
+    if (!Dictation.start(context, date, onText)) {
         Toast.makeText(context, R.string.voice_cant_record, Toast.LENGTH_SHORT).show()
         return onClosed()
     }
@@ -102,12 +112,10 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
     }
 
     val dialog = sheetDialog(ui, card, cancelable = false).apply {
-        // Thinking for a while shouldn't let the screen go off mid-note
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     fun showState() {
-        val paused = recorder.paused
+        val paused = Dictation.recorder?.paused == true
         status.setText(if (paused) R.string.voice_paused else R.string.voice_recording)
         status.setTextColor(if (paused) faint(170) else ink)
         dot.setImageDrawable(StatIcons.drawable(if (paused) StatIcons.PAUSE else StatIcons.RECORD, if (paused) faint(170) else red, 12.dpToPx()))
@@ -119,39 +127,29 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
     showState()
 
     val main = android.os.Handler(android.os.Looper.getMainLooper())
-    var finished = false
+    var closed = false
     lateinit var tick: Runnable
     lateinit var keeper: DefaultLifecycleObserver
+    lateinit var changed: () -> Unit
 
+    /** Just the popup: the recording carries on unless it was finished */
     fun close() {
-        finished = true
+        if (closed) return
+        closed = true
         main.removeCallbacks(tick)
         lifecycle.removeObserver(keeper)
+        Dictation.removeListener(changed)
         runCatching { dialog.dismiss() }
         onClosed()
     }
 
-    fun save() {
-        if (finished) return
-        close()
-        Thread {
-            val file = recorder.stop()
-            main.post {
-                if (file == null) return@post Toast.makeText(context, R.string.voice_too_short, Toast.LENGTH_SHORT).show()
-                VoiceNotes.writeOut(context, date, file) { text -> if (text != null) onText?.invoke(text) }
-            }
-        }.start()
-    }
-
-    fun discard() {
-        if (finished) return
-        close()
-        Thread { recorder.cancel() }.start()
-    }
+    // Finished or paused elsewhere (the notification, headphones): the popup keeps up
+    changed = { if (Dictation.active) showState() else close() }
+    Dictation.addListener(changed)
 
     tick = object : Runnable {
         override fun run() {
-            if (finished) return
+            val recorder = Dictation.recorder ?: return close()
             timer.text = clockOf(recorder.recordedMs)
             bars.push(recorder.level)
             // The red dot blinks while it's listening
@@ -160,45 +158,37 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
                 System.currentTimeMillis() / 600 % 2 == 0L -> 1f
                 else -> 0.25f
             }
-            // At the most it can hold, it's kept as if Done were tapped
-            if (recorder.full) return save()
             main.postDelayed(this, 80)
         }
     }
 
+    // The page going takes the popup with it, not the recording
     keeper = object : DefaultLifecycleObserver {
-        override fun onStop(owner: LifecycleOwner) {
-            recorder.paused = true
-            showState()
-        }
-
-        override fun onDestroy(owner: LifecycleOwner) = if (recorder.recordedMs >= KEEP_ON_CLOSE_MS) save() else discard()
+        override fun onDestroy(owner: LifecycleOwner) = close()
     }
     lifecycle.addObserver(keeper)
 
     cancel.setOnClickListener {
+        val recorder = Dictation.recorder ?: return@setOnClickListener close()
         // A long recording is worth a second thought before throwing it away
-        if (recorder.recordedMs < KEEP_ON_CLOSE_MS) return@setOnClickListener discard()
+        if (recorder.recordedMs < KEEP_WITHOUT_ASKING_MS) return@setOnClickListener Dictation.cancel(context)
         recorder.paused = true
         showState()
         AlertDialog.Builder(ui)
             .setMessage(R.string.voice_discard_ask)
             .setNegativeButton(R.string.voice_keep_going, null)
-            .setPositiveButton(R.string.voice_discard) { _, _ -> discard() }
+            .setPositiveButton(R.string.voice_discard) { _, _ -> Dictation.cancel(context) }
             .show()
     }
-    pause.setOnClickListener {
-        recorder.paused = !recorder.paused
-        showState()
-    }
-    done.setOnClickListener { save() }
+    pause.setOnClickListener { Dictation.togglePause() }
+    done.setOnClickListener { Dictation.done(context) }
 
     dialog.show()
     main.post(tick)
 }
 
-/** Recordings shorter than this are thrown away without asking, and when the page goes */
-private const val KEEP_ON_CLOSE_MS = 10_000L
+/** Recordings shorter than this are thrown away without asking */
+private const val KEEP_WITHOUT_ASKING_MS = 10_000L
 
 /** A round button with a pixel icon in it and its name under it */
 private class RoundButton(context: Context) : LinearLayout(context) {

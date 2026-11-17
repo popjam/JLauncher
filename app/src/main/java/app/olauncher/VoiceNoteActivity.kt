@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import app.olauncher.data.Prefs
 import app.olauncher.helper.VoiceNotes
 import app.olauncher.ui.MIC_REQUEST
+import app.olauncher.ui.missingForRecording
 import app.olauncher.ui.showRecorder
 import java.time.LocalDate
 
@@ -32,8 +33,8 @@ class VoiceNoteActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(Prefs(this).appTheme)
         super.onCreate(savedInstanceState)
-        if (VoiceNotes.canRecord(this)) record()
-        else requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), MIC_REQUEST)
+        val missing = missingForRecording(this)
+        if (missing.isEmpty()) record() else requestPermissions(missing, MIC_REQUEST)
     }
 
     @Deprecated("Deprecated in Java")
@@ -41,7 +42,8 @@ class VoiceNoteActivity : AppCompatActivity() {
         @Suppress("DEPRECATION")
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != MIC_REQUEST) return
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) record()
+        // The notification is only nice to have: the mic is what's needed
+        if (VoiceNotes.canRecord(this)) record()
         else {
             Toast.makeText(this, R.string.voice_allow_mic, Toast.LENGTH_LONG).show()
             finish()

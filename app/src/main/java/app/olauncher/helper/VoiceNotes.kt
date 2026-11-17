@@ -140,8 +140,9 @@ object VoiceNotes {
             synchronized(working) { working += file.name }
         }
 
+        /** Starts recording, from [mic] if given (headphones'), otherwise the phone's own */
         @SuppressLint("MissingPermission")
-        fun start(): Boolean {
+        fun start(mic: android.media.AudioDeviceInfo? = null): Boolean {
             val size = maxOf(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), RATE / 5)
             val record = runCatching { AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size) }
                 .getOrNull()?.takeIf { it.state == AudioRecord.STATE_INITIALIZED }
@@ -149,6 +150,7 @@ object VoiceNotes {
                 synchronized(working) { working -= file.name }
                 return false
             }
+            if (mic != null) record.preferredDevice = mic
             thread = Thread {
                 runCatching {
                     RandomAccessFile(file, "rw").use { out ->

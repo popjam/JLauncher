@@ -25,6 +25,11 @@
     <!--Only for the phone's step counter (Steps)-->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!--Only for voice notes: carrying on with the screen off, with a notification to finish them, and headphones' mic-->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <queries>
@@ -82,6 +87,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Keeps a voice note recording with the screen off -->
+        <service
+            android:name=".helper.DictationService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <activity
             android:name=".helper.PinItemActivity"
