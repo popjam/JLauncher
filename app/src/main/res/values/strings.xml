@@ -1364,8 +1364,8 @@
     <string name="info_lock_app_changes">Stops holding an app to change, hide or swap it.</string>
     <string name="info_lock_hidden">Stops showing hidden apps.</string>
     <string name="info_lock_launcher">Stops switching to another launcher.</string>
-    <string name="info_lock_protect">Leaves JLauncher\'s app info, accessibility and uninstall pages. Needs accessibility.</string>
-    <string name="info_lock_system">Leaves Date &amp; time, Default home app, Device admin apps, Usage access, battery optimisation and Developer options. Needs accessibility.</string>
+    <string name="info_lock_protect">Leaves JLauncher\'s app info, storage, accessibility and uninstall pages. Needs accessibility.</string>
+    <string name="info_lock_system">Leaves Date &amp; time, Default home app, Device admin apps, Usage access, battery optimisation, Developer options and JLauncher\'s own app pages. Needs accessibility.</string>
     <string name="info_lockdown_grayscale">Turns the screen grey while lockdown is on. Needs a one-time permission from a computer.</string>
     <string name="info_lockdown_notification">Shows lockdown\'s state while it\'s on.</string>
     <string name="info_blocked_attempts">Apps and sites blocked today.</string>

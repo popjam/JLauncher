@@ -317,7 +317,8 @@ class MyAccessibilityService : AccessibilityService() {
         val pkg = root.packageName?.toString() ?: return
         val installer = pkg in INSTALLER_PACKAGES
         if (!installer && pkg !in SETTINGS_PACKAGES) return
-        val leave = (protect && showsJLauncher(root, pkg, installer)) || (system && !installer && showsSystemPage(root))
+        // JLauncher's own pages (app info, storage, accessibility, uninstall) could undo lockdown too, so either lock leaves them
+        val leave = showsJLauncher(root, pkg, installer) || (system && !installer && showsSystemPage(root, pkg))
         if (!leave) return
         performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)
@@ -325,12 +326,31 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /** Whether a settings page's title is one of the pages that could undo lockdown */
-    private fun showsSystemPage(root: AccessibilityNodeInfo): Boolean {
+    private fun showsSystemPage(root: AccessibilityNodeInfo, pkg: String): Boolean {
         val titles = words("com.android.settings", listOf("date_and_time", "development_settings_title", "manage_device_admin",
             "high_power_apps", "home_app", "default_home_app_title", "usage_access_title", "usage_access"),
             "Date & time", "Developer options", "Device admin apps", "Battery optimization", "Battery optimisation", "Home app", "Default home app",
             "Usage access", "Device & app usage")
-        return pageTitles(root).any { title -> titles.any { it.equals(title, ignoreCase = true) } }
+        if (pageTitles(root).any { title -> titles.any { it.equals(title, ignoreCase = true) } }) return true
+        // The default apps pages belong to the permission controller, whose title isn't always on the page as text:
+        // any of its pages naming the home app is left, which is the picker and the list it's chosen from
+        if (pkg !in PERMISSION_PACKAGES) return false
+        val home = words(pkg, listOf("role_home_label", "role_home_short_label", "home_app"), "Default home app", "Home app")
+        return anyText(root) { text -> home.any { it.equals(text, ignoreCase = true) } }
+    }
+
+    /** Whether any text on the page matches [match] */
+    private fun anyText(root: AccessibilityNodeInfo, match: (String) -> Boolean): Boolean {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var seen = 0
+        while (queue.isNotEmpty() && seen < 400) {
+            val node = queue.removeFirst()
+            seen++
+            if (listOfNotNull(node.text?.toString(), node.contentDescription?.toString()).any { match(it.trim()) }) return true
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        return false
     }
 
     /** What a settings page shows as its title: the collapsing toolbar's or action bar's, and the first text on the page */
@@ -363,7 +383,9 @@ class MyAccessibilityService : AccessibilityService() {
         val description = getString(R.string.accessibility_service_description)
         val words = if (installer) words(pkg, listOf("uninstall_application_text", "uninstall_application_text_all_users",
             "uninstall_application_text_user", "uninstall_update_text", "uninstall_application_title"), "Uninstall")
-        else words("com.android.settings", listOf("uninstall_text", "force_stop"), "Uninstall", "Force stop")
+        // App info's buttons, and its Storage page's, where clearing storage would wipe lockdown
+        else words("com.android.settings", listOf("uninstall_text", "force_stop", "clear_user_data_text", "clear_cache_btn_text", "disable_text"),
+            "Uninstall", "Force stop", "Disable", "Clear storage", "Clear data", "Clear cache")
         var named = false
         var aboutApp = false
         val queue = ArrayDeque<AccessibilityNodeInfo>()
@@ -516,7 +538,10 @@ class MyAccessibilityService : AccessibilityService() {
         private const val RECHECK_MS = 15_000L
 
         /** Where JLauncher can be turned off or uninstalled from */
-        private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.miui.securitycenter")
+        private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.miui.securitycenter",
+            "com.google.android.permissioncontroller", "com.android.permissioncontroller")
+        /** Where the default apps, the home app among them, are chosen */
+        private val PERMISSION_PACKAGES = setOf("com.google.android.permissioncontroller", "com.android.permissioncontroller")
         /** Browsers whose address bar is read for blocked sites, with the bar's view ids */
         private val BROWSERS = mapOf(
             "com.android.chrome" to listOf("com.android.chrome:id/url_bar"),
