@@ -50,6 +50,7 @@ class PauseScreen(
     }
 
     init {
+        binding.pauseFace.mood = app.olauncher.helper.BlockScreen.WARNING
         binding.pauseCancel.setOnClickListener { onCancel() }
         binding.pauseOpen.setOnClickListener { onOpen(null) }
         listOf(binding.useFor2, binding.useFor5, binding.useFor10, binding.useFor30)
@@ -120,10 +121,10 @@ class PauseScreen(
         }
     }
 
-    /** Swaps the breathing pause for the time choice, on the same card. */
+    /** Swaps the breathing pause for the time choice, on the same sheet. */
     private fun showUseFor() {
         breathing?.cancel()
-        binding.useForTitle.text = context.getString(R.string.use_for_question, appLabel)
+        binding.pauseAppName.text = context.getString(R.string.use_for_question, appLabel)
         binding.pauseBreathing.isVisible = false
         binding.pauseOpen.isVisible = false
         binding.useForLayout.isVisible = true

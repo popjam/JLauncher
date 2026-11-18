@@ -481,8 +481,8 @@ class MyAccessibilityService : AccessibilityService() {
                 }
             }
             val binding = FragmentPauseBinding.inflate(LayoutInflater.from(context), root, true)
-            // Solid black, so none of the app shows through (the launcher's own shade is see-through)
-            binding.root.setBackgroundColor(Color.BLACK)
+            // Nearly black, like a blocked app's sheet, so the app barely shows through
+            binding.root.setBackgroundColor(BlockScreen.SHADE_BLOCK)
             val screen = PauseScreen(
                 binding,
                 pkg,
@@ -501,7 +501,7 @@ class MyAccessibilityService : AccessibilityService() {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.OPAQUE
+                PixelFormat.TRANSLUCENT
             )
             (getSystemService(Context.WINDOW_SERVICE) as WindowManager).addView(root, params)
             gateView = root
