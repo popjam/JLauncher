@@ -363,11 +363,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private fun lockdownWidgetView(): LinearLayout {
         val context = requireContext()
         lockdownWidgetIcon = View(context).apply {
-            background = StatIcons.drawable(StatIcons.LOCK, LOCKDOWN_BLUE, 32.dpToPx())
+            background = StatIcons.drawable(StatIcons.LOCK, LOCKDOWN_BLUE, 24.dpToPx())
         }
         lockdownWidgetText = androidx.appcompat.widget.AppCompatTextView(context, null, 0).apply {
             setTextAppearance(R.style.TextSmall)
             gravity = Gravity.CENTER
+            isSingleLine = true
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size))
             setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 10.dpToPx())
         }
@@ -375,7 +376,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             visibility = View.GONE
-            addView(lockdownWidgetIcon, LinearLayout.LayoutParams(32.dpToPx(), 32.dpToPx()).apply { topMargin = 10.dpToPx() })
+            // The lock fills its square edge to edge, so it's drawn smaller than the other icons to look their size
+            addView(lockdownWidgetIcon, LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { topMargin = 14.dpToPx(); bottomMargin = 4.dpToPx() })
             addView(lockdownWidgetText)
             setOnClickListener { addLockdownTime() }
             // Held without dragging, it opens the Lockdown page
@@ -736,9 +738,11 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
         val params = row.layoutParams as FrameLayout.LayoutParams
         val left = (centre - mine.left - mine.width / 2).coerceIn(0, maxOf(0, binding.mainLayout.width - row.width))
-        if (params.topMargin != top.coerceAtLeast(0) || params.leftMargin != left) {
+        // The left margin would otherwise shrink the width the row is measured in, squeezing its texts onto several lines
+        if (params.topMargin != top.coerceAtLeast(0) || params.leftMargin != left || params.rightMargin != -left) {
             params.topMargin = top.coerceAtLeast(0)
             params.leftMargin = left
+            params.rightMargin = -left
             row.layoutParams = params
         }
     }
