@@ -48,6 +48,12 @@ object Limits {
 
     fun rule(prefs: Prefs, pkg: String) = rules(prefs)[pkg] ?: Rule()
 
+    /** How many installed apps have a limit, a pause or a choice of time */
+    fun appsWithRules(context: android.content.Context, prefs: Prefs): Int {
+        AppPause.migrateIfNeeded(prefs)
+        return (rules(prefs).keys + prefs.pausedApps + prefs.useForApps).count { context.isPackageInstalled(it) }
+    }
+
     fun setRule(prefs: Prefs, pkg: String, rule: Rule) {
         prefs.appLimits = formatRules(rules(prefs) + (pkg to rule))
     }

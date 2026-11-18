@@ -60,7 +60,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         WEBSITES -> getString(R.string.lockdown_websites)
         PLACES -> getString(R.string.lockdown_places)
         STAGES -> getString(R.string.lockdown_stages)
-        LIMITS -> getString(R.string.lockdown_app_limits)
+        LIMITS -> getString(R.string.limits)
         else -> appLabel(pkg)
     }
 
@@ -311,7 +311,6 @@ class LockdownPageFragment : LockdownBaseFragment() {
             rule.opens.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.lockdown_opens, it, it) },
             getString(R.string.lockdown_pause_short).takeIf { pkg in prefs.pausedApps },
             getString(R.string.lockdown_use_for_short).takeIf { pkg in prefs.useForApps },
-            getString(R.string.lockdown_blocked_short).takeIf { pkg in prefs.lockdownBlockedApps },
         ).joinToString(" · ").replaceFirstChar { it.titlecase(Locale.getDefault()) }
     }
 

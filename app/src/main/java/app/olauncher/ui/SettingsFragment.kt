@@ -42,6 +42,8 @@ import app.olauncher.data.Prefs
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Arrangement
 import app.olauncher.helper.Lockdown
+import androidx.core.view.isVisible
+import app.olauncher.helper.Limits
 import app.olauncher.helper.AutoStats
 import app.olauncher.helper.People
 import app.olauncher.helper.Places
@@ -249,13 +251,13 @@ class SettingsFragment : CardPageFragment() {
         toTracking = toTracking || arguments?.getBoolean(TO_TRACKING) == true
         arguments?.remove(TO_TRACKING)
         cardList.removeAllViews()
+        lockdownSection()
         homeSection()
         gesturesSection()
         appsSection()
         checkInSection()
         trackingSection()
         statsSection()
-        lockdownSection()
         backupSection()
         aboutSection()
         applySearch()
@@ -1043,15 +1045,38 @@ class SettingsFragment : CardPageFragment() {
 
     private val gate by lazy { LockdownGate(this) { render() } }
 
-    /** Lockdown has its own page; here it's one row with its status */
+    /**
+     * Limits and Lockdown each have their own page; here they're the first two rows, with no heading,
+     * and a dot by the value while either is in force (red for lockdown, teal for limits).
+     */
     private fun lockdownSection() {
         val context = requireContext()
         val card = Card(getString(R.string.lockdown))
+        (card.titleView.parent as? View)?.isVisible = false
+        val limits = Limits.appsWithRules(context, prefs)
+        val on = Lockdown.isActive(context, prefs)
         card.body(
+            row(card, getString(R.string.limits), if (limits == 0) getString(R.string.off)
+                else resources.getQuantityString(R.plurals.lockdown_apps_count, limits, limits), R.string.info_app_limits) {
+                findNavController().navigate(R.id.lockdownPageFragment, androidx.core.os.bundleOf(LockdownPageFragment.PAGE to LockdownPageFragment.LIMITS))
+            }.also { if (limits > 0) it.valueDot(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt()) },
             row(card, getString(R.string.lockdown), LockdownGate.status(context), R.string.info_lockdown) {
                 findNavController().navigate(R.id.lockdownFragment)
-            },
+            }.also { if (on) it.valueDot(0xFFEF5350.toInt()) },
         )
+    }
+
+    /** A small dot before a row's value */
+    private fun View.valueDot(color: Int) {
+        val value = (this as? ViewGroup)?.let { it.getChildAt(it.childCount - 1) } as? android.widget.TextView ?: return
+        val size = 7.dpToPx()
+        value.setCompoundDrawablesRelative(GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            setSize(size, size)
+            setBounds(0, 0, size, size)
+        }, null, null, null)
+        value.compoundDrawablePadding = 7.dpToPx()
     }
 
     // --- Backup ---

@@ -170,11 +170,14 @@ class LockdownFragment : LockdownBaseFragment() {
         val card = section(getString(R.string.lockdown_when))
         val schedules = Lockdown.schedules(prefs)
         val places = prefs.lockdownPlaces.mapNotNull { LockdownGate.placeName(context, it) }
+        val stages = Limits.stages(prefs)
         card.add(
             row(card, getString(R.string.lockdown_schedules), if (schedules.isEmpty()) getString(R.string.off) else schedules.size.toString(),
                 R.string.info_lockdown_schedules) { if (schedules.isEmpty()) addSchedule() else showSchedules() },
             row(card, getString(R.string.lockdown_places), if (places.isEmpty()) getString(R.string.off) else places.joinToString(", "),
                 R.string.info_lockdown_places) { open(LockdownPageFragment.PLACES) },
+            row(card, getString(R.string.lockdown_stages), if (stages.all { it <= 0 }) getString(R.string.off)
+                else stages.joinToString(" · ") { minutesName(it) }, R.string.info_lockdown_stages) { open(LockdownPageFragment.STAGES) },
             row(card, getString(R.string.lockdown_home_widget), onOff(prefs.lockdownHomeWidget), R.string.info_lockdown_home_widget) {
                 prefs.lockdownHomeWidget = !prefs.lockdownHomeWidget
                 render()
@@ -282,9 +285,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val card = section(getString(R.string.lockdown_apps))
         val allow = prefs.lockdownAppMode == Lockdown.ALLOW
         val chosen = (if (allow) prefs.lockdownAllowedApps else prefs.lockdownBlockedApps).count { context.isPackageInstalled(it) }
-        val limits = Limits.rules(prefs).keys.count { context.isPackageInstalled(it) } +
-            (prefs.pausedApps + prefs.useForApps + prefs.lockdownBlockedApps).count { it !in Limits.rules(prefs) && context.isPackageInstalled(it) }
-        val stages = Limits.stages(prefs)
+        val limits = Limits.appsWithRules(context, prefs)
         val needsService = chosen > 0 || prefs.lockdownProtect || prefs.lockdownSystemSettings || prefs.lockdownSites.isNotEmpty() || limits > 0
         card.add(
             row(card, getString(R.string.lockdown_during), getString(if (allow) R.string.lockdown_only_allow else R.string.lockdown_block_these),
@@ -293,10 +294,6 @@ class LockdownFragment : LockdownBaseFragment() {
                 if (allow) R.string.info_allowed_apps else R.string.info_blocked_apps) {
                 open(if (allow) LockdownPageFragment.ALLOWED else LockdownPageFragment.BLOCKED)
             },
-            row(card, getString(R.string.lockdown_app_limits), resources.getQuantityString(R.plurals.lockdown_apps_count, limits, limits),
-                R.string.info_app_limits) { open(LockdownPageFragment.LIMITS) },
-            row(card, getString(R.string.lockdown_stages), if (stages.all { it <= 0 }) getString(R.string.off)
-                else stages.joinToString(" · ") { minutesName(it) }, R.string.info_lockdown_stages) { open(LockdownPageFragment.STAGES) },
             row(card, getString(R.string.lockdown_essentials), (prefs.lockdownEssentials.count { context.isPackageInstalled(it) } + 1).toString(),
                 R.string.info_lockdown_essentials, level = 1) { open(LockdownPageFragment.ESSENTIALS) },
             row(card, getString(R.string.lockdown_websites), prefs.lockdownSites.size.toString(), R.string.info_lockdown_websites) {

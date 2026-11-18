@@ -836,6 +836,7 @@
     <string name="tracking_check">Check</string>
     <string name="places_title_short">Places</string>
     <string name="lockdown">Lockdown</string>
+    <string name="limits">Limits</string>
     <string name="lockdown_lock_for">Lock for a set time</string>
     <string name="lockdown_add_time">Add time</string>
     <string name="lockdown_until">Until %1$s</string>
