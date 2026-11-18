@@ -40,7 +40,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         val prefs = prefs
         if (Lockdown.isOpen(context, prefs)) return action()
         Lockdown.timedEnd(context, prefs)?.let { end ->
-            return context.showToast(context.getString(R.string.lockdown_locked_until, time(context, end)))
+            return locked(context, context.getString(R.string.lockdown_locked_until, time(context, end)))
         }
         when (Lockdown.unlock(prefs)) {
             Lockdown.Unlock.PASSWORD -> requirePassword(action)
@@ -382,10 +382,15 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             return days + " " + at(schedule.start) + "–" + at(schedule.end)
         }
 
+        /** Says [message] in lockdown's sheet, or a toast when the accessibility service isn't on */
+        fun locked(context: Context, message: String) {
+            if (!app.olauncher.helper.MyAccessibilityService.showLocked(message)) context.showToast(message)
+        }
+
         /** Says it's locked when [lock] is, and returns whether it is */
         fun stopIfLocked(context: Context, lock: Lockdown.Lock): Boolean {
             if (!Lockdown.isLocked(context, lock)) return false
-            context.showToast(lockedMessage(context))
+            locked(context, lockedMessage(context))
             return true
         }
 

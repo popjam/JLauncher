@@ -1346,6 +1346,10 @@
     <string name="lockdown_until_turned_off">until lockdown is turned off</string>
     <string name="lockdown_used">%1$s used</string>
     <string name="lockdown_left_today">%1$s: %2$s left today</string>
+    <string name="lockdown_left_today_line">%1$s left today</string>
+    <string name="time_up_line">Time\'s up</string>
+    <string name="lockdown_suspicious">That looked suspicious</string>
+    <string name="lockdown_suspicious_line">This page could undo lockdown.</string>
     <string name="lockdown_on_title">Lockdown on</string>
     <string name="lockdown_on_until_title">Lockdown on until %1$s</string>
     <string name="lockdown_add_hour">+1 hour</string>

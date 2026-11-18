@@ -115,7 +115,7 @@ class MyAccessibilityService : AccessibilityService() {
             systemOnTop = false
             AppPause.onHomeShown()
             removeGate()
-            removeBlock()
+            if (!blockSticky) removeBlock()
             return
         }
         if (pkg == SYSTEM_UI || pkg in keyboardPackages) return
@@ -123,9 +123,9 @@ class MyAccessibilityService : AccessibilityService() {
             // A system screen (a call, a permission dialog, the share sheet, recents) isn't an app: it's
             // never covered, and going back to the app from it isn't a new open. An app that was blocked
             // is blocked again when it comes back.
-            blockPackage?.let { coveredBefore = it }
+            if (!blockSticky) blockPackage?.let { coveredBefore = it }
             systemOnTop = true
-            removeBlock()
+            if (!blockSticky) removeBlock()
             if (gatePackage != null) removeGate()
             return
         }
@@ -134,7 +134,7 @@ class MyAccessibilityService : AccessibilityService() {
         systemOnTop = false
         foregroundPackage = pkg
         // The block screen is already over this app
-        if (blockPackage == pkg) return
+        if (blockPackage == pkg && !blockSticky) return
         removeBlock()
         val prefs = Prefs(this)
         Lockdown.blockFor(this, pkg, opening, prefs)?.let { block ->
@@ -159,7 +159,9 @@ class MyAccessibilityService : AccessibilityService() {
         if (!Limits.shouldWarn(rule, Limits.usedToday(this, pkg), Limits.warnedToday(this, pkg))) return
         Limits.setWarned(this, pkg)
         val left = rule.minutes * 60_000L - Limits.usedToday(this, pkg)
-        showToast(getString(R.string.lockdown_left_today, appLabel(pkg), LockdownGate.duration(this, left)))
+        // Over the app, which carries on once it's closed
+        showSheet(appLabel(pkg), listOf(getString(R.string.lockdown_left_today_line, LockdownGate.duration(this, left))),
+            BlockScreen.WARNING, BlockScreen.SHADE_DIM, pkg, toHome = false, sticky = false, quiet = false)
     }
 
     // The block screen: over a blocked app or site, with why and until when, and Close
@@ -195,13 +197,23 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastCountedAt = 0L
 
     private fun showBlock(name: String, block: Lockdown.Block, pkg: String?) {
-        removeBlock()
         // One attempt, not one for every window the app opens
         val key = pkg ?: name
         val now = android.os.SystemClock.uptimeMillis()
         if (key != lastCounted || now - lastCountedAt > 5_000) Lockdown.countBlocked(this)
         lastCounted = key
         lastCountedAt = now
+        showSheet(name, listOf(LockdownGate.reasonText(this, block), LockdownGate.detailText(this, block, pkg)),
+            BlockScreen.BLOCKED, BlockScreen.SHADE_BLOCK, pkg, toHome = true, sticky = false, quiet = true)
+    }
+
+    /**
+     * Shows lockdown's sheet over the screen until it's closed. [toHome]: closing goes home, as the
+     * app under it is blocked. [sticky]: it stays when home or a system screen comes up underneath,
+     * for sheets put up as the page under them is closed. [quiet]: playback underneath is stopped.
+     */
+    private fun showSheet(title: String, lines: List<String>, mood: Int, shade: Int, pkg: String?, toHome: Boolean, sticky: Boolean, quiet: Boolean) {
+        removeBlock()
         try {
             val context = themedContext()
             val root = object : FrameLayout(context) {
@@ -211,35 +223,44 @@ class MyAccessibilityService : AccessibilityService() {
                     return true
                 }
             }
-            root.setBackgroundColor(Color.BLACK)
-            root.addView(BlockScreen.view(context, name, LockdownGate.reasonText(this, block), LockdownGate.detailText(this, block, pkg)) { closeBlock() },
-                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+            root.addView(BlockScreen.view(context, title, lines, mood, shade) { closeBlock() },
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.OPAQUE
+                PixelFormat.TRANSLUCENT
             )
             (getSystemService(Context.WINDOW_SERVICE) as WindowManager).addView(root, params)
             blockView = root
-            holdAudio()
+            blockToHome = toHome
+            blockSticky = sticky
+            if (quiet) holdAudio()
             blockPackage = pkg ?: foregroundPackage
         } catch (e: Exception) {
             e.printStackTrace()
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            if (toHome) performGlobalAction(GLOBAL_ACTION_HOME)
         }
     }
 
+    /** Whether closing the sheet goes home */
+    private var blockToHome = true
+
+    /** Whether the sheet stays when the screen under it changes */
+    private var blockSticky = false
+
     private fun closeBlock() {
+        val home = blockToHome && !blockSticky
         removeBlock()
-        performGlobalAction(GLOBAL_ACTION_HOME)
+        if (home) performGlobalAction(GLOBAL_ACTION_HOME)
     }
 
     private fun removeBlock() {
         val view = blockView ?: return
         blockView = null
         blockPackage = null
+        blockSticky = false
         releaseAudio()
         runCatching { (getSystemService(Context.WINDOW_SERVICE) as WindowManager).removeView(view) }
     }
@@ -321,6 +342,8 @@ class MyAccessibilityService : AccessibilityService() {
         val protect = Lockdown.isLocked(this, Lockdown.Lock.PROTECT)
         val system = Lockdown.isLocked(this, Lockdown.Lock.SYSTEM_SETTINGS)
         if (!protect && !system) return
+        // Already showing: the page under it is being closed
+        if (blockView != null && blockSticky) return
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
         val pkg = root.packageName?.toString() ?: return
         val installer = pkg in INSTALLER_PACKAGES
@@ -338,9 +361,12 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
         lastLeft = now
+        // The sheet covers the page at once, so nothing on it can be tapped while it closes underneath
+        Lockdown.countBlocked(this)
+        showSheet(getString(R.string.lockdown_suspicious), listOf(getString(R.string.lockdown_suspicious_line), LockdownGate.lockedMessage(this)),
+            BlockScreen.BLOCKED, BlockScreen.SHADE_DIM, null, toHome = false, sticky = true, quiet = false)
         performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)
-        showToast(LockdownGate.lockedMessage(this))
     }
 
     /** Whether a settings page's title is one of the pages that could undo lockdown */
@@ -511,7 +537,8 @@ class MyAccessibilityService : AccessibilityService() {
         if (foregroundPackage != pkg || systemOnTop) return
         removeGate()
         performGlobalAction(GLOBAL_ACTION_HOME)
-        showToast(getString(R.string.time_up, appLabel(pkg)))
+        showSheet(appLabel(pkg), listOf(getString(R.string.time_up_line)), BlockScreen.BLOCKED, BlockScreen.SHADE_DIM, null,
+            toHome = false, sticky = true, quiet = false)
     }
 
     private fun appLabel(pkg: String): String = try {
@@ -581,6 +608,14 @@ class MyAccessibilityService : AccessibilityService() {
 
         fun closeIfShowing(packageName: String) {
             instance?.timeUp(packageName)
+        }
+
+        /** Shows lockdown's sheet saying something in JLauncher is locked; false when the service isn't running */
+        fun showLocked(message: String): Boolean {
+            val service = instance ?: return false
+            service.showSheet(service.getString(R.string.lockdown), listOf(message), BlockScreen.BLOCKED, BlockScreen.SHADE_DIM, null,
+                toHome = false, sticky = true, quiet = false)
+            return true
         }
 
         /** Shows the block screen for an app the launcher was asked to open; false when the service isn't running */
