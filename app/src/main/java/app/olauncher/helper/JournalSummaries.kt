@@ -20,7 +20,7 @@ object JournalSummaries {
     const val NAME = "journal_summaries"
 
     /** Notes at least this many words long get a summary */
-    const val WORDS = 250
+    const val WORDS = 150
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 

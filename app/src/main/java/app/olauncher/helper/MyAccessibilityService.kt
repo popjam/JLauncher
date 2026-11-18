@@ -292,17 +292,25 @@ class MyAccessibilityService : AccessibilityService() {
         Lockdown.blockForSite(this, host)?.let { showBlock(host, it, null) }
     }
 
-    private val guard = Runnable { guardNow() }
+    private var guardPending = false
+    private var lastLeft = 0L
+    private val guard = Runnable {
+        guardPending = false
+        guardNow()
+    }
 
     /**
-     * When the settings or an installer changes what it shows, checks it once things settle, since
-     * pages change many times as they draw.
+     * When the settings or an installer changes what it shows, checks it: straight away when a page
+     * opens, then at most every 100ms while it draws. Never put off by further changes, as pages keep
+     * changing while they open and a locked page would stay usable meanwhile.
      */
     private fun guardSoon(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
         if (pkg !in SETTINGS_PACKAGES && pkg !in INSTALLER_PACKAGES) return
-        main.removeCallbacks(guard)
-        main.postDelayed(guard, 250)
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) guardNow()
+        if (guardPending) return
+        guardPending = true
+        main.postDelayed(guard, 100)
     }
 
     /**
@@ -320,6 +328,16 @@ class MyAccessibilityService : AccessibilityService() {
         // JLauncher's own pages (app info, storage, accessibility, uninstall) could undo lockdown too, so either lock leaves them
         val leave = showsJLauncher(root, pkg, installer) || (system && !installer && showsSystemPage(root, pkg))
         if (!leave) return
+        // Checked often while a page draws, so it leaves once, not again while the page is closing
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastLeft < 1_000) {
+            // Looked at again once the second's up, in case the page is still there and quiet
+            main.removeCallbacks(guard)
+            guardPending = true
+            main.postDelayed(guard, 1_000 - (now - lastLeft))
+            return
+        }
+        lastLeft = now
         performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)
         showToast(LockdownGate.lockedMessage(this))

@@ -1193,7 +1193,7 @@
     <string name="journal_summarise">Go</string>
     <string name="journal_summarising">Working…</string>
     <string name="journal_summarise_none">No notes to tidy or summarise</string>
-    <string name="info_journal_summarise_all">Tidies every journal note of 40 words or more that Claude hasn\'t tidied since it last changed, then makes the summary of every note over 250 words again. Each note is sent to Claude.</string>
+    <string name="info_journal_summarise_all">Tidies every journal note of 40 words or more that Claude hasn\'t tidied since it last changed, then makes the summary of every note over 150 words again. Each note is sent to Claude.</string>
     <plurals name="journal_summarise_ask">
         <item quantity="one">Tidy and summarise %d note?</item>
         <item quantity="other">Tidy and summarise %d notes?</item>
