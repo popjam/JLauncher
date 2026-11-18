@@ -770,12 +770,15 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 }
                 return@forEachIndexed
             }
-            val target = above.left + theirs[i].left + theirs[i].width / 2
-            val now = row.left + piece.left + piece.width / 2
-            val shift = if (endSide) now - target else target - now
-            if (kotlin.math.abs(shift) <= 1) return@forEachIndexed
-            if (endSide) params.marginEnd = (params.marginEnd + shift).coerceAtLeast(0)
-            else params.marginStart = (params.marginStart + shift).coerceAtLeast(0)
+            // The gap to its outer neighbour that puts the two as far apart as the two above them. Worked
+            // out from widths alone, never from where things are now, as the row moves when this changes.
+            val outer = mine[i - 1]
+            val apart = kotlin.math.abs((theirs[i - 1].left + theirs[i - 1].width / 2) - (theirs[i].left + theirs[i].width / 2))
+            // Wide texts can need less than no gap: their 10dp of empty padding each side may overlap
+            val gap = (apart - piece.width / 2 - outer.width / 2).coerceAtLeast(-18.dpToPx())
+            if (endSide && params.marginEnd == gap && params.marginStart == 0) return@forEachIndexed
+            if (!endSide && params.marginStart == gap && params.marginEnd == 0) return@forEachIndexed
+            if (endSide) { params.marginEnd = gap; params.marginStart = 0 } else { params.marginStart = gap; params.marginEnd = 0 }
             piece.layoutParams = params
         }
     }
