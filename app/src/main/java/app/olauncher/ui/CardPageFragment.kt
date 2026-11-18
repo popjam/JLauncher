@@ -134,7 +134,7 @@ abstract class CardPageFragment : Fragment() {
             setPadding(16.dpToPx(), 20.dpToPx(), 16.dpToPx(), 8.dpToPx())
             setOnClickListener {
                 val picked = BooleanArray(hidden.size)
-                androidx.appcompat.app.AlertDialog.Builder(context)
+                AppDialog(context)
                     .setTitle(R.string.hidden_cards_title)
                     .setMultiChoiceItems(hidden.map { cardLabel(it) }.toTypedArray(), picked) { _, i, on -> picked[i] = on }
                     .setNegativeButton(R.string.cancel, null)
@@ -177,6 +177,34 @@ abstract class CardPageFragment : Fragment() {
 
     internal val ink by lazy { requireContext().getColorFromAttr(R.attr.primaryColor) }
     internal fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
+
+    // --- The settings look: solid sections headed in coloured capitals, rows split by thin lines ---
+
+    /** Whether the page is light text on dark */
+    internal val darkPage get() = ColorUtils.calculateLuminance(ink) > 0.5
+
+    /** The solid colour behind each section and the search boxes */
+    internal val panelColor get() = if (darkPage) 0xFF151716.toInt() else 0xFFF4F5F4.toInt()
+
+    /** A card as a settings section: a solid panel, so the wallpaper doesn't show through, its name a heading over its rows */
+    internal fun Card.panel() {
+        scene.visibility = View.GONE
+        root.background = GradientDrawable().apply {
+            cornerRadius = 20.dpToPx().toFloat()
+            setColor(panelColor)
+        }
+        titleView.textSize = 12.5f
+        titleView.isAllCaps = true
+        titleView.letterSpacing = 0.12f
+        titleView.setTypeface(Typeface.DEFAULT_BOLD)
+        titleView.setTextColor(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt())
+    }
+
+    /** The thin line between two settings */
+    internal fun rowDivider() = GradientDrawable().apply {
+        setColor(faint(30))
+        setSize(0, 1.dpToPx())
+    }
 
     internal fun dateText(date: LocalDate) = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
     /** A time in the phone's own style, 24-hour or not */

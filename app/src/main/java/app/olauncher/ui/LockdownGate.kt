@@ -54,7 +54,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     private fun askWait() {
         val prefs = prefs
         when (val state = Lockdown.waitState(context, prefs)) {
-            is Lockdown.WaitState.Waiting -> AlertDialog.Builder(context)
+            is Lockdown.WaitState.Waiting -> AppDialog(context)
                 .setTitle(context.getString(R.string.lockdown_unlocks_in, duration(context, state.msLeft)))
                 .setPositiveButton(R.string.okay, null)
                 .setNegativeButton(R.string.lockdown_stop_waiting) { _, _ ->
@@ -62,7 +62,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                     onChanged()
                 }
                 .show()
-            else -> AlertDialog.Builder(context)
+            else -> AppDialog(context)
                 .setTitle(R.string.lockdown_wait_title)
                 .setMessage(context.getString(R.string.lockdown_wait_message, duration(context, prefs.lockdownWaitMinutes * 60_000L),
                     duration(context, Lockdown.READY_MS)))
@@ -92,7 +92,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     /** Sets a new password, after warning what losing it means; [onSet] once it's saved */
     fun setNewPassword(warn: Boolean, onSet: () -> Unit) {
         if (warn) {
-            AlertDialog.Builder(context)
+            AppDialog(context)
                 .setTitle(R.string.catastrophic_warning)
                 .setMessage(R.string.lockdown_password_warning)
                 .setPositiveButton(R.string.proceed) { _, _ -> setNewPassword(false, onSet) }
@@ -143,7 +143,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             addView(input)
             addView(show)
         }
-        val builder = AlertDialog.Builder(context)
+        val builder = AppDialog(context)
             .setTitle(title)
             .setView(box)
             .setPositiveButton(R.string.okay) { _, _ -> onEntered(input.text.toString()) }
@@ -157,7 +157,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#\$%^&*"
         val random = java.security.SecureRandom()
         val password = (1..32).map { chars[random.nextInt(chars.length)] }.joinToString("")
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.catastrophic_warning)
             .setMessage(context.getString(R.string.generated_password_warning, password))
             .setPositiveButton(R.string.proceed) { _, _ -> savePassword(password, onSet) }
@@ -173,11 +173,11 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         val ways = mutableListOf<Pair<String, () -> Unit>>()
         if (prefs.recoveryTap500) ways += context.getString(R.string.recovery_tap_500) to { context.showToast(context.getString(R.string.recovery_tap_500_info)) }
         if (prefs.recoveryClue) ways += context.getString(R.string.recovery_clue) to {
-            AlertDialog.Builder(context).setTitle(R.string.your_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
+            AppDialog(context).setTitle(R.string.your_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
         }
         if (prefs.recoveryEssay) ways += context.getString(R.string.recovery_essay) to { essay() }
         if (ways.isEmpty()) return context.showToast(context.getString(R.string.no_recovery_methods))
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.recover_password)
             .setItems(ways.map { it.first }.toTypedArray()) { _, which -> ways[which].second() }
             .setNegativeButton(R.string.close, null)
@@ -196,7 +196,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
             }
         }
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.recovery_essay)
             .setView(padded(context, input))
             .setPositiveButton(R.string.okay) { _, _ ->
@@ -209,7 +209,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
 
     fun showPassword() {
         val password = prefs.lockdownPasswordPlaintext.ifEmpty { return }
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.your_password_is)
             .setView(padded(context, TextView(context).apply {
                 text = password

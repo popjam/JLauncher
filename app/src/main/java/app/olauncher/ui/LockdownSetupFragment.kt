@@ -137,7 +137,7 @@ class LockdownSetupFragment : LockdownBaseFragment() {
     }
 
     private fun startsNow(save: () -> Unit) {
-        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.lockdown_starts_now)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.add) { _, _ -> save() }

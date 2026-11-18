@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every popup's frame: the check-in's black (white on the light theme) with a thin line round it -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="20dp"
+    android:insetTop="16dp"
+    android:insetRight="20dp"
+    android:insetBottom="16dp">
+    <shape android:shape="rectangle">
+        <solid android:color="?attr/primaryInverseColor" />
+        <corners android:radius="24dp" />
+        <stroke
+            android:width="0.8dp"
+            android:color="?attr/primaryColorTrans50" />
+    </shape>
+</inset>

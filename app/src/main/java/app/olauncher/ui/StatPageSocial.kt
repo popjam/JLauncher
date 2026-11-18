@@ -333,7 +333,7 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
             setSingleLine()
             setSelection(text.length)
         }
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(title)
             .setView(android.widget.FrameLayout(context).apply {
                 setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
@@ -383,7 +383,7 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
             resources.getQuantityString(R.plurals.day_count, went, went)).joinToString(" · "), place.color,
             onTap = { openMap(place.lat, place.lon, place.name) },
             onHold = {
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setTitle(place.name)
                     .setItems(arrayOf(getString(R.string.places_rename), getString(R.string.places_recolor), getString(R.string.places_remove))) { _, which ->
                         when (which) {
@@ -395,7 +395,7 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
                                 Places.recolor(context, place.id)
                                 if (_binding != null) render()
                             }
-                            else -> AlertDialog.Builder(context)
+                            else -> AppDialog(context)
                                 .setMessage(getString(R.string.places_remove_ask, place.name))
                                 .setNegativeButton(R.string.cancel, null)
                                 .setPositiveButton(R.string.places_remove) { _, _ ->
@@ -444,7 +444,7 @@ internal fun StatPageFragment.editHome(slot: Int, home: Social.Home?) {
     val context = requireContext()
     val ssid = Social.currentSsid(context)
     if (ssid == null && home == null) {
-        AlertDialog.Builder(context).setMessage(R.string.social_connect_first).setPositiveButton(R.string.okay, null).show()
+        AppDialog(context).setMessage(R.string.social_connect_first).setPositiveButton(R.string.okay, null).show()
         return
     }
     val name = EditText(context).apply {
@@ -456,7 +456,7 @@ internal fun StatPageFragment.editHome(slot: Int, home: Social.Home?) {
         setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
         addView(name)
     }
-    AlertDialog.Builder(context)
+    AppDialog(context)
         .setTitle(if (slot == Social.WORK) getString(R.string.work) else getString(R.string.social_home_n, slot + 1))
         .setMessage(if (ssid != null) getString(R.string.social_uses_wifi, ssid) else getString(R.string.social_keeps_wifi, home!!.ssid))
         .setView(box)

@@ -98,7 +98,7 @@ class LockdownFragment : LockdownBaseFragment() {
     private fun statusCard() {
         val context = requireContext()
         val card = Card("")
-        card.scene.visibility = View.GONE
+        card.panel()
         // No title row: the status is the card's heading
         (card.titleView.parent as? View)?.visibility = View.GONE
         // Tapping the status 500 times shows the password, when that way of recovering it is on
@@ -151,7 +151,7 @@ class LockdownFragment : LockdownBaseFragment() {
             prefs.lockdownModeOn = true
             return render()
         }
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(until?.let { getString(R.string.lockdown_keep_on_after, LockdownGate.time(context, it)) } ?: getString(R.string.lockdown_keep_on))
             .setMessage(R.string.lockdown_keep_on_message)
             .setNegativeButton(R.string.cancel, null)
@@ -193,7 +193,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val running = Lockdown.timedActive(context, prefs)
         val minutes = listOf(15, 30, 60, 120, 240, 480, 1440)
         val names = minutes.map { (if (running) "+" else "") + LockdownGate.duration(context, it * 60_000L) } + getString(R.string.lockdown_until_a_time)
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(if (running) R.string.lockdown_add_time else R.string.lockdown_lock_for)
             .setItems(names.toTypedArray()) { _, which ->
                 val left = Lockdown.timedMsLeft(context, prefs)
@@ -212,7 +212,7 @@ class LockdownFragment : LockdownBaseFragment() {
     /** Asks before locking for [totalMs] from now, since it can't be undone */
     private fun confirmLockFor(totalMs: Long) {
         val context = requireContext()
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(getString(R.string.lockdown_lock_until_ask, LockdownGate.time(context, System.currentTimeMillis() + totalMs)))
             .setMessage(R.string.lockdown_lock_until_message)
             .setNegativeButton(R.string.cancel, null)
@@ -227,11 +227,11 @@ class LockdownFragment : LockdownBaseFragment() {
     private fun showSchedules() {
         val context = requireContext()
         val schedules = Lockdown.schedules(prefs)
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.lockdown_schedules)
             .setItems(schedules.map { LockdownGate.scheduleName(context, it) }.toTypedArray()) { _, i ->
                 val schedule = schedules[i]
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setTitle(LockdownGate.scheduleName(context, schedule))
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.lockdown_remove) { _, _ ->
@@ -252,7 +252,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val context = requireContext()
         val days = java.time.DayOfWeek.values()
         val ticked = days.map { it.value <= 5 }.toBooleanArray()
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.lockdown_schedule_days)
             .setMultiChoiceItems(days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) }.toTypedArray(), ticked) { _, i, on -> ticked[i] = on }
             .setNegativeButton(R.string.cancel, null)
@@ -353,7 +353,7 @@ class LockdownFragment : LockdownBaseFragment() {
             return render()
         }
         val input = android.widget.EditText(requireContext()).apply { hint = getString(R.string.enter_clue) }
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.enter_clue)
             .setView(LockdownGate.padded(requireContext(), input))
             .setPositiveButton(R.string.okay) { _, _ ->
@@ -438,7 +438,7 @@ class LockdownFragment : LockdownBaseFragment() {
 
     /** Something that turns lockdown on straight away is asked about first */
     private fun confirmStartsNow(save: () -> Unit) {
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.lockdown_starts_now)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.add) { _, _ -> save() }

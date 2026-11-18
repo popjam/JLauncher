@@ -269,7 +269,7 @@ internal fun androidx.fragment.app.Fragment.askWeekLimit(onDone: () -> Unit) {
         addView(carry)
         addView(onHome)
     }
-    AlertDialog.Builder(context)
+    AppDialog(context)
         .setTitle(R.string.week_limit_ask)
         .setView(box)
         .setPositiveButton(R.string.okay) { _, _ ->
@@ -309,7 +309,7 @@ internal fun StatPageFragment.askEssential(purchase: Spending.Purchase) {
     } else {
         options += getString(R.string.subscription_is) to { askPeriod(purchase.merchant, purchase.cents, null) }
     }
-    AlertDialog.Builder(context)
+    AppDialog(context)
         .setTitle(getString(R.string.essential_title, purchase.merchant, money(purchase.cents)))
         .setItems(options.map { it.first }.toTypedArray()) { _, which ->
             options[which].second()
@@ -322,7 +322,7 @@ internal fun StatPageFragment.askEssential(purchase: Spending.Purchase) {
 internal fun StatPageFragment.askPeriod(merchant: String, cents: Long, current: Subscriptions.Period?) {
     val context = requireContext()
     val periods = Subscriptions.Period.values()
-    AlertDialog.Builder(context)
+    AppDialog(context)
         .setTitle(getString(R.string.subscription_how_often, merchant))
         .setSingleChoiceItems(periods.map { getString(periodName(it)) }.toTypedArray(), current?.ordinal ?: Subscriptions.Period.MONTHLY.ordinal) { dialog, which ->
             Subscriptions.mark(context, merchant, cents, periods[which])
@@ -368,7 +368,7 @@ internal fun StatPageFragment.subscriptionsCard() {
                     getString(R.string.subscription_not) to { Subscriptions.remove(context, sub.merchant); if (_binding != null) render() },
                     getString(R.string.subscription_change) to { askPeriod(sub.merchant, sub.cents, sub.period) },
                 )
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setTitle(getString(R.string.essential_title, sub.merchant, money(sub.cents)))
                     .setItems(options.map { it.first }.toTypedArray()) { _, which -> options[which].second() }
                     .show()

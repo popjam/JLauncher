@@ -209,7 +209,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             row(add, name, null, null) {
                 val save = { prefs.lockdownPlaces = prefs.lockdownPlaces + id; addedHere += id.toString(); render() }
                 val here = runCatching { Social.currentPlace(context) }.getOrNull() == id
-                if (here && !Lockdown.isActive(context, prefs)) AlertDialog.Builder(context)
+                if (here && !Lockdown.isActive(context, prefs)) AppDialog(context)
                     .setTitle(R.string.lockdown_starts_now)
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.add) { _, _ -> save() }
@@ -324,7 +324,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val used = Limits.usedToday(context, pkg)
         val opens = Limits.opensToday(context, pkg)
         val today = Card("")
-        today.scene.visibility = View.GONE
+        today.panel()
         (today.titleView.parent as? View)?.isVisible = false
         today.add(android.widget.TextView(context, null, 0, R.style.TextLarge).apply {
             text = getString(R.string.lockdown_used_today, LockdownGate.duration(context, used))

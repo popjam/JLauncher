@@ -1453,7 +1453,7 @@ class StatsHomeFragment : CardPageFragment() {
         compareRoot = card.root
         fun pick(onPick: (String) -> Unit) {
             val options = comparables
-            AlertDialog.Builder(requireContext())
+            AppDialog(requireContext())
                 .setItems(options.map { it.name }.toTypedArray()) { _, i -> onPick(options[i].key) }
                 .show()
         }

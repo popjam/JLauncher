@@ -19,7 +19,7 @@ import app.olauncher.helper.dpToPx
 object NewMedicine {
 
     fun pick(context: Context, store: MoodStore, onDone: () -> Unit) {
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.new_stat)
             .setItems(arrayOf(context.getString(R.string.new_kind_stat), context.getString(R.string.new_kind_medicine))) { _, which ->
                 if (which == 0) StatEditor.show(context, store, null) { onDone() } else show(context, store, onDone)
@@ -49,7 +49,7 @@ object NewMedicine {
                 setPadding(4.dpToPx(), 6.dpToPx(), 4.dpToPx(), 0)
             })
         }
-        val dialog = AlertDialog.Builder(context)
+        val dialog = AppDialog(context)
             .setTitle(R.string.new_kind_medicine)
             .setView(box)
             .setNegativeButton(R.string.cancel, null)

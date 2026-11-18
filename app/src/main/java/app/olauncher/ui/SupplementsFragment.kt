@@ -479,7 +479,7 @@ class SupplementsFragment : CardPageFragment() {
             text = stat.name + " ▾"
             setPadding(8.dpToPx(), 4.dpToPx(), 0, 4.dpToPx())
             setOnClickListener {
-                AlertDialog.Builder(requireContext())
+                AppDialog(requireContext())
                     .setItems(choices.map { it.name }.toTypedArray()) { _, i ->
                         amountStat = choices[i].id
                         render()

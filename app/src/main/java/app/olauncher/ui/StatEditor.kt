@@ -202,7 +202,7 @@ object StatEditor {
             stat != null -> context.getString(R.string.edit_stat)
             else -> context.getString(R.string.new_stat)
         }
-        val builder = AlertDialog.Builder(context)
+        val builder = AppDialog(context)
             .setTitle(title)
             .setView(binding.root)
             .setNegativeButton(R.string.cancel, null)
@@ -238,7 +238,7 @@ object StatEditor {
     }
 
     private fun confirmDelete(context: Context, moodStore: MoodStore, stat: MoodStore.Stat, onDone: (String?) -> Unit) {
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setMessage(context.getString(R.string.delete_stat_message, stat.name))
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.delete_stat) { _, _ ->

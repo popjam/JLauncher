@@ -156,7 +156,7 @@ class SettingsFragment : CardPageFragment() {
         val savedAt = BackupManager.savedAt(existing)?.let {
             "\n\n" + getString(R.string.backup_saved_on, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(it))
         }.orEmpty()
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.backup_folder)
             .setMessage(getString(R.string.backup_found_message) + savedAt)
             .setCancelable(false)
@@ -419,32 +419,12 @@ class SettingsFragment : CardPageFragment() {
         }
     }
 
-    /** Whether the page is light text on dark */
-    private val darkPage get() = androidx.core.graphics.ColorUtils.calculateLuminance(ink) > 0.5
-
-    /** The solid colour behind each section and the search box */
-    private val panelColor get() = if (darkPage) 0xFF151716.toInt() else 0xFFF4F5F4.toInt()
-
     private fun Card.body(vararg rows: View?) {
-        scene.visibility = View.GONE
-        // A solid panel, so the wallpaper doesn't show through the settings
-        root.background = GradientDrawable().apply {
-            cornerRadius = 20.dpToPx().toFloat()
-            setColor(panelColor)
-        }
-        // The section's name in small spaced capitals and in colour, so it reads as a heading over its settings
-        titleView.textSize = 12.5f
-        titleView.isAllCaps = true
-        titleView.letterSpacing = 0.12f
-        titleView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
-        titleView.setTextColor(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt())
+        panel()
         val list = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             // A thin line between settings
-            dividerDrawable = GradientDrawable().apply {
-                setColor(faint(30))
-                setSize(0, 1.dpToPx())
-            }
+            dividerDrawable = rowDivider()
             showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
         }
         val shown = rows.filterNotNull()
@@ -461,7 +441,7 @@ class SettingsFragment : CardPageFragment() {
     }
 
     private fun choose(title: Int, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(title)
             .setSingleChoiceItems(options.toTypedArray(), selected) { dialog, which ->
                 dialog.dismiss()
@@ -550,10 +530,10 @@ class SettingsFragment : CardPageFragment() {
                 }
             } else null,
             row(card, getString(R.string.settings_arrange), null, R.string.info_arrange) {
-                AlertDialog.Builder(context).setTitle(R.string.settings_arrange).setMessage(R.string.info_arrange).setPositiveButton(R.string.okay, null).show()
+                AppDialog(context).setTitle(R.string.settings_arrange).setMessage(R.string.info_arrange).setPositiveButton(R.string.okay, null).show()
             },
             row(card, getString(R.string.settings_reset_layout), null, R.string.info_reset_layout, level = 1) {
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setMessage(R.string.reset_layout_ask)
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.settings_reset_layout) { _, _ ->
@@ -666,7 +646,7 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext().applicationContext
         val count = app.olauncher.helper.JournalSummaries.toRedo(context).size
         if (count == 0) return android.widget.Toast.makeText(context, R.string.journal_summarise_none, android.widget.Toast.LENGTH_SHORT).show()
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setMessage(resources.getQuantityString(R.plurals.journal_summarise_ask, count, count))
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.journal_summarise) { _, _ ->
@@ -679,7 +659,7 @@ class SettingsFragment : CardPageFragment() {
                         context.resources.getQuantityString(R.plurals.journal_summarised, made, made), android.widget.Toast.LENGTH_LONG).show()
                     // A dialog, so the reason can be read in full
                     val text = context.resources.getQuantityString(R.plurals.journal_summarise_failed, failed, failed)
-                    if (isAdded) AlertDialog.Builder(requireContext())
+                    if (isAdded) AppDialog(requireContext())
                         .setTitle(text)
                         .setMessage(why ?: "")
                         .setPositiveButton(R.string.okay, null)
@@ -699,7 +679,7 @@ class SettingsFragment : CardPageFragment() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setText(app.olauncher.helper.AiTidy.key(context).orEmpty())
         }
-        val builder = AlertDialog.Builder(context)
+        val builder = AppDialog(context)
             .setTitle(R.string.voice_tidy)
             .setMessage(R.string.info_voice_tidy)
             .setView(android.widget.FrameLayout(context).apply {
@@ -741,7 +721,7 @@ class SettingsFragment : CardPageFragment() {
 
     /** Double tap, home for recents and pausing apps opened elsewhere all need the accessibility service */
     private fun askAccessibility() {
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.accessibility)
             .setMessage(R.string.accessibility_disclosure)
             .setNegativeButton(R.string.cancel, null)
@@ -810,7 +790,7 @@ class SettingsFragment : CardPageFragment() {
     private fun pickCheckInStats() {
         val stats = moodStore.load().stats.filter { it.id != MoodStore.USAGE }
         val asked = stats.map { it.daily }.toBooleanArray()
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.check_in_asks)
             .setMultiChoiceItems(stats.map { it.name }.toTypedArray(), asked) { _, i, on -> asked[i] = on }
             .setNegativeButton(R.string.cancel, null)
@@ -860,7 +840,7 @@ class SettingsFragment : CardPageFragment() {
             }
         }
         draw()
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(title)
             .setView(ScrollView(context).apply { addView(list) })
             .setNegativeButton(R.string.cancel, null)
@@ -944,7 +924,7 @@ class SettingsFragment : CardPageFragment() {
             if (placesOn) row(card, getString(R.string.places_today), resources.getQuantityString(R.plurals.places_checks, checks, checks) + " · " +
                 resources.getQuantityString(R.plurals.places_scans, scans, scans), R.string.info_places_today, level = 1, onTap = null) else null,
             if (placesOn) row(card, getString(R.string.places_delete), null, R.string.info_places_delete, level = 1) {
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setMessage(R.string.places_delete_ask)
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.places_delete) { _, _ -> Places.deleteHistory(context); render() }
@@ -979,14 +959,14 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext()
         val rules = Spending.groupRules(context).entries.toList()
         if (rules.isEmpty()) {
-            AlertDialog.Builder(context).setMessage(R.string.settings_essentials_how).setPositiveButton(R.string.okay, null).show()
+            AppDialog(context).setMessage(R.string.settings_essentials_how).setPositiveButton(R.string.okay, null).show()
             return
         }
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.settings_essentials)
             .setItems(rules.map { (group, essential) -> group + " · " + getString(if (essential) R.string.essential else R.string.settings_not_essential) }.toTypedArray()) { _, i ->
                 val (group, essential) = rules[i]
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setTitle(group)
                     .setItems(arrayOf(getString(if (essential) R.string.essential_not_group else R.string.essential_group, group),
                         getString(R.string.essential_reset_group, group))) { _, which ->
@@ -1046,7 +1026,7 @@ class SettingsFragment : CardPageFragment() {
 
     private fun askReport() {
         val spans = listOf(30, 90, 180)
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.report_make)
             .setItems(spans.map { getString(R.string.last_days, it) }.toTypedArray()) { _, i ->
                 reportDays = spans[i]
@@ -1085,7 +1065,7 @@ class SettingsFragment : CardPageFragment() {
                 else -> folderName(folder)
             }, R.string.info_backup_folder) {
                 if (folder.isEmpty()) return@row pickFolder()
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setTitle(R.string.backup_folder)
                     .setItems(arrayOf(getString(R.string.change_folder), getString(R.string.turn_off))) { _, which ->
                         if (which == 0) pickFolder() else {
@@ -1155,7 +1135,7 @@ class SettingsFragment : CardPageFragment() {
 
     private fun showRestoreSummary() {
         val summary = BackupManager.takeRestoreSummary(requireContext()) ?: return
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(R.string.backup_restored)
             .setMessage(summary + "\n\n" + getString(R.string.restored_note))
             .setPositiveButton(R.string.okay, null)

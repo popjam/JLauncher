@@ -100,9 +100,7 @@ object SupplementDialog {
         val days = FlowLayout(context)
         val dateText = TextView(context).apply {
             textSize = 16f
-            setPadding(4.dpToPx(), 10.dpToPx(), 4.dpToPx(), 10.dpToPx())
-            background = EditText(context).background
-        }
+        }.also { AppDialog.box(it) }
 
         box.addView(column(R.string.supplement_name, name))
         box.addView(pair(column(R.string.supplement_amount, amount), column(R.string.supplement_unit, unit)))
@@ -120,7 +118,7 @@ object SupplementDialog {
         }
         box.addView(buttons, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        val dialog = AlertDialog.Builder(context)
+        val dialog = AppDialog(context)
             .setTitle(supplement?.name ?: context.getString(R.string.supplement_new))
             .setView(ScrollView(context).apply { addView(box) })
             .create()
@@ -235,7 +233,7 @@ object SupplementDialog {
             }
             buttons.addView(startAgain)
             buttons.addView(button(R.string.supplement_delete, 0xFFE57373.toInt()) {
-                AlertDialog.Builder(context)
+                AppDialog(context)
                     .setMessage(context.getString(R.string.supplement_delete_confirm, supplement.name))
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.supplement_delete) { _, _ ->
@@ -293,7 +291,7 @@ object SupplementDialog {
             })
         }
         fun value() = field.text.toString().replace(',', '.').toFloatOrNull()?.takeIf { it > 0f && it.isFinite() && it < 1e7f }
-        val dialog = AlertDialog.Builder(context)
+        val dialog = AppDialog(context)
             .setTitle(context.getString(R.string.supplement_amount_title, supplement.name))
             .setView(box)
             .setNegativeButton(R.string.cancel, null)

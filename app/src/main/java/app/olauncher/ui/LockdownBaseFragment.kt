@@ -117,20 +117,24 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     /** A card titled [title] in small spaced capitals, with [subtitle] on its right */
     internal fun section(title: String, subtitle: String? = null): Card {
         val card = Card(title)
-        card.scene.visibility = View.GONE
-        card.titleView.textSize = 12.5f
-        card.titleView.isAllCaps = true
-        card.titleView.letterSpacing = 0.12f
-        card.titleView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
-        card.titleView.setTextColor(faint(140))
+        card.panel()
         if (subtitle != null) card.subtitle(subtitle)
         return card
     }
 
     /** Adds [rows] (nulls skipped) to [card], above its drawing */
     internal fun Card.add(vararg rows: View?) {
-        rows.filterNotNull().forEach { root.addView(it, root.indexOfChild(scene)) }
+        rows.filterNotNull().forEach {
+            // A thin line between two settings in a row, like Settings
+            val before = root.getChildAt(root.indexOfChild(scene) - 1)
+            if (it in settingRows && before in settingRows) root.addView(View(context).apply { background = rowDivider() },
+                root.indexOfChild(scene), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1.dpToPx()))
+            root.addView(it, root.indexOfChild(scene))
+        }
     }
+
+    /** The views made by [row], to put lines between */
+    private val settingRows = java.util.Collections.newSetFromMap(java.util.WeakHashMap<View, Boolean>())
 
     /**
      * A setting: its name, its value on the right, indented by [level]; tapping does [onTap],
@@ -138,7 +142,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
      */
     internal fun row(card: Card, title: String, value: String?, about: Int?, level: Int = 0, onTap: (() -> Unit)?): View {
         val context = requireContext()
-        return LinearLayout(context).apply {
+        return LinearLayout(context).also { settingRows.add(it) }.apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
@@ -157,11 +161,12 @@ abstract class LockdownBaseFragment : CardPageFragment() {
                 marginStart = if (l == 1) 6.dpToPx() else 12.dpToPx()
                 if (l == level) marginEnd = 12.dpToPx()
             })
-            addView(card.textView(if (level == 0) 15.5f else 14.5f, if (level == 0) 245 else 200).apply {
+            addView(card.textView(if (level == 0) 16f else 15f, if (level == 0) 255 else 230).apply {
                 text = title
-                setPadding(0, 11.dpToPx(), 0, 11.dpToPx())
+                if (level == 0) typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(card.textView(14f, 150).apply {
+            if (value != null) addView(card.textView(15f, 215).apply {
                 text = value
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -247,7 +252,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         imeOptions = if (onDone != null) android.view.inputmethod.EditorInfo.IME_ACTION_DONE else android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         background = GradientDrawable().apply {
             cornerRadius = 22.dpToPx().toFloat()
-            setColor(faint(18))
+            setColor(panelColor)
         }
         setPadding(18.dpToPx(), 11.dpToPx(), 18.dpToPx(), 11.dpToPx())
         addTextChangedListener(object : android.text.TextWatcher {
@@ -330,7 +335,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     internal fun grayscaleSetup() {
         val context = requireContext()
         val command = LockdownSystem.grantCommand(context)
-        AlertDialog.Builder(context)
+        AppDialog(context)
             .setTitle(R.string.lockdown_grayscale)
             .setMessage(getString(R.string.lockdown_grayscale_setup) + "\n\n" + command)
             .setNegativeButton(R.string.lockdown_copy) { _, _ ->
@@ -344,7 +349,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
 
     /** A list to pick from with [selected] ticked; picking it again changes nothing, unless it's only [suggested] rather than the current value */
     internal fun choose(title: String, options: List<String>, selected: Int, suggested: Boolean = false, onPick: (Int) -> Unit) {
-        AlertDialog.Builder(requireContext())
+        AppDialog(requireContext())
             .setTitle(title)
             .setSingleChoiceItems(options.toTypedArray(), selected) { dialog, which ->
                 dialog.dismiss()

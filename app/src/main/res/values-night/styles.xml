@@ -43,6 +43,11 @@
         <item name="primaryShadeDarkColor">@color/whiteInverseTrans25</item>
         <item name="dialogShadeColor">@color/whiteInverseTrans50</item>
 
+        <item name="alertDialogTheme">@style/AppDialog</item>
+        <item name="android:alertDialogTheme">@style/AppPickerDialog</item>
+        <item name="android:datePickerDialogTheme">@style/AppPickerDialog</item>
+        <item name="android:timePickerDialogTheme">@style/AppPickerDialog</item>
+
     </style>
 
     <style name="WindowAnimationTransition">

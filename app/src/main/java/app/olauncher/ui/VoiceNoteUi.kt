@@ -174,7 +174,7 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
         if (recorder.recordedMs < KEEP_WITHOUT_ASKING_MS) return@setOnClickListener Dictation.cancel(context)
         recorder.paused = true
         showState()
-        AlertDialog.Builder(ui)
+        AppDialog(ui)
             .setMessage(R.string.voice_discard_ask)
             .setNegativeButton(R.string.voice_keep_going, null)
             .setPositiveButton(R.string.voice_discard) { _, _ -> Dictation.cancel(context) }
@@ -344,7 +344,7 @@ private fun Fragment.pendingRow(ui: Context, ink: Int, file: File, faint: (Int) 
             setBackgroundResource(android.R.drawable.list_selector_background)
             contentDescription = ui.getString(R.string.voice_discard)
             setOnClickListener {
-                AlertDialog.Builder(ui)
+                AppDialog(ui)
                     .setMessage(R.string.voice_discard_ask)
                     .setNegativeButton(R.string.cancel, null)
                     .setPositiveButton(R.string.voice_discard) { _, _ -> VoiceNotes.delete(file) }

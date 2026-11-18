@@ -1,0 +1,313 @@
+kotlin version: 2.1.20
+error message: org.jetbrains.kotlin.codegen.CompilationException: Back-end (JVM) Internal error: Couldn't transform method node:
+showBlock (Ljava/lang/String;Lapp/olauncher/helper/Lockdown$Block;Ljava/lang/String;)V:
+    // annotable parameter count: 3 (visible)
+    // annotable parameter count: 3 (invisible)
+    TRYCATCHBLOCK L0 L1 L2 java/lang/Exception
+   L3
+    LINENUMBER 198 L3
+    ALOAD 0
+    INVOKESPECIAL app/olauncher/helper/MyAccessibilityService.removeBlock ()V
+   L4
+    LINENUMBER 200 L4
+    ALOAD 3
+    IFNULL L5
+    ALOAD 3
+    GOTO L6
+   L5
+    NOP
+    ALOAD 1
+   L6
+    ASTORE 4
+   L7
+    LINENUMBER 201 L7
+    INVOKESTATIC android/os/SystemClock.uptimeMillis ()J
+    LSTORE 5
+   L8
+    LINENUMBER 202 L8
+    ALOAD 4
+    ALOAD 0
+    GETFIELD app/olauncher/helper/MyAccessibilityService.lastCounted : Ljava/lang/String;
+    INVOKESTATIC kotlin/jvm/internal/Intrinsics.areEqual (Ljava/lang/Object;Ljava/lang/Object;)Z
+    IFEQ L9
+    LLOAD 5
+    ALOAD 0
+    GETFIELD app/olauncher/helper/MyAccessibilityService.lastCountedAt : J
+    LSUB
+    LDC 5000
+    LCMP
+    IFLE L10
+   L9
+    GETSTATIC app/olauncher/helper/Lockdown.INSTANCE : Lapp/olauncher/helper/Lockdown;
+    ALOAD 0
+    CHECKCAST android/content/Context
+    ACONST_NULL
+    ICONST_2
+    ACONST_NULL
+    INVOKESTATIC app/olauncher/helper/Lockdown.countBlocked$default (Lapp/olauncher/helper/Lockdown;Landroid/content/Context;Lapp/olauncher/data/Prefs;ILjava/lang/Object;)V
+   L10
+    LINENUMBER 203 L10
+    ALOAD 0
+    ALOAD 4
+    PUTFIELD app/olauncher/helper/MyAccessibilityService.lastCounted : Ljava/lang/String;
+   L11
+    LINENUMBER 204 L11
+    ALOAD 0
+    LLOAD 5
+    PUTFIELD app/olauncher/helper/MyAccessibilityService.lastCountedAt : J
+   L12
+    LINENUMBER 205 L12
+   L13
+   L0
+    NOP
+   L14
+    LINENUMBER 206 L14
+    ALOAD 0
+    INVOKESPECIAL app/olauncher/helper/MyAccessibilityService.themedContext ()Landroid/content/Context;
+    ASTORE 7
+   L15
+    LINENUMBER 207 L15
+    NEW app/olauncher/helper/MyAccessibilityService$showBlock$root$1
+    DUP
+    ALOAD 7
+    ALOAD 0
+    INVOKESPECIAL app/olauncher/helper/MyAccessibilityService$showBlock$root$1.<init> (Landroid/content/Context;Lapp/olauncher/helper/MyAccessibilityService;)V
+    ASTORE 8
+   L16
+    LINENUMBER 214 L16
+    ALOAD 8
+    LDC -16777216
+    INVOKEVIRTUAL app/olauncher/helper/MyAccessibilityService$showBlock$root$1.setBackgroundColor (I)V
+   L17
+    LINENUMBER 215 L17
+    ALOAD 8
+    GETSTATIC app/olauncher/helper/BlockScreen.INSTANCE : Lapp/olauncher/helper/BlockScreen;
+    ALOAD 7
+    ALOAD 1
+    GETSTATIC app/olauncher/ui/LockdownGate.Companion : Lapp/olauncher/ui/LockdownGate$Companion;
+    ALOAD 0
+    CHECKCAST android/content/Context
+    ALOAD 2
+    INVOKEVIRTUAL app/olauncher/ui/LockdownGate$Companion.reasonText (Landroid/content/Context;Lapp/olauncher/helper/Lockdown$Block;)Ljava/lang/String;
+    GETSTATIC app/olauncher/ui/LockdownGate.Companion : Lapp/olauncher/ui/LockdownGate$Companion;
+    ALOAD 0
+    CHECKCAST android/content/Context
+    ALOAD 2
+    ALOAD 3
+    INVOKEVIRTUAL app/olauncher/ui/LockdownGate$Companion.detailText (Landroid/content/Context;Lapp/olauncher/helper/Lockdown$Block;Ljava/lang/String;)Ljava/lang/String;
+    ALOAD 0
+    INVOKEDYNAMIC invoke(Lapp/olauncher/helper/MyAccessibilityService;)Lkotlin/jvm/functions/Function0; [
+      // handle kind 0x6 : INVOKESTATIC
+      java/lang/invoke/LambdaMetafactory.metafactory(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;
+      // arguments:
+      ()Ljava/lang/Object;, 
+      // handle kind 0x6 : INVOKESTATIC
+      app/olauncher/helper/MyAccessibilityService.showBlock$lambda$5(Lapp/olauncher/helper/MyAccessibilityService;)Lkotlin/Unit;, 
+      ()Lkotlin/Unit;
+    ]
+    INVOKEVIRTUAL app/olauncher/helper/BlockScreen.view (Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Landroid/view/View;
+   L18
+    LINENUMBER 216 L18
+    NEW android/widget/FrameLayout$LayoutParams
+    DUP
+    ICONST_M1
+    BIPUSH -2
+    BIPUSH 17
+    INVOKESPECIAL android/widget/FrameLayout$LayoutParams.<init> (III)V
+    CHECKCAST android/view/ViewGroup$LayoutParams
+   L19
+    LINENUMBER 215 L19
+    INVOKEVIRTUAL app/olauncher/helper/MyAccessibilityService$showBlock$root$1.addView (Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V
+   L20
+    LINENUMBER 217 L20
+    NEW android/view/WindowManager$LayoutParams
+    DUP
+   L21
+    LINENUMBER 218 L21
+    ICONST_M1
+   L22
+    LINENUMBER 219 L22
+    ICONST_M1
+   L23
+    LINENUMBER 220 L23
+    SIPUSH 2032
+   L24
+    LINENUMBER 221 L24
+    SIPUSH 256
+   L25
+    LINENUMBER 222 L25
+    ICONST_M1
+   L26
+    LINENUMBER 217 L26
+    INVOKESPECIAL android/view/WindowManager$LayoutParams.<init> (IIIII)V
+    ASTORE 9
+   L27
+    LINENUMBER 224 L27
+    ALOAD 0
+    LDC "window"
+    INVOKEVIRTUAL app/olauncher/helper/MyAccessibilityService.getSystemService (Ljava/lang/String;)Ljava/lang/Object;
+    ASTORE 10
+   L28
+    ALOAD 10
+    LDC "null cannot be cast to non-null type android.view.WindowManager"
+    INVOKESTATIC kotlin/jvm/internal/Intrinsics.checkNotNull (Ljava/lang/Object;Ljava/lang/String;)V
+    ALOAD 10
+    CHECKCAST android/view/WindowManager
+   L29
+    ALOAD 8
+    CHECKCAST android/view/View
+    ALOAD 9
+    CHECKCAST android/view/ViewGroup$LayoutParams
+    INVOKEINTERFACE android/view/WindowManager.addView (Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V (itf)
+   L30
+    LINENUMBER 225 L30
+    ALOAD 0
+    ALOAD 8
+    CHECKCAST android/view/View
+    PUTFIELD app/olauncher/helper/MyAccessibilityService.blockView : Landroid/view/View;
+   L31
+    LINENUMBER 226 L31
+    ALOAD 0
+    INVOKESPECIAL app/olauncher/helper/MyAccessibilityService.holdAudio ()V
+   L32
+    LINENUMBER 227 L32
+    ALOAD 0
+    ALOAD 3
+    IFNULL L33
+    ALOAD 3
+    GOTO L34
+   L33
+    NOP
+    ALOAD 0
+    GETFIELD app/olauncher/helper/MyAccessibilityService.foregroundPackage : Ljava/lang/String;
+   L34
+    PUTFIELD app/olauncher/helper/MyAccessibilityService.blockPackage : Ljava/lang/String;
+   L35
+    GETSTATIC kotlin/Unit.INSTANCE : Lkotlin/Unit;
+    ASTORE 7
+   L1
+    GOTO L36
+   L2
+    LINENUMBER 228 L2
+    ASTORE 8
+   L37
+    LINENUMBER 229 L37
+    ALOAD 8
+    INVOKEVIRTUAL java/lang/Exception.printStackTrace ()V
+   L38
+    LINENUMBER 230 L38
+    ALOAD 0
+    ICONST_2
+    INVOKEVIRTUAL app/olauncher/helper/MyAccessibilityService.performGlobalAction (I)Z
+    INVOKESTATIC java/lang/Boolean.valueOf (Z)Ljava/lang/Boolean;
+    ASTORE 7
+   L36
+    LINENUMBER 232 L36
+    NOP
+    RETURN
+   L39
+    LOCALVARIABLE context Landroid/content/Context; L15 L35 7
+    LOCALVARIABLE root Lapp/olauncher/helper/MyAccessibilityService$showBlock$root$1; L16 L35 8
+    LOCALVARIABLE params Landroid/view/WindowManager$LayoutParams; L27 L35 9
+    LOCALVARIABLE e Ljava/lang/Exception; L37 L36 8
+    LOCALVARIABLE key Ljava/lang/String; L7 L39 4
+    LOCALVARIABLE now J L8 L39 5
+    LOCALVARIABLE this Lapp/olauncher/helper/MyAccessibilityService; L3 L39 0
+    LOCALVARIABLE name Ljava/lang/String; L3 L39 1
+    LOCALVARIABLE block Lapp/olauncher/helper/Lockdown$Block; L3 L39 2
+    LOCALVARIABLE pkg Ljava/lang/String; L3 L39 3
+    MAXSTACK = 9
+    MAXLOCALS = 11
+
+File is unknown
+The root cause java.lang.OutOfMemoryError was thrown at: org.jetbrains.kotlin.codegen.optimization.common.OptimizationBasicInterpreter.newValue(OptimizationBasicInterpreter.java:69)
+	at org.jetbrains.kotlin.codegen.TransformationMethodVisitor.visitEnd(TransformationMethodVisitor.kt:89)
+	at org.jetbrains.org.objectweb.asm.MethodVisitor.visitEnd(MethodVisitor.java:796)
+	at org.jetbrains.org.objectweb.asm.tree.MethodNode.accept(MethodNode.java:770)
+	at org.jetbrains.kotlin.backend.jvm.codegen.ClassCodegen.generateMethod(ClassCodegen.kt:452)
+	at org.jetbrains.kotlin.backend.jvm.codegen.ClassCodegen.generate(ClassCodegen.kt:167)
+	at org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory.generateFile$lambda$18(JvmIrCodegenFactory.kt:398)
+	at org.jetbrains.kotlin.backend.common.phaser.PhaseBuildersKt$createSimpleNamedCompilerPhase$1.phaseBody(PhaseBuilders.kt:68)
+	at org.jetbrains.kotlin.config.phaser.SimpleNamedCompilerPhase.phaseBody(CompilerPhase.kt:215)
+	at org.jetbrains.kotlin.config.phaser.NamedCompilerPhase.invoke(CompilerPhase.kt:111)
+	at org.jetbrains.kotlin.backend.common.phaser.PerformByIrFilePhase.invokeSequential(performByIrFile.kt:51)
+	at org.jetbrains.kotlin.backend.common.phaser.PerformByIrFilePhase.invoke(performByIrFile.kt:41)
+	at org.jetbrains.kotlin.backend.common.phaser.PerformByIrFilePhase.invoke(performByIrFile.kt:27)
+	at org.jetbrains.kotlin.config.phaser.CompilerPhaseKt.invokeToplevel(CompilerPhase.kt:62)
+	at org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory.invokeCodegen(JvmIrCodegenFactory.kt:371)
+	at org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler.runCodegen$cli(KotlinToJVMBytecodeCompiler.kt:413)
+	at org.jetbrains.kotlin.cli.pipeline.jvm.JvmBackendPipelinePhase.executePhase(JvmBackendPipelinePhase.kt:98)
+	at org.jetbrains.kotlin.cli.pipeline.jvm.JvmBackendPipelinePhase.executePhase(JvmBackendPipelinePhase.kt:30)
+	at org.jetbrains.kotlin.cli.pipeline.PipelinePhase.phaseBody(PipelinePhase.kt:68)
+	at org.jetbrains.kotlin.cli.pipeline.PipelinePhase.phaseBody(PipelinePhase.kt:58)
+	at org.jetbrains.kotlin.config.phaser.SimpleNamedCompilerPhase.phaseBody(CompilerPhase.kt:215)
+	at org.jetbrains.kotlin.config.phaser.NamedCompilerPhase.invoke(CompilerPhase.kt:111)
+	at org.jetbrains.kotlin.backend.common.phaser.CompositePhase.invoke(PhaseBuilders.kt:28)
+	at org.jetbrains.kotlin.config.phaser.CompilerPhaseKt.invokeToplevel(CompilerPhase.kt:62)
+	at org.jetbrains.kotlin.cli.pipeline.AbstractCliPipeline.runPhasedPipeline(AbstractCliPipeline.kt:106)
+	at org.jetbrains.kotlin.cli.pipeline.AbstractCliPipeline.execute(AbstractCliPipeline.kt:65)
+	at org.jetbrains.kotlin.cli.jvm.K2JVMCompiler.doExecutePhased(K2JVMCompiler.kt:61)
+	at org.jetbrains.kotlin.cli.jvm.K2JVMCompiler.doExecutePhased(K2JVMCompiler.kt:36)
+	at org.jetbrains.kotlin.cli.common.CLICompiler.execImpl(CLICompiler.kt:80)
+	at org.jetbrains.kotlin.cli.common.CLICompiler.exec(CLICompiler.kt:337)
+	at org.jetbrains.kotlin.incremental.IncrementalJvmCompilerRunner.runCompiler(IncrementalJvmCompilerRunner.kt:466)
+	at org.jetbrains.kotlin.incremental.IncrementalJvmCompilerRunner.runCompiler(IncrementalJvmCompilerRunner.kt:75)
+	at org.jetbrains.kotlin.incremental.IncrementalCompilerRunner.doCompile(IncrementalCompilerRunner.kt:514)
+	at org.jetbrains.kotlin.incremental.IncrementalCompilerRunner.compileImpl(IncrementalCompilerRunner.kt:431)
+	at org.jetbrains.kotlin.incremental.IncrementalCompilerRunner.compileNonIncrementally(IncrementalCompilerRunner.kt:310)
+	at org.jetbrains.kotlin.incremental.IncrementalCompilerRunner.compile(IncrementalCompilerRunner.kt:137)
+	at org.jetbrains.kotlin.daemon.CompileServiceImplBase.execIncrementalCompiler(CompileServiceImpl.kt:678)
+	at org.jetbrains.kotlin.daemon.CompileServiceImplBase.access$execIncrementalCompiler(CompileServiceImpl.kt:92)
+	at org.jetbrains.kotlin.daemon.CompileServiceImpl.compile(CompileServiceImpl.kt:1805)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at java.rmi/sun.rmi.server.UnicastServerRef.dispatch(UnicastServerRef.java:360)
+	at java.rmi/sun.rmi.transport.Transport$1.run(Transport.java:200)
+	at java.rmi/sun.rmi.transport.Transport$1.run(Transport.java:197)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:712)
+	at java.rmi/sun.rmi.transport.Transport.serviceCall(Transport.java:196)
+	at java.rmi/sun.rmi.transport.tcp.TCPTransport.handleMessages(TCPTransport.java:587)
+	at java.rmi/sun.rmi.transport.tcp.TCPTransport$ConnectionHandler.run0(TCPTransport.java:828)
+	at java.rmi/sun.rmi.transport.tcp.TCPTransport$ConnectionHandler.lambda$run$0(TCPTransport.java:705)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:399)
+	at java.rmi/sun.rmi.transport.tcp.TCPTransport$ConnectionHandler.run(TCPTransport.java:704)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.lang.OutOfMemoryError: GC overhead limit exceeded
+	at org.jetbrains.kotlin.codegen.optimization.common.OptimizationBasicInterpreter.newValue(OptimizationBasicInterpreter.java:69)
+	at org.jetbrains.kotlin.codegen.optimization.common.OptimizationBasicInterpreter.newValue(OptimizationBasicInterpreter.java:36)
+	at org.jetbrains.org.objectweb.asm.tree.analysis.Interpreter.newParameterValue(Interpreter.java:96)
+	at org.jetbrains.kotlin.codegen.optimization.common.FastAnalyzer.initLocals(FastAnalyzer.kt:191)
+	at org.jetbrains.kotlin.codegen.optimization.common.FastAnalyzer.analyzeMainLoop(FastAnalyzer.kt:61)
+	at org.jetbrains.kotlin.codegen.optimization.common.FastAnalyzer.analyze(FastAnalyzer.kt:53)
+	at org.jetbrains.kotlin.codegen.optimization.transformer.MethodTransformer.analyze(MethodTransformer.java:49)
+	at org.jetbrains.kotlin.codegen.optimization.ConstantConditionEliminationMethodTransformer$ConstantConditionsOptimization.collectRewriteActions(ConstantConditionEliminationMethodTransformer.kt:65)
+	at org.jetbrains.kotlin.codegen.optimization.ConstantConditionEliminationMethodTransformer$ConstantConditionsOptimization.run(ConstantConditionEliminationMethodTransformer.kt:56)
+	at org.jetbrains.kotlin.codegen.optimization.ConstantConditionEliminationMethodTransformer.transform(ConstantConditionEliminationMethodTransformer.kt:39)
+	at org.jetbrains.kotlin.codegen.optimization.transformer.CompositeMethodTransformer.transform(CompositeMethodTransformer.kt:25)
+	at org.jetbrains.kotlin.codegen.optimization.OptimizationMethodVisitor.performTransformations(OptimizationMethodVisitor.kt:74)
+	at org.jetbrains.kotlin.codegen.TransformationMethodVisitor.visitEnd(TransformationMethodVisitor.kt:67)
+	at org.jetbrains.org.objectweb.asm.MethodVisitor.visitEnd(MethodVisitor.java:796)
+	at org.jetbrains.org.objectweb.asm.tree.MethodNode.accept(MethodNode.java:770)
+	at org.jetbrains.kotlin.backend.jvm.codegen.ClassCodegen.generateMethod(ClassCodegen.kt:452)
+	at org.jetbrains.kotlin.backend.jvm.codegen.ClassCodegen.generate(ClassCodegen.kt:167)
+	at org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory.generateFile$lambda$18(JvmIrCodegenFactory.kt:398)
+	at org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory$$Lambda$2303/0x0000789aca9a5b70.invoke(Unknown Source)
+	at org.jetbrains.kotlin.backend.common.phaser.PhaseBuildersKt$createSimpleNamedCompilerPhase$1.phaseBody(PhaseBuilders.kt:68)
+	at org.jetbrains.kotlin.config.phaser.SimpleNamedCompilerPhase.phaseBody(CompilerPhase.kt:215)
+	at org.jetbrains.kotlin.config.phaser.NamedCompilerPhase.invoke(CompilerPhase.kt:111)
+	at org.jetbrains.kotlin.backend.common.phaser.PerformByIrFilePhase.invokeSequential(performByIrFile.kt:51)
+	at org.jetbrains.kotlin.backend.common.phaser.PerformByIrFilePhase.invoke(performByIrFile.kt:41)
+	at org.jetbrains.kotlin.backend.common.phaser.PerformByIrFilePhase.invoke(performByIrFile.kt:27)
+	at org.jetbrains.kotlin.config.phaser.CompilerPhaseKt.invokeToplevel(CompilerPhase.kt:62)
+	at org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory.invokeCodegen(JvmIrCodegenFactory.kt:371)
+	at org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler.runCodegen$cli(KotlinToJVMBytecodeCompiler.kt:413)
+	at org.jetbrains.kotlin.cli.pipeline.jvm.JvmBackendPipelinePhase.executePhase(JvmBackendPipelinePhase.kt:98)
+	at org.jetbrains.kotlin.cli.pipeline.jvm.JvmBackendPipelinePhase.executePhase(JvmBackendPipelinePhase.kt:30)
+	at org.jetbrains.kotlin.cli.pipeline.PipelinePhase.phaseBody(PipelinePhase.kt:68)
+	at org.jetbrains.kotlin.cli.pipeline.PipelinePhase.phaseBody(PipelinePhase.kt:58)
+
+
