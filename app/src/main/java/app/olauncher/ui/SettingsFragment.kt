@@ -204,6 +204,8 @@ class SettingsFragment : CardPageFragment() {
                 alpha = 0.45f
                 setPadding(28.dpToPx(), 0, 28.dpToPx(), 4.dpToPx())
             })
+            // Kept from the page before, when coming back from a page opened here, so it's taken off that first
+            (noMatches.parent as? ViewGroup)?.removeView(noMatches)
             addView(noMatches)
             addView(cardList)
         }

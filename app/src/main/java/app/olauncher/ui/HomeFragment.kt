@@ -378,7 +378,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             visibility = View.GONE
             // The lock fills its square edge to edge, so it's drawn smaller than the other icons to look their size
             addView(lockdownWidgetIcon, LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { topMargin = 14.dpToPx(); bottomMargin = 4.dpToPx() })
-            addView(lockdownWidgetText)
+            // Its own width, not the column's: a column sized to its children leaves out ones that fill it, so the time was cut to the lock's width
+            addView(lockdownWidgetText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             setOnClickListener { addLockdownTime() }
             // Held without dragging, it opens the Lockdown page
             setOnLongClickListener {

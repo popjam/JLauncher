@@ -867,6 +867,8 @@
     <string name="lockdown_wait_message">Lockdown unlocks in %1$s, for %2$s.</string>
     <string name="lockdown_start_wait">Start</string>
     <string name="lockdown_stop_waiting">Stop waiting</string>
+    <string name="lockdown_end_now">End now</string>
+    <string name="lockdown_end_title">End the timed lockdown now?</string>
     <string name="lockdown_unlocks_in">Unlocks in %1$s</string>
     <string name="lockdown_unlocked_for">Unlocked for %1$s</string>
     <string name="lockdown_on_until">On until %1$s</string>

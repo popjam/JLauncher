@@ -49,6 +49,33 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         }
     }
 
+    /**
+     * Ends the timed lockdown early, after the unlock method: the password, or a finished wait (asking
+     * to start one if there isn't). With no unlock method, it's asked first.
+     */
+    fun endTimed() {
+        val prefs = prefs
+        val end = {
+            Lockdown.endTimed(prefs)
+            if (Lockdown.unlock(prefs) == Lockdown.Unlock.WAIT) Lockdown.cancelWait(prefs)
+            app.olauncher.helper.LockdownSystem.sync(context)
+            onChanged()
+        }
+        when (Lockdown.unlock(prefs)) {
+            Lockdown.Unlock.PASSWORD -> if (prefs.isLockdownPasswordSet) requirePassword(end) else confirmEnd(end)
+            Lockdown.Unlock.WAIT -> if (Lockdown.waitState(context, prefs) is Lockdown.WaitState.Ready) end() else askWait()
+            Lockdown.Unlock.NOTHING -> confirmEnd(end)
+        }
+    }
+
+    private fun confirmEnd(end: () -> Unit) {
+        AppDialog(context)
+            .setTitle(R.string.lockdown_end_title)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.lockdown_end_now) { _, _ -> end() }
+            .show()
+    }
+
     // --- Waiting ---
 
     private fun askWait() {

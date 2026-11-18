@@ -387,6 +387,13 @@ object Lockdown {
         prefs.lockdownWaitBoot = boot(context)
     }
 
+    /** Ends the timed lockdown now; schedules, places and stages carry on */
+    fun endTimed(prefs: Prefs) {
+        prefs.lockdownUntil = 0L
+        prefs.lockdownUntilElapsed = 0L
+        prefs.lockdownUntilBoot = -1
+    }
+
     fun cancelWait(prefs: Prefs) {
         prefs.lockdownWaitRequestedAt = 0L
     }

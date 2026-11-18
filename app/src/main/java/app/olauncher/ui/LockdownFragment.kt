@@ -130,6 +130,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val buttons = FlowLayout(context).apply {
             updatePadding(top = 10.dpToPx())
             addView(pill(getString(R.string.lockdown_lock_for)) { askLockFor() })
+            if (Lockdown.timedActive(context, prefs)) addView(pill(getString(R.string.lockdown_end_now)) { gate.endTimed() })
             addView(pill(getString(if (prefs.lockdownModeOn) R.string.lockdown_turn_off else R.string.lockdown_turn_on)) { toggleManual() })
             addView(pill(getString(R.string.lockdown_setup)) { openSetup() })
         }
