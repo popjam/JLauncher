@@ -369,15 +369,17 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             setTextAppearance(R.style.TextSmall)
             gravity = Gravity.CENTER
             isSingleLine = true
-            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size))
-            setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 10.dpToPx())
+            // The size of the money's days, beside it
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size) * 0.88f)
+            setPadding(10.dpToPx(), 5.dpToPx(), 10.dpToPx(), 10.dpToPx())
         }
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             visibility = View.GONE
             // The lock fills its square edge to edge, so it's drawn smaller than the other icons to look their size
-            addView(lockdownWidgetIcon, LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { topMargin = 14.dpToPx(); bottomMargin = 4.dpToPx() })
+            // Level with the money figure beside it, which is about this tall and 4dp down, so their texts line up too
+            addView(lockdownWidgetIcon, LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { topMargin = 4.dpToPx() })
             // Its own width, not the column's: a column sized to its children leaves out ones that fill it, so the time was cut to the lock's width
             addView(lockdownWidgetText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             setOnClickListener { addLockdownTime() }
@@ -737,6 +739,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             top = if (clockBottom) binding.mainLayout.height - 64.dpToPx() - row.height else 72.dpToPx()
             centre = if (endSide) binding.mainLayout.width - margin else margin
         }
+        if (above != null) centreUnder(row, layout, endSide)
         val params = row.layoutParams as FrameLayout.LayoutParams
         val left = (centre - mine.left - mine.width / 2).coerceIn(0, maxOf(0, binding.mainLayout.width - row.width))
         // The left margin would otherwise shrink the width the row is measured in, squeezing its texts onto several lines
@@ -745,6 +748,35 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             params.leftMargin = left
             params.rightMargin = -left
             row.layoutParams = params
+        }
+    }
+
+    /**
+     * Spaces the pieces in [row] so each sits centred under the piece above it in [above], counting
+     * from the outer side; the outer one is placed with the row itself.
+     */
+    private fun centreUnder(row: LinearLayout, above: LinearLayout, endSide: Boolean) {
+        fun pieces(r: LinearLayout) = (0 until r.childCount).map { r.getChildAt(it) }.filter { it.isVisible }.let { if (endSide) it.reversed() else it }
+        val mine = pieces(row)
+        val theirs = pieces(above)
+        mine.forEachIndexed { i, piece ->
+            val params = piece.layoutParams as LinearLayout.LayoutParams
+            // The outer piece, and any with nothing above, sit next to their neighbour
+            if (i == 0 || i >= theirs.size) {
+                if (params.marginStart != 0 || params.marginEnd != 0) {
+                    params.marginStart = 0
+                    params.marginEnd = 0
+                    piece.layoutParams = params
+                }
+                return@forEachIndexed
+            }
+            val target = above.left + theirs[i].left + theirs[i].width / 2
+            val now = row.left + piece.left + piece.width / 2
+            val shift = if (endSide) now - target else target - now
+            if (kotlin.math.abs(shift) <= 1) return@forEachIndexed
+            if (endSide) params.marginEnd = (params.marginEnd + shift).coerceAtLeast(0)
+            else params.marginStart = (params.marginStart + shift).coerceAtLeast(0)
+            piece.layoutParams = params
         }
     }
 
