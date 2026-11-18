@@ -177,7 +177,12 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         }
     }
 
-    /** What a setting does, in a small card under it */
+    /** Colours a [row]'s value */
+    internal fun View.valueColor(color: Int) {
+        ((this as? ViewGroup)?.let { it.getChildAt(it.childCount - 1) } as? TextView)?.setTextColor(color)
+    }
+
+        /** What a setting does, in a small card under it */
     private fun explain(anchor: View, title: String, text: String) {
         info?.dismiss()
         val context = requireContext()

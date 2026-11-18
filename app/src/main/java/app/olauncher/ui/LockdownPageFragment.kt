@@ -1,5 +1,7 @@
 package app.olauncher.ui
 
+import android.content.Intent
+import android.provider.Settings
 import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
@@ -15,6 +17,7 @@ import app.olauncher.helper.Places
 import app.olauncher.helper.Social
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getAppsList
+import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.isPackageInstalled
 import app.olauncher.helper.showToast
 import kotlinx.coroutines.launch
@@ -41,6 +44,8 @@ class LockdownPageFragment : LockdownBaseFragment() {
         const val STAGES = "stages"
         const val LIMITS = "limits"
         const val APP = "app"
+        const val PROTECTION = "protection"
+        const val UNLOCK = "unlock"
     }
 
     private val page get() = arguments?.getString(PAGE) ?: BLOCKED
@@ -54,8 +59,9 @@ class LockdownPageFragment : LockdownBaseFragment() {
     private val addedHere = mutableSetOf<String>()
 
     override fun title(): String = when (page) {
-        BLOCKED -> getString(R.string.blocked_apps)
-        ALLOWED -> getString(R.string.lockdown_allowed_apps)
+        BLOCKED, ALLOWED -> getString(R.string.lockdown_apps)
+        PROTECTION -> getString(R.string.lockdown_settings_changes)
+        UNLOCK -> getString(R.string.lockdown_ending_early)
         ESSENTIALS -> getString(R.string.lockdown_essentials)
         WEBSITES -> getString(R.string.lockdown_websites)
         PLACES -> getString(R.string.lockdown_places)
@@ -93,25 +99,32 @@ class LockdownPageFragment : LockdownBaseFragment() {
             STAGES -> stagesPage()
             LIMITS -> limitsPage()
             APP -> appPage()
+            PROTECTION -> protectionPage()
+            UNLOCK -> unlockPage()
         }
     }
 
     // --- Blocked, allowed and essential apps ---
 
-    private fun chosen(): Set<String> = when (page) {
+    /** Blocked or allowed apps, whichever the choice at the top of the apps page is; else the page */
+    private val listPage get() = if (page == BLOCKED || page == ALLOWED) {
+        if (prefs.lockdownAppMode == Lockdown.ALLOW) ALLOWED else BLOCKED
+    } else page
+
+    private fun chosen(): Set<String> = when (listPage) {
         BLOCKED -> prefs.lockdownBlockedApps
         ALLOWED -> prefs.lockdownAllowedApps
         else -> prefs.lockdownEssentials
     }
 
-    private fun setChosen(apps: Set<String>) = when (page) {
+    private fun setChosen(apps: Set<String>) = when (listPage) {
         BLOCKED -> prefs.lockdownBlockedApps = apps
         ALLOWED -> prefs.lockdownAllowedApps = apps
         else -> prefs.lockdownEssentials = apps
     }
 
     /** Blocking more is stricter; allowing more, or more essentials, loosens */
-    private fun addLoosens() = page != BLOCKED
+    private fun addLoosens() = listPage != BLOCKED
 
     private fun appsPage() {
         val context = requireContext()
@@ -119,7 +132,8 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val chosen = chosen()
         val fixed = if (page == ESSENTIALS) all.filter { !Lockdown.canBlock(context, it.appPackage) } else emptyList()
         val listed = all.filter { Lockdown.canBlock(context, it.appPackage) }
-        val title = when (page) {
+        if (listPage != ESSENTIALS) modeSection()
+        val title = when (listPage) {
             BLOCKED -> R.string.lockdown_blocked_count_title
             ALLOWED -> R.string.lockdown_allowed_count_title
             else -> R.string.lockdown_essentials_count_title
@@ -132,6 +146,34 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val matches = listed.filter { it.appPackage !in chosen && (query.isBlank() || it.appLabel.lowercase(Locale.getDefault()).contains(query.trim().lowercase(Locale.getDefault()))) }
         val add = section(getString(R.string.add))
         add.add(*matches.map { app -> row(add, app.appLabel, null, null) { addApp(app.appPackage) } }.toTypedArray())
+    }
+
+    /** Block the chosen apps, or allow only them; and the apps always left open */
+    private fun modeSection() {
+        val context = requireContext()
+        val allow = prefs.lockdownAppMode == Lockdown.ALLOW
+        val card = section("")
+        (card.titleView.parent as? View)?.isVisible = false
+        card.add(
+            row(card, getString(R.string.lockdown_during), getString(if (allow) R.string.lockdown_only_allow else R.string.lockdown_block_these),
+                R.string.info_lockdown_during) { pickMode() },
+            row(card, getString(R.string.lockdown_essentials), (prefs.lockdownEssentials.count { context.isPackageInstalled(it) } + 1).toString(),
+                R.string.info_lockdown_essentials) { open(ESSENTIALS) },
+        )
+    }
+
+    /**
+     * Blocking a list, or allowing only a list. Leaving the allowlist loosens; going to it is stricter
+     * unless it allows an app that's blocked now.
+     */
+    private fun pickMode() {
+        val options = listOf(getString(R.string.lockdown_block_these), getString(R.string.lockdown_only_allow))
+        choose(getString(R.string.lockdown_during), options, prefs.lockdownAppMode) { which ->
+            if (which == prefs.lockdownAppMode) return@choose
+            val change = { prefs.lockdownAppMode = which; addedHere.clear(); render() }
+            val unblocks = (prefs.lockdownAllowedApps + prefs.lockdownEssentials).any { it in prefs.lockdownBlockedApps }
+            if (which == Lockdown.ALLOW && !unblocks) change() else gate.loosen(change)
+        }
     }
 
     private fun addApp(pkg: String) {
@@ -383,5 +425,89 @@ class LockdownPageFragment : LockdownBaseFragment() {
     private fun setRule(old: Limits.Rule, new: Limits.Rule) {
         val change = { Limits.setRule(prefs, pkg, new); render() }
         if (Limits.loosens(old.minutes, new.minutes) || Limits.loosens(old.opens, new.opens)) gate.loosen(change) else change()
+    }
+
+    // --- Settings changes ---
+
+    private fun protectionPage() {
+        val context = requireContext()
+        val card = section("")
+        (card.titleView.parent as? View)?.isVisible = false
+        card.add(*Lockdown.Lock.values().map { lock ->
+            row(card, lockName(lock), onOff(Lockdown.enabled(prefs, lock)), lockInfo(lock)) {
+                if (Lockdown.enabled(prefs, lock)) gate.loosen { Lockdown.setEnabled(prefs, lock, false); render() }
+                else {
+                    Lockdown.setEnabled(prefs, lock, true)
+                    render()
+                    val needsService = lock == Lockdown.Lock.PROTECT || lock == Lockdown.Lock.SYSTEM_SETTINGS
+                    if (needsService && !isAccessServiceEnabled(context)) runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                }
+            }
+        }.toTypedArray())
+    }
+
+    private fun lockName(lock: Lockdown.Lock) = getString(when (lock) {
+        Lockdown.Lock.APP_LIST -> R.string.lockdown_lock_app_list
+        Lockdown.Lock.APP_CHANGES -> R.string.lockdown_lock_app_changes
+        Lockdown.Lock.HIDDEN_APPS -> R.string.lockdown_lock_hidden_apps
+        Lockdown.Lock.LAUNCHER -> R.string.lockdown_lock_launcher
+        Lockdown.Lock.PROTECT -> R.string.lockdown_lock_protect
+        Lockdown.Lock.SYSTEM_SETTINGS -> R.string.lockdown_lock_system
+    })
+
+    private fun lockInfo(lock: Lockdown.Lock) = when (lock) {
+        Lockdown.Lock.APP_LIST -> R.string.info_lock_app_list
+        Lockdown.Lock.APP_CHANGES -> R.string.info_lock_app_changes
+        Lockdown.Lock.HIDDEN_APPS -> R.string.info_lock_hidden
+        Lockdown.Lock.LAUNCHER -> R.string.info_lock_launcher
+        Lockdown.Lock.PROTECT -> R.string.info_lock_protect
+        Lockdown.Lock.SYSTEM_SETTINGS -> R.string.info_lock_system
+    }
+
+    // --- Ending it early ---
+
+    private fun unlockPage() {
+        val card = section("")
+        (card.titleView.parent as? View)?.isVisible = false
+        val unlock = Lockdown.unlock(prefs)
+        val password = unlock == Lockdown.Unlock.PASSWORD
+        val recovery = password && prefs.passwordRecoveryEnabled
+        fun method(title: Int, about: Int, get: () -> Boolean, toggle: () -> Unit) = if (recovery) row(card, getString(title), onOff(get()), about, level = 2) {
+            gate.loosen(toggle)
+        } else null
+        card.add(
+            row(card, getString(R.string.lockdown_needs), unlockName(unlock), R.string.info_lockdown_unlock_with) { pickUnlock() },
+            if (password) row(card, getString(R.string.change_lockdown_password), null, R.string.info_change_password, level = 1) {
+                gate.requirePassword { gate.setNewPassword(warn = false) { render() } }
+            } else null,
+            if (password) row(card, getString(R.string.lockdown_password_recovery), onOff(prefs.passwordRecoveryEnabled), R.string.info_recovery, level = 1) {
+                gate.loosen { prefs.passwordRecoveryEnabled = !prefs.passwordRecoveryEnabled; render() }
+            } else null,
+            method(R.string.recovery_tap_500, R.string.recovery_tap_500_info, { prefs.recoveryTap500 }) { prefs.recoveryTap500 = !prefs.recoveryTap500; render() },
+            method(R.string.recovery_clue, R.string.recovery_clue_info, { prefs.recoveryClue }) { toggleClue() },
+            method(R.string.recovery_essay, R.string.recovery_essay_info, { prefs.recoveryEssay }) { prefs.recoveryEssay = !prefs.recoveryEssay; render() },
+        )
+    }
+
+    private fun toggleClue() {
+        if (prefs.recoveryClue) {
+            prefs.recoveryClue = false
+            prefs.recoveryClueText = ""
+            return render()
+        }
+        val input = android.widget.EditText(requireContext()).apply { hint = getString(R.string.enter_clue) }
+        AppDialog(requireContext())
+            .setTitle(R.string.enter_clue)
+            .setView(LockdownGate.padded(requireContext(), input))
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val clue = input.text.toString().trim()
+                if (clue.isNotEmpty()) {
+                    prefs.recoveryClue = true
+                    prefs.recoveryClueText = clue
+                    render()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 }

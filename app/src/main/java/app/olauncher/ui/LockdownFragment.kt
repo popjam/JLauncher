@@ -30,8 +30,8 @@ import java.time.LocalDateTime
 import java.util.Locale
 
 /**
- * Lockdown's page: what's on now and why, then when it turns on, the apps it covers, how it's
- * unlocked, what it protects, and today's numbers.
+ * Lockdown's page: what's on now and why, with Start; then what it blocks, what starts it by itself,
+ * what ending it early needs, extras, and today's numbers. The details of each are a page down.
  */
 class LockdownFragment : LockdownBaseFragment() {
 
@@ -86,10 +86,10 @@ class LockdownFragment : LockdownBaseFragment() {
 
     override fun build() {
         statusCard()
-        whenSection()
-        appsSection()
-        unlockSection()
-        protectionSection()
+        blocksSection()
+        startsSection()
+        endingSection()
+        extrasSection()
         todaySection()
     }
 
@@ -127,12 +127,21 @@ class LockdownFragment : LockdownBaseFragment() {
             card.add(card.textView(14f, 165).apply { text = line; updatePadding(top = 10.dpToPx()) })
             card.add(StageBar(context, stages, used, ink, labels = true), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64.dpToPx()))
         }
+        // Off: one Start, which asks for how long. On: what can be done with the lockdown that's on
         val buttons = FlowLayout(context).apply {
             updatePadding(top = 10.dpToPx())
-            addView(pill(getString(R.string.lockdown_lock_for)) { askLockFor() })
-            if (Lockdown.timedActive(context, prefs)) addView(pill(getString(R.string.lockdown_end_now)) { gate.endTimed() })
-            addView(pill(getString(if (prefs.lockdownModeOn) R.string.lockdown_turn_off else R.string.lockdown_turn_on)) { toggleManual() })
-            addView(pill(getString(R.string.lockdown_setup)) { openSetup() })
+            when {
+                !active -> addView(pill(getString(R.string.lockdown_start)) { askLockFor() })
+                prefs.lockdownModeOn -> addView(pill(getString(R.string.lockdown_turn_off)) { toggleManual() })
+                Lockdown.timedActive(context, prefs) -> {
+                    addView(pill(getString(R.string.lockdown_add_time)) { askLockFor() })
+                    addView(pill(getString(R.string.lockdown_end_now)) { gate.endTimed() })
+                }
+                else -> {
+                    addView(pill(getString(R.string.lockdown_lock_for)) { askLockFor() })
+                    addView(pill(getString(R.string.lockdown_keep_on_button)) { toggleManual() })
+                }
+            }
         }
         card.add(buttons)
     }
@@ -163,31 +172,101 @@ class LockdownFragment : LockdownBaseFragment() {
             .show()
     }
 
-    // --- When ---
+    // --- What it blocks ---
 
-    private fun whenSection() {
+    private fun blocksSection() {
         val context = requireContext()
-        val card = section(getString(R.string.lockdown_when))
+        val card = section(getString(R.string.lockdown_what_it_blocks))
+        val allow = prefs.lockdownAppMode == Lockdown.ALLOW
+        val chosen = (if (allow) prefs.lockdownAllowedApps else prefs.lockdownBlockedApps).count { context.isPackageInstalled(it) }
+        val sites = prefs.lockdownSites.size
+        val locks = Lockdown.Lock.values()
+        val limits = Limits.appsWithRules(context, prefs)
+        val needsService = chosen > 0 || prefs.lockdownProtect || prefs.lockdownSystemSettings || sites > 0 || limits > 0
+        card.add(
+            row(card, getString(R.string.lockdown_apps), when {
+                allow -> getString(R.string.lockdown_all_but, chosen)
+                chosen == 0 -> getString(R.string.lockdown_none_chosen)
+                else -> chosen.toString()
+            }, if (allow) R.string.info_allowed_apps else R.string.info_blocked_apps) {
+                open(LockdownPageFragment.BLOCKED)
+            }.also { if (!allow && chosen == 0) it.valueColor(0xFFEF5350.toInt()) },
+            row(card, getString(R.string.lockdown_websites), if (sites == 0) getString(R.string.lockdown_none) else sites.toString(),
+                R.string.info_lockdown_websites) { open(LockdownPageFragment.WEBSITES) },
+            row(card, getString(R.string.lockdown_settings_changes), getString(R.string.lockdown_n_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size),
+                R.string.info_lockdown_settings_changes) { open(LockdownPageFragment.PROTECTION) },
+            // Only when it's needed and off, since nothing outside the launcher is blocked without it
+            if (needsService && !isAccessServiceEnabled(context)) row(card, getString(R.string.accessibility), onOff(false), R.string.info_lockdown_accessibility) {
+                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            } else null,
+        )
+    }
+
+    // --- Starts by itself ---
+
+    private fun startsSection() {
+        val context = requireContext()
+        val card = section(getString(R.string.lockdown_starts_by_itself))
         val schedules = Lockdown.schedules(prefs)
         val places = prefs.lockdownPlaces.mapNotNull { LockdownGate.placeName(context, it) }
         val stages = Limits.stages(prefs)
         card.add(
-            row(card, getString(R.string.lockdown_schedules), if (schedules.isEmpty()) getString(R.string.off) else schedules.size.toString(),
-                R.string.info_lockdown_schedules) { if (schedules.isEmpty()) addSchedule() else showSchedules() },
-            row(card, getString(R.string.lockdown_places), if (places.isEmpty()) getString(R.string.off) else places.joinToString(", "),
+            row(card, getString(R.string.lockdown_on_a_schedule), when (schedules.size) {
+                0 -> getString(R.string.off)
+                1 -> LockdownGate.scheduleName(context, schedules.first())
+                else -> schedules.size.toString()
+            }, R.string.info_lockdown_schedules) { if (schedules.isEmpty()) addSchedule() else showSchedules() },
+            row(card, getString(R.string.lockdown_at_places), if (places.isEmpty()) getString(R.string.off) else places.joinToString(", "),
                 R.string.info_lockdown_places) { open(LockdownPageFragment.PLACES) },
-            row(card, getString(R.string.lockdown_stages), if (stages.all { it <= 0 }) getString(R.string.off)
+            row(card, getString(R.string.lockdown_after_screen_time), if (stages.all { it <= 0 }) getString(R.string.off)
                 else stages.joinToString(" · ") { minutesName(it) }, R.string.info_lockdown_stages) { open(LockdownPageFragment.STAGES) },
-            row(card, getString(R.string.lockdown_home_widget), onOff(prefs.lockdownHomeWidget), R.string.info_lockdown_home_widget) {
-                prefs.lockdownHomeWidget = !prefs.lockdownHomeWidget
-                render()
+        )
+    }
+
+    // --- Ending it early ---
+
+    private fun endingSection() {
+        val card = section(getString(R.string.lockdown_ending_early))
+        card.add(row(card, getString(R.string.lockdown_needs), unlockName(Lockdown.unlock(prefs)), R.string.info_lockdown_unlock_with) {
+            open(LockdownPageFragment.UNLOCK)
+        })
+    }
+
+    // --- Extras ---
+
+    private fun extrasSection() {
+        val context = requireContext()
+        val card = section(getString(R.string.lockdown_extras))
+        val canGrey = LockdownSystem.canGrayscale(context)
+        fun tap(minutes: Int) = getString(R.string.lockdown_a_tap, LockdownGate.duration(context, minutes * 60_000L))
+        card.add(
+            row(card, getString(R.string.lockdown_home_widget), if (prefs.lockdownHomeWidget) tap(prefs.lockdownWidgetMinutes) else getString(R.string.off),
+                R.string.info_lockdown_home_widget) {
+                val options = listOf(0, 15, 30, 60, 120)
+                choose(getString(R.string.lockdown_home_widget), options.map { if (it == 0) getString(R.string.off) else tap(it) },
+                    if (prefs.lockdownHomeWidget) options.indexOf(prefs.lockdownWidgetMinutes) else 0) {
+                    prefs.lockdownHomeWidget = options[it] > 0
+                    if (options[it] > 0) prefs.lockdownWidgetMinutes = options[it]
+                    render()
+                }
             },
-            if (prefs.lockdownHomeWidget) row(card, getString(R.string.lockdown_each_tap), LockdownGate.duration(context, prefs.lockdownWidgetMinutes * 60_000L),
-                R.string.info_lockdown_each_tap, level = 1) {
-                val options = listOf(15, 30, 60, 120)
-                choose(getString(R.string.lockdown_each_tap), options.map { LockdownGate.duration(context, it * 60_000L) },
-                    options.indexOf(prefs.lockdownWidgetMinutes)) { prefs.lockdownWidgetMinutes = options[it]; render() }
-            } else null,
+            row(card, getString(R.string.lockdown_grayscale), if (!canGrey) getString(R.string.lockdown_needs_setup) else onOff(prefs.lockdownGrayscale),
+                R.string.info_lockdown_grayscale) {
+                when {
+                    !canGrey -> grayscaleSetup()
+                    prefs.lockdownGrayscale -> gate.loosen { prefs.lockdownGrayscale = false; render() }
+                    else -> { prefs.lockdownGrayscale = true; render() }
+                }
+            },
+            row(card, getString(R.string.lockdown_notification), onOff(prefs.lockdownNotification && LockdownSystem.canNotify(context)),
+                R.string.info_lockdown_notification) {
+                when {
+                    !LockdownSystem.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                        askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else -> { prefs.lockdownNotification = !prefs.lockdownNotification; render() }
+                }
+            },
+            row(card, getString(R.string.lockdown_setup), null, R.string.info_lockdown_setup) { openSetup() },
         )
     }
 
@@ -196,12 +275,19 @@ class LockdownFragment : LockdownBaseFragment() {
         val context = requireContext()
         val running = Lockdown.timedActive(context, prefs)
         val minutes = listOf(15, 30, 60, 120, 240, 480, 1440)
-        val names = minutes.map { (if (running) "+" else "") + LockdownGate.duration(context, it * 60_000L) } + getString(R.string.lockdown_until_a_time)
+        // Starting from off can also be until it's turned off
+        val untilOff = !running && !Lockdown.isActive(context, prefs)
+        val names = minutes.map { (if (running) "+" else "") + LockdownGate.duration(context, it * 60_000L) } + getString(R.string.lockdown_until_a_time) +
+            listOfNotNull(getString(R.string.lockdown_until_off).takeIf { untilOff })
         AppDialog(context)
-            .setTitle(if (running) R.string.lockdown_add_time else R.string.lockdown_lock_for)
+            .setTitle(if (running) R.string.lockdown_add_time else R.string.lockdown_start_title)
             .setItems(names.toTypedArray()) { _, which ->
                 val left = Lockdown.timedMsLeft(context, prefs)
                 if (which < minutes.size) return@setItems confirmLockFor(left + minutes[which] * 60_000L)
+                if (which > minutes.size) {
+                    prefs.lockdownModeOn = true
+                    return@setItems render()
+                }
                 val now = java.time.LocalTime.now()
                 TimePickerDialog(context, { _, hour, minute ->
                     val at = LocalDate.now().atTime(hour, minute).let { if (it.isAfter(LocalDateTime.now())) it else it.plusDays(1) }
@@ -276,150 +362,6 @@ class LockdownFragment : LockdownBaseFragment() {
                 }, 22, 0, is24).apply { setTitle(R.string.lockdown_schedule_starts) }.show()
             }
             .show()
-    }
-
-    // --- Apps ---
-
-    private fun appsSection() {
-        val context = requireContext()
-        val card = section(getString(R.string.lockdown_apps))
-        val allow = prefs.lockdownAppMode == Lockdown.ALLOW
-        val chosen = (if (allow) prefs.lockdownAllowedApps else prefs.lockdownBlockedApps).count { context.isPackageInstalled(it) }
-        val limits = Limits.appsWithRules(context, prefs)
-        val needsService = chosen > 0 || prefs.lockdownProtect || prefs.lockdownSystemSettings || prefs.lockdownSites.isNotEmpty() || limits > 0
-        card.add(
-            row(card, getString(R.string.lockdown_during), getString(if (allow) R.string.lockdown_only_allow else R.string.lockdown_block_these),
-                R.string.info_lockdown_during) { pickMode() },
-            row(card, getString(if (allow) R.string.lockdown_allowed_apps else R.string.blocked_apps), chosen.toString(),
-                if (allow) R.string.info_allowed_apps else R.string.info_blocked_apps) {
-                open(if (allow) LockdownPageFragment.ALLOWED else LockdownPageFragment.BLOCKED)
-            },
-            row(card, getString(R.string.lockdown_essentials), (prefs.lockdownEssentials.count { context.isPackageInstalled(it) } + 1).toString(),
-                R.string.info_lockdown_essentials, level = 1) { open(LockdownPageFragment.ESSENTIALS) },
-            row(card, getString(R.string.lockdown_websites), prefs.lockdownSites.size.toString(), R.string.info_lockdown_websites) {
-                open(LockdownPageFragment.WEBSITES)
-            },
-            // Only when it's needed and off, since nothing outside the launcher is blocked without it
-            if (needsService && !isAccessServiceEnabled(context)) row(card, getString(R.string.accessibility), onOff(isAccessServiceEnabled(context)), R.string.info_lockdown_accessibility) {
-                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-            } else null,
-        )
-    }
-
-    /**
-     * Blocking a list, or allowing only a list. Leaving the allowlist loosens; going to it is stricter
-     * unless it allows an app that's blocked now.
-     */
-    private fun pickMode() {
-        val options = listOf(getString(R.string.lockdown_block_these), getString(R.string.lockdown_only_allow))
-        choose(getString(R.string.lockdown_during), options, prefs.lockdownAppMode) { which ->
-            if (which == prefs.lockdownAppMode) return@choose
-            val change = { prefs.lockdownAppMode = which; render() }
-            val unblocks = (prefs.lockdownAllowedApps + prefs.lockdownEssentials).any { it in prefs.lockdownBlockedApps }
-            if (which == Lockdown.ALLOW && !unblocks) change() else gate.loosen(change)
-        }
-    }
-
-    // --- Unlock ---
-
-    private fun unlockSection() {
-        val card = section(getString(R.string.lockdown_unlock))
-        val unlock = Lockdown.unlock(prefs)
-        val password = unlock == Lockdown.Unlock.PASSWORD
-        val recovery = password && prefs.passwordRecoveryEnabled
-        fun method(title: Int, about: Int, get: () -> Boolean, toggle: () -> Unit) = if (recovery) row(card, getString(title), onOff(get()), about, level = 2) {
-            gate.loosen(toggle)
-        } else null
-        card.add(
-            row(card, getString(R.string.lockdown_unlock_with), unlockName(unlock), R.string.info_lockdown_unlock_with) { pickUnlock() },
-            if (password) row(card, getString(R.string.change_lockdown_password), null, R.string.info_change_password, level = 1) {
-                gate.requirePassword { gate.setNewPassword(warn = false) { render() } }
-            } else null,
-            if (password) row(card, getString(R.string.lockdown_password_recovery), onOff(prefs.passwordRecoveryEnabled), R.string.info_recovery, level = 1) {
-                gate.loosen { prefs.passwordRecoveryEnabled = !prefs.passwordRecoveryEnabled; render() }
-            } else null,
-            method(R.string.recovery_tap_500, R.string.recovery_tap_500_info, { prefs.recoveryTap500 }) { prefs.recoveryTap500 = !prefs.recoveryTap500; render() },
-            method(R.string.recovery_clue, R.string.recovery_clue_info, { prefs.recoveryClue }) { toggleClue() },
-            method(R.string.recovery_essay, R.string.recovery_essay_info, { prefs.recoveryEssay }) { prefs.recoveryEssay = !prefs.recoveryEssay; render() },
-        )
-    }
-
-    private fun toggleClue() {
-        if (prefs.recoveryClue) {
-            prefs.recoveryClue = false
-            prefs.recoveryClueText = ""
-            return render()
-        }
-        val input = android.widget.EditText(requireContext()).apply { hint = getString(R.string.enter_clue) }
-        AppDialog(requireContext())
-            .setTitle(R.string.enter_clue)
-            .setView(LockdownGate.padded(requireContext(), input))
-            .setPositiveButton(R.string.okay) { _, _ ->
-                val clue = input.text.toString().trim()
-                if (clue.isNotEmpty()) {
-                    prefs.recoveryClue = true
-                    prefs.recoveryClueText = clue
-                    render()
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    // --- Protection ---
-
-    private fun protectionSection() {
-        val context = requireContext()
-        val card = section(getString(R.string.lockdown_protection))
-        val locks = Lockdown.Lock.values().map { lock ->
-            row(card, lockName(lock), onOff(Lockdown.enabled(prefs, lock)), lockInfo(lock)) {
-                if (Lockdown.enabled(prefs, lock)) gate.loosen { Lockdown.setEnabled(prefs, lock, false); render() }
-                else {
-                    Lockdown.setEnabled(prefs, lock, true)
-                    render()
-                    val needsService = lock == Lockdown.Lock.PROTECT || lock == Lockdown.Lock.SYSTEM_SETTINGS
-                    if (needsService && !isAccessServiceEnabled(context)) runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                }
-            }
-        }
-        val canGrey = LockdownSystem.canGrayscale(context)
-        card.add(
-            *locks.toTypedArray(),
-            row(card, getString(R.string.lockdown_grayscale), if (!canGrey) getString(R.string.lockdown_needs_setup) else onOff(prefs.lockdownGrayscale),
-                R.string.info_lockdown_grayscale) {
-                when {
-                    !canGrey -> grayscaleSetup()
-                    prefs.lockdownGrayscale -> gate.loosen { prefs.lockdownGrayscale = false; render() }
-                    else -> { prefs.lockdownGrayscale = true; render() }
-                }
-            },
-            row(card, getString(R.string.lockdown_notification), onOff(prefs.lockdownNotification && LockdownSystem.canNotify(context)),
-                R.string.info_lockdown_notification) {
-                when {
-                    !LockdownSystem.canNotify(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
-                        askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    else -> { prefs.lockdownNotification = !prefs.lockdownNotification; render() }
-                }
-            },
-        )
-    }
-
-    private fun lockName(lock: Lockdown.Lock) = getString(when (lock) {
-        Lockdown.Lock.APP_LIST -> R.string.lockdown_lock_app_list
-        Lockdown.Lock.APP_CHANGES -> R.string.lockdown_lock_app_changes
-        Lockdown.Lock.HIDDEN_APPS -> R.string.lockdown_lock_hidden_apps
-        Lockdown.Lock.LAUNCHER -> R.string.lockdown_lock_launcher
-        Lockdown.Lock.PROTECT -> R.string.lockdown_lock_protect
-        Lockdown.Lock.SYSTEM_SETTINGS -> R.string.lockdown_lock_system
-    })
-
-    private fun lockInfo(lock: Lockdown.Lock) = when (lock) {
-        Lockdown.Lock.APP_LIST -> R.string.info_lock_app_list
-        Lockdown.Lock.APP_CHANGES -> R.string.info_lock_app_changes
-        Lockdown.Lock.HIDDEN_APPS -> R.string.info_lock_hidden
-        Lockdown.Lock.LAUNCHER -> R.string.info_lock_launcher
-        Lockdown.Lock.PROTECT -> R.string.info_lock_protect
-        Lockdown.Lock.SYSTEM_SETTINGS -> R.string.info_lock_system
     }
 
     // --- Today ---
