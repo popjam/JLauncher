@@ -260,6 +260,14 @@ abstract class LockdownBaseFragment : CardPageFragment() {
             setColor(panelColor)
         }
         setPadding(18.dpToPx(), 11.dpToPx(), 18.dpToPx(), 11.dpToPx())
+        // Built without the usual text box style, so it has to be told it can take focus from a tap
+        isFocusable = true
+        isFocusableInTouchMode = true
+        isCursorVisible = true
+        setOnClickListener {
+            requestFocus()
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(this, 0)
+        }
         addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
