@@ -127,10 +127,28 @@ object Limits {
         return text.takeIf { '.' in it && it.length > 3 }
     }
 
-    /** Whether [host] is [site] or one of its subdomains */
+    /**
+     * Whether [host] is [site], loosely, the same way for every site: any of its subdomains
+     * (old.reddit.com), the same name under another ending (reddit.co.uk), and names that start with
+     * it (redditmedia.com). Names under 4 letters (x.com) only match exactly, so they don't catch others.
+     */
     fun matches(host: String, site: String): Boolean {
-        val s = site.trim().lowercase().removePrefix("www.")
-        return host == s || host.endsWith(".$s")
+        val s = site.trim().lowercase().removePrefix("www.").trimEnd('.')
+        val h = host.trim().lowercase().trimEnd('.')
+        if (s.isEmpty()) return false
+        if (h == s || h.endsWith(".$s")) return true
+        val name = siteName(s) ?: return false
+        val hostName = siteName(h) ?: return false
+        return hostName == name || (name.length >= 4 && hostName.startsWith(name))
+    }
+
+    /** The name a domain is registered under: "reddit" for old.reddit.com and reddit.co.uk */
+    fun siteName(domain: String): String? {
+        val labels = domain.split('.').filter { it.isNotEmpty() }
+        if (labels.size < 2) return null
+        // Endings like .co.uk and .com.au take two labels
+        val twoPart = labels.size >= 3 && labels.last().length == 2 && labels[labels.size - 2] in setOf("co", "com", "org", "net", "ac", "gov", "edu")
+        return labels[labels.size - if (twoPart) 3 else 2]
     }
 
     /** What's typed as a site, made plain ("https://Reddit.com/" is "reddit.com"), or null if it isn't one */

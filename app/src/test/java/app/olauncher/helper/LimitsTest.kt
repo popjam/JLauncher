@@ -115,11 +115,24 @@ class LimitsTest {
     }
 
     @Test
-    fun aSiteCoversItsSubdomainsOnly() {
+    fun aSiteCoversItsSubdomainsOtherEndingsAndLongerNames() {
         assertTrue(Limits.matches("reddit.com", "reddit.com"))
         assertTrue(Limits.matches("old.reddit.com", "reddit.com"))
         assertFalse(Limits.matches("notreddit.com", "reddit.com"))
         assertTrue(Limits.matches("reddit.com", "www.reddit.com"))
+        assertTrue(Limits.matches("old.reddit.com", "reddit.com"))
+        assertTrue(Limits.matches("np.reddit.com", "reddit.com"))
+        assertTrue(Limits.matches("reddit.co.uk", "reddit.com"))
+        assertTrue(Limits.matches("redditmedia.com", "reddit.com"))
+        assertTrue(Limits.matches("i.redd.it", "redd.it"))
+        assertTrue(Limits.matches("m.gamespot.co.uk", "gamespot.com"))
+        assertTrue(Limits.matches("mobile.x.com", "x.com"))
+        assertFalse(Limits.matches("xbox.com", "x.com"))
+        assertTrue(Limits.matches("reddit.com.", "reddit.com"))
+        assertTrue(Limits.matches("youtube-nocookie.com", "youtube.com"))
+        assertFalse(Limits.matches("redditor.example.com", "reddit.com"))
+        assertFalse(Limits.matches("google.com", "reddit.com"))
+        assertEquals("reddit", Limits.siteName("old.reddit.co.uk"))
     }
 
     @Test
