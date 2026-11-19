@@ -116,7 +116,7 @@ class MyAccessibilityService : AccessibilityService() {
             systemOnTop = false
             AppPause.onHomeShown()
             removeGate()
-            if (!blockSticky) removeBlock("home")
+            if (!blockSticky) removeBlock()
             return
         }
         if (pkg == SYSTEM_UI || pkg in keyboardPackages) return
@@ -126,7 +126,7 @@ class MyAccessibilityService : AccessibilityService() {
             // is blocked again when it comes back.
             if (!blockSticky) blockPackage?.let { coveredBefore = it }
             systemOnTop = true
-            if (!blockSticky) removeBlock("system screen $pkg")
+            if (!blockSticky) removeBlock()
             if (gatePackage != null) removeGate()
             return
         }
@@ -136,7 +136,7 @@ class MyAccessibilityService : AccessibilityService() {
         foregroundPackage = pkg
         // The block screen is already over this app
         if (blockPackage == pkg && !blockSticky) return
-        removeBlock("app $pkg over ${blockPackage ?: "?"}")
+        removeBlock()
         val prefs = Prefs(this)
         Lockdown.blockFor(this, pkg, opening, prefs)?.let { block ->
             removeGate()
@@ -241,7 +241,6 @@ class MyAccessibilityService : AccessibilityService() {
             blockPackage = pkg ?: foregroundPackage
         } catch (e: Exception) {
             e.printStackTrace()
-            note("sheet error: ${e.javaClass.simpleName} ${e.message}")
             if (toHome) performGlobalAction(GLOBAL_ACTION_HOME)
         }
     }
@@ -258,9 +257,8 @@ class MyAccessibilityService : AccessibilityService() {
         if (home) performGlobalAction(GLOBAL_ACTION_HOME)
     }
 
-    private fun removeBlock(why: String = "") {
+    private fun removeBlock() {
         val view = blockView ?: return
-        if (why.isNotEmpty()) note("sheet removed: $why")
         blockView = null
         blockPackage = null
         blockSticky = false
@@ -296,14 +294,6 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     // Websites: the address in Chrome or Firefox, once the page settles
-    /** Adds [line] to [siteLog], skipping a repeat of the last one */
-    private fun note(line: String) {
-        val time = java.time.LocalTime.now().withNano(0)
-        if (siteLog.peekLast()?.substringAfter(' ') == line) return
-        siteLog.addLast("$time $line")
-        while (siteLog.size > 8) siteLog.pollFirst()
-    }
-
     private var sitePending = false
     private val siteCheck = Runnable {
         sitePending = false
@@ -354,13 +344,8 @@ class MyAccessibilityService : AccessibilityService() {
         val host = bar?.let { textIn(it, 0)?.trim()?.substringBefore(' ')?.let { shown -> Limits.host(shown) } }
             // Any layout: the first address among the browser's own controls, outside the page
             ?: hostInControls(root, 0)
-        val read = "$pkg · ${bar?.viewIdResourceName ?: "no bar"} · ${host ?: "no address"}"
-        if (host == null) return note("$read")
-        if (blockView != null) return note("$read · sheet already up")
-        val block = Lockdown.blockForSite(this, host)
-            ?: return note("$read · not blocked (lockdown ${if (Lockdown.isActive(this)) "on" else "off"}, sites ${Prefs(this).lockdownSites.joinToString(",")})")
-        showBlock(host, block, null)
-        note("$read · ${if (blockView != null) "sheet shown" else "sheet failed"}")
+        if (host == null || blockView != null) return
+        Lockdown.blockForSite(this, host)?.let { showBlock(host, it, null) }
     }
 
     /** The first text outside any web page under [node] that reads as a site's address */
@@ -668,8 +653,6 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        /** The last few site checks and sheet changes, shown on the Websites page while site blocking is checked */
-        val siteLog = java.util.concurrent.ConcurrentLinkedDeque<String>()
 
         private const val SYSTEM_UI = "com.android.systemui"
         private const val RECHECK_MS = 15_000L

@@ -108,6 +108,7 @@ class LimitsTest {
         assertEquals("youtube.com", Limits.host("m.youtube.com/watch"))
         assertEquals("news.ycombinator.com", Limits.host("news.ycombinator.com"))
         assertEquals("example.com", Limits.host("Example.com:8080/"))
+        assertEquals("reddit.com", Limits.host("reddit.com."))
         assertNull(Limits.host("search words here"))
         assertNull(Limits.host("localhost"))
         assertNull(Limits.host(""))

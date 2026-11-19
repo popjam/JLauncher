@@ -121,6 +121,8 @@ object Limits {
         if (text.isEmpty() || ' ' in text) return null
         text = text.substringAfter("://")
         text = text.substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':')
+        // A bar read aloud with its hint ("reddit.com. Search or enter address") leaves a full stop on the end
+        text = text.trimEnd('.')
         text = text.removePrefix("www.").removePrefix("m.")
         return text.takeIf { '.' in it && it.length > 3 }
     }
