@@ -206,6 +206,8 @@ class LockdownPageFragment : LockdownBaseFragment() {
             val apps = section(getString(R.string.lockdown_sites_from_apps))
             apps.add(*fromApps.map { (site, pkg) -> row(apps, site, appLabel(pkg), R.string.info_sites_from_apps, onTap = null) }.toTypedArray())
         }
+        // While site blocking is being checked: what the last look at a browser found
+        app.olauncher.helper.MyAccessibilityService.lastSiteRead?.let { card.add(line(card, it)) }
         if (listOf("com.android.chrome", "org.mozilla.firefox").none { runCatching { context.packageManager.getPackageInfo(it, 0) }.isSuccess }) {
             card.add(line(card, getString(R.string.lockdown_no_browser)))
         }

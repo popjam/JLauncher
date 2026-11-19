@@ -329,20 +329,37 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     private fun checkSite() {
-        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        // The browser's window: usually the active one, but a phone can make something else active
+        // (a tab strip, a popup), so the other windows on screen are looked through as well
+        val root = runCatching { rootInActiveWindow }.getOrNull()?.takeIf { r -> r.packageName?.toString()?.let { isBrowser(it) } == true }
+            ?: runCatching { windows.mapNotNull { it.root }.firstOrNull { r -> r.packageName?.toString()?.let { isBrowser(it) } == true } }.getOrNull()
+            ?: return
         val pkg = root.packageName?.toString() ?: return
-        if (!isBrowser(pkg)) return
         val ids = BROWSERS[pkg].orEmpty()
         val bar = ids.asSequence().flatMap { runCatching { root.findAccessibilityNodeInfosByViewId(it) }.getOrNull().orEmpty().asSequence() }.firstOrNull()
             ?: findBar(root, 0)
-            ?: return
         // Not while an address is being typed
-        if (bar.isFocused) return
+        if (bar?.isFocused == true) return
         // Newer Firefox reads its address and hint together ("reddit.com/… Search or enter address"); the address comes first
-        val shown = textIn(bar, 0)?.trim()?.substringBefore(' ')
-        val host = Limits.host(shown ?: return) ?: return
-        if (blockView != null) return
+        val host = bar?.let { textIn(it, 0)?.trim()?.substringBefore(' ')?.let { shown -> Limits.host(shown) } }
+            // Any layout: the first address among the browser's own controls, outside the page
+            ?: hostInControls(root, 0)
+        lastSiteRead = "$pkg · ${bar?.viewIdResourceName ?: "no bar"} · ${host ?: "no address"}"
+        if (host == null || blockView != null) return
         Lockdown.blockForSite(this, host)?.let { showBlock(host, it, null) }
+    }
+
+    /** The first text outside any web page under [node] that reads as a site's address */
+    private fun hostInControls(node: AccessibilityNodeInfo, depth: Int): String? {
+        if (node.className?.toString()?.contains("WebView") == true || depth > 30) return null
+        if (!node.isEditable || !node.isFocused) {
+            (node.text ?: node.contentDescription)?.toString()?.trim()?.substringBefore(' ')?.let { Limits.host(it) }?.let { return it }
+        }
+        for (i in 0 until node.childCount) {
+            val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
+            hostInControls(child, depth + 1)?.let { return it }
+        }
+        return null
     }
 
     /**
@@ -637,6 +654,9 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        /** What the last look at a browser found, shown on the Websites page while site blocking is checked */
+        @Volatile var lastSiteRead: String? = null
+
         private const val SYSTEM_UI = "com.android.systemui"
         private const val RECHECK_MS = 15_000L
 
