@@ -944,12 +944,17 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         isShortcut: Boolean,
         shortcutId: String?,
     ): Boolean {
-        // With lockdown's allowlist, apps not allowed are left out, keeping their place
-        if (packageName.isNotEmpty() && Lockdown.hides(requireContext(), packageName, prefs)) {
-            textView.text = ""
-            textView.visibility = View.INVISIBLE
-            return true
-        }
+        // An app that can't be opened now (lockdown, a limit or a stage) is faded with a lock by its name;
+        // tapping it still shows why
+        val locked = packageName.isNotEmpty() && !isShortcut && Lockdown.blockFor(requireContext(), packageName, opening = false, prefs) != null
+        textView.alpha = if (locked) 0.4f else 1f
+        if (locked) {
+            val size = (textView.textSize * 0.8f).toInt()
+            val lock = StatIcons.drawable(StatIcons.LOCK, textView.currentTextColor, size).apply { setBounds(0, 0, size, size) }
+            if (prefs.homeAlignment == Gravity.END) textView.setCompoundDrawablesRelative(null, null, lock, null)
+            else textView.setCompoundDrawablesRelative(lock, null, null, null)
+            textView.compoundDrawablePadding = (size * 0.6f).toInt()
+        } else textView.setCompoundDrawablesRelative(null, null, null, null)
         // Get user handle for the app/shortcut
         val userHandle = getUserHandleFromString(requireContext(), userString)
 

@@ -305,12 +305,37 @@ class MyAccessibilityService : AccessibilityService() {
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
         val ids = BROWSERS[root.packageName?.toString()] ?: return
         val bar = ids.asSequence().flatMap { runCatching { root.findAccessibilityNodeInfosByViewId(it) }.getOrNull().orEmpty().asSequence() }.firstOrNull()
+            ?: findById(root, ids.toSet(), 0)
             ?: return
         // Not while an address is being typed
         if (bar.isFocused) return
-        val host = Limits.host(bar.text?.toString() ?: return) ?: return
+        // Newer Firefox reads its address and hint together ("reddit.com/… Search or enter address"); the address comes first
+        val shown = textIn(bar, 0)?.trim()?.substringBefore(' ')
+        val host = Limits.host(shown ?: return) ?: return
         if (blockView != null) return
         Lockdown.blockForSite(this, host)?.let { showBlock(host, it, null) }
+    }
+
+    /** The first node under [node] with one of [ids], for bars drawn with Compose, which the id search can miss */
+    private fun findById(node: AccessibilityNodeInfo, ids: Set<String>, depth: Int): AccessibilityNodeInfo? {
+        if (node.viewIdResourceName in ids) return node
+        if (depth > 30) return null
+        for (i in 0 until node.childCount) {
+            val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
+            findById(child, ids, depth + 1)?.let { return it }
+        }
+        return null
+    }
+
+    /** [node]'s text, or else the first text under it: Compose bars keep it in a child */
+    private fun textIn(node: AccessibilityNodeInfo, depth: Int): String? {
+        (node.text ?: node.contentDescription)?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+        if (depth > 6) return null
+        for (i in 0 until node.childCount) {
+            val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
+            textIn(child, depth + 1)?.let { return it }
+        }
+        return null
     }
 
     private var guardPending = false
@@ -590,7 +615,9 @@ class MyAccessibilityService : AccessibilityService() {
         /** Browsers whose address bar is read for blocked sites, with the bar's view ids */
         private val BROWSERS = mapOf(
             "com.android.chrome" to listOf("com.android.chrome:id/url_bar"),
-            "org.mozilla.firefox" to listOf("org.mozilla.firefox:id/mozac_browser_toolbar_url_view", "org.mozilla.firefox:id/url_bar_title"),
+            "org.mozilla.firefox" to listOf("org.mozilla.firefox:id/mozac_browser_toolbar_url_view", "org.mozilla.firefox:id/url_bar_title", "ADDRESSBAR_URL_BOX"),
+            "org.mozilla.firefox_beta" to listOf("org.mozilla.firefox_beta:id/mozac_browser_toolbar_url_view", "org.mozilla.firefox_beta:id/url_bar_title", "ADDRESSBAR_URL_BOX"),
+            "org.mozilla.fenix" to listOf("org.mozilla.fenix:id/mozac_browser_toolbar_url_view", "org.mozilla.fenix:id/url_bar_title", "ADDRESSBAR_URL_BOX"),
         )
 
         private val INSTALLER_PACKAGES = setOf("com.google.android.packageinstaller", "com.android.packageinstaller",
