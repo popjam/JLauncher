@@ -241,6 +241,9 @@ class AppDrawerAdapter(
                 if (appModel.isNew) append(" ✦")
             }
             appTitle.gravity = appLabelGravity
+            val picking = flag in Constants.FLAG_SET_HOME_APP_1..Constants.FLAG_SET_SCREEN_TIME_APP
+            appTitle.alpha = if (picking && appModel is AppModel.App && appModel.appPackage.isNotEmpty() &&
+                app.olauncher.helper.Lockdown.blockFor(root.context, appModel.appPackage, opening = false) != null) 0.4f else 1f
             otherProfileIndicator.isVisible = appModel.user != myUserHandle
 
             appTitle.setOnClickListener { clickListener(appModel) }

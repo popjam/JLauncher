@@ -41,6 +41,8 @@ import app.olauncher.helper.MoodPrompt
 import app.olauncher.helper.Spending
 import app.olauncher.helper.SwipeTargets
 import app.olauncher.helper.isAccessServiceEnabled
+import app.olauncher.helper.isSystemApp
+import app.olauncher.helper.uninstall
 import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
@@ -210,21 +212,12 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     }
 
     override fun onLongClick(view: View): Boolean {
-        // Swapping a home app (or the clock's, date's or screen time's) is changing apps
-        val changesApp = view.id in HOME_APP_IDS || view.id == R.id.clock || view.id == R.id.date || view.id == R.id.tvScreenTime
-        if (changesApp && LockdownGate.stopIfLocked(requireContext(), Lockdown.Lock.APP_CHANGES)) return true
+        // Swapping stays open in lockdown: a locked app put on home is still locked
+        if (view.id in HOME_APP_IDS) return true.also { showHomeAppOptions(view) }
         when (view.id) {
             R.id.moodAvatar -> runCatching {
                 findNavController().navigate(R.id.action_mainFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to MoodStore.MOOD))
             }
-            R.id.homeApp1 -> showAppList(Constants.FLAG_SET_HOME_APP_1, prefs.appName1.isNotEmpty(), true)
-            R.id.homeApp2 -> showAppList(Constants.FLAG_SET_HOME_APP_2, prefs.appName2.isNotEmpty(), true)
-            R.id.homeApp3 -> showAppList(Constants.FLAG_SET_HOME_APP_3, prefs.appName3.isNotEmpty(), true)
-            R.id.homeApp4 -> showAppList(Constants.FLAG_SET_HOME_APP_4, prefs.appName4.isNotEmpty(), true)
-            R.id.homeApp5 -> showAppList(Constants.FLAG_SET_HOME_APP_5, prefs.appName5.isNotEmpty(), true)
-            R.id.homeApp6 -> showAppList(Constants.FLAG_SET_HOME_APP_6, prefs.appName6.isNotEmpty(), true)
-            R.id.homeApp7 -> showAppList(Constants.FLAG_SET_HOME_APP_7, prefs.appName7.isNotEmpty(), true)
-            R.id.homeApp8 -> showAppList(Constants.FLAG_SET_HOME_APP_8, prefs.appName8.isNotEmpty(), true)
             // Picking one replaces the old; backing out keeps it
             R.id.clock -> showAppList(Constants.FLAG_SET_CLOCK_APP)
 
@@ -244,6 +237,82 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             }
         }
         return true
+    }
+
+    /**
+     * Holding a home app and letting go: replace, rename, take it off home, its info, uninstall. With
+     * lockdown's "Changing apps" on, info and uninstall are faded and only say it's locked.
+     */
+    private fun showHomeAppOptions(view: View) {
+        val context = requireContext()
+        val slot = view.tag.toString().toIntOrNull() ?: return
+        val flag = Constants.FLAG_SET_HOME_APP_1 + slot - 1
+        val page = prefs.homePage
+        val values = prefs.homeSlot(page, slot)
+        val name = values["APP_NAME"] as? String
+        if (name.isNullOrEmpty()) return showAppList(flag, false, true)
+        val pkg = values["APP_PACKAGE"] as? String ?: ""
+        val user = getUserHandleFromString(context, values["APP_USER"] as? String ?: "")
+        val isShortcut = values["IS_SHORTCUT"] == true
+        val restricted = Lockdown.isLocked(context, Lockdown.Lock.APP_CHANGES, prefs)
+        class Option(val label: Int, val locked: Boolean = false, val run: () -> Unit)
+        val options = listOfNotNull(
+            Option(R.string.replace) { showAppList(flag, true, true) },
+            Option(R.string.rename) { renameHomeApp(slot, name) },
+            Option(R.string.remove_from_home) {
+                prefs.removeHomeSlot(page, slot)
+                hideHomeApps()
+                populateHomeApps()
+            },
+            Option(R.string.app_info, restricted) { app.olauncher.helper.openAppInfo(context, user, pkg) }.takeIf { !isShortcut && pkg.isNotEmpty() },
+            Option(R.string.delete, restricted) {
+                if (user != android.os.Process.myUserHandle()) app.olauncher.helper.openAppInfo(context, user, pkg)
+                else context.uninstall(pkg)
+            }.takeIf { !isShortcut && pkg.isNotEmpty() && !context.isSystemApp(pkg, user) },
+        )
+        val adapter = object : android.widget.ArrayAdapter<String>(context, androidx.appcompat.R.layout.select_dialog_item_material,
+            android.R.id.text1, options.map { getString(it.label) }) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                super.getView(position, convertView, parent).apply { alpha = if (options[position].locked) 0.4f else 1f }
+        }
+        AppDialog(context)
+            .setTitle(name)
+            .setAdapter(adapter) { _, which ->
+                val option = options[which]
+                if (option.locked) LockdownGate.locked(context, LockdownGate.lockedMessage(context)) else option.run()
+            }
+            .show()
+    }
+
+    /** A new name for home app [slot] on this page; left empty, it goes back to the app's own */
+    private fun renameHomeApp(slot: Int, name: String) {
+        val context = requireContext()
+        val input = android.widget.EditText(context).apply {
+            setText(name)
+            setSelectAllOnFocus(true)
+            isSingleLine = true
+        }
+        AppDialog(context)
+            .setTitle(R.string.rename)
+            .setView(LockdownGate.padded(context, input))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isEmpty()) return@setPositiveButton
+                when (slot) {
+                    1 -> prefs.appName1 = text
+                    2 -> prefs.appName2 = text
+                    3 -> prefs.appName3 = text
+                    4 -> prefs.appName4 = text
+                    5 -> prefs.appName5 = text
+                    6 -> prefs.appName6 = text
+                    7 -> prefs.appName7 = text
+                    8 -> prefs.appName8 = text
+                }
+                populateHomeApps()
+            }
+            .show()
+        input.requestFocus()
     }
 
     private fun initObservers() {
@@ -411,9 +480,20 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private fun addLockdownTime() {
         val context = requireContext()
         Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs)
+        buzz(context)
         Lockdown.timedEnd(context, prefs)?.let { context.showToast(getString(R.string.lockdown_locked_until, LockdownGate.time(context, it))) }
         app.olauncher.helper.LockdownSystem.sync(context)
         populateLockdownWidget()
+    }
+
+    /** A short, firm buzz, whatever the phone's touch feedback is set to */
+    private fun buzz(context: Context) = runCatching {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            context.getSystemService(android.os.VibratorManager::class.java).defaultVibrator
+        else @Suppress("DEPRECATION") context.getSystemService(android.os.Vibrator::class.java)
+        val effect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_HEAVY_CLICK)
+            else android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+        vibrator.vibrate(effect)
     }
 
     /** Keeps the widget's time left current while home shows */
@@ -1132,7 +1212,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     }
 
     private fun showAppList(flag: Int, rename: Boolean = false, includeHiddenApps: Boolean = false) {
-        viewModel.getAppList(includeHiddenApps)
+        viewModel.getAppList(includeHiddenApps, includeLocked = flag != Constants.FLAG_LAUNCH_APP)
         try {
             findNavController().navigate(
                 R.id.action_mainFragment_to_appListFragment,

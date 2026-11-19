@@ -446,11 +446,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun getAppList(includeHiddenApps: Boolean = false) {
+    /** [includeLocked]: picking an app for home lists every app, locked ones too (they stay locked there) */
+    fun getAppList(includeHiddenApps: Boolean = false, includeLocked: Boolean = false) {
         viewModelScope.launch {
             val apps = getAppsList(appContext, prefs, includeRegularApps = true, includeHiddenApps)
-            // With lockdown's allowlist, only the allowed apps are listed
-            appList.value = apps.filterNot { it is AppModel.App && Lockdown.hides(appContext, it.appPackage, prefs) }
+            // With lockdown's allowlist, only the allowed apps are listed to open
+            appList.value = if (includeLocked) apps else apps.filterNot { it is AppModel.App && Lockdown.hides(appContext, it.appPackage, prefs) }
         }
         getPrivateSpaceAppList()
     }
