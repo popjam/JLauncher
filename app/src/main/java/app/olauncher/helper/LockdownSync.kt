@@ -91,6 +91,8 @@ object LockdownSync {
             .put("unlock", Lockdown.unlock(prefs).name.lowercase())
             .put("passwordHash", prefs.lockdownPasswordHash)
             .put("waitMinutes", prefs.lockdownWaitMinutes)
+            // The last Mac request done here, so the Mac knows when to stop acting on its own
+            .put("appliedCommand", store(context).getString("command", "").orEmpty())
     }
 
     /** Sends this phone's state if it's changed since the last send */
