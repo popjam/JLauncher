@@ -67,6 +67,7 @@ class MyAccessibilityService : AccessibilityService() {
                     showBlock(appLabel(pkg), block, pkg)
                 } else warnIfLow(pkg, prefs)
             }
+            if (blockView == null) checkSite()
             LockdownSystem.sync(service)
             main.postDelayed(this, RECHECK_MS)
         }
@@ -293,19 +294,47 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     // Websites: the address in Chrome or Firefox, once the page settles
-    private val siteCheck = Runnable { checkSite() }
+    private var sitePending = false
+    private val siteCheck = Runnable {
+        sitePending = false
+        checkSite()
+    }
 
+    /**
+     * Checks the address a moment after a browser changes. A page that never stops changing (videos,
+     * feeds) mustn't put the check off for good, so a check already waiting isn't moved back.
+     */
     private fun siteSoon(event: AccessibilityEvent) {
-        if (event.packageName?.toString() !in BROWSERS) return
-        main.removeCallbacks(siteCheck)
+        if (!isBrowser(event.packageName?.toString() ?: return)) return
+        if (sitePending) return
+        sitePending = true
         main.postDelayed(siteCheck, 400)
+    }
+
+    /** Apps that open web links, read now and then, so a browser installed later is covered */
+    private var browsers: Set<String> = emptySet()
+    private var browsersRead = 0L
+
+    private fun isBrowser(pkg: String): Boolean {
+        if (pkg in BROWSERS) return true
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (browsersRead == 0L || now - browsersRead > 10 * 60_000L) {
+            browsersRead = now
+            browsers = runCatching {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com"))
+                packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL).map { it.activityInfo.packageName }.toSet()
+            }.getOrDefault(emptySet())
+        }
+        return pkg in browsers
     }
 
     private fun checkSite() {
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
-        val ids = BROWSERS[root.packageName?.toString()] ?: return
+        val pkg = root.packageName?.toString() ?: return
+        if (!isBrowser(pkg)) return
+        val ids = BROWSERS[pkg].orEmpty()
         val bar = ids.asSequence().flatMap { runCatching { root.findAccessibilityNodeInfosByViewId(it) }.getOrNull().orEmpty().asSequence() }.firstOrNull()
-            ?: findById(root, ids.toSet(), 0)
+            ?: findBar(root, 0)
             ?: return
         // Not while an address is being typed
         if (bar.isFocused) return
@@ -316,13 +345,17 @@ class MyAccessibilityService : AccessibilityService() {
         Lockdown.blockForSite(this, host)?.let { showBlock(host, it, null) }
     }
 
-    /** The first node under [node] with one of [ids], for bars drawn with Compose, which the id search can miss */
-    private fun findById(node: AccessibilityNodeInfo, ids: Set<String>, depth: Int): AccessibilityNodeInfo? {
-        if (node.viewIdResourceName in ids) return node
+    /**
+     * The address bar under [node], by the ids browsers give it: for bars drawn with Compose, which the
+     * id search misses, and for browsers not listed by name (Firefox builds, Chromium browsers, Samsung)
+     */
+    private fun findBar(node: AccessibilityNodeInfo, depth: Int): AccessibilityNodeInfo? {
+        val id = node.viewIdResourceName
+        if (id != null && (id in BAR_TAGS || BAR_IDS.any { id.endsWith(":id/$it") })) return node
         if (depth > 30) return null
         for (i in 0 until node.childCount) {
             val child = runCatching { node.getChild(i) }.getOrNull() ?: continue
-            findById(child, ids, depth + 1)?.let { return it }
+            findBar(child, depth + 1)?.let { return it }
         }
         return null
     }
@@ -613,6 +646,12 @@ class MyAccessibilityService : AccessibilityService() {
         /** Where the default apps, the home app among them, are chosen */
         private val PERMISSION_PACKAGES = setOf("com.google.android.permissioncontroller", "com.android.permissioncontroller")
         /** Browsers whose address bar is read for blocked sites, with the bar's view ids */
+        /** Address bar ids, after the package's ":id/" */
+        private val BAR_IDS = listOf("url_bar", "mozac_browser_toolbar_url_view", "url_bar_title", "location_bar_edit_text", "url_field", "url")
+
+        /** Address bar tags in browsers drawn with Compose */
+        private val BAR_TAGS = setOf("ADDRESSBAR_URL_BOX")
+
         private val BROWSERS = mapOf(
             "com.android.chrome" to listOf("com.android.chrome:id/url_bar"),
             "org.mozilla.firefox" to listOf("org.mozilla.firefox:id/mozac_browser_toolbar_url_view", "org.mozilla.firefox:id/url_bar_title", "ADDRESSBAR_URL_BOX"),
