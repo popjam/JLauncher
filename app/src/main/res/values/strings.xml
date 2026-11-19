@@ -1302,6 +1302,13 @@
     <string name="lockdown_add_site">Add a site</string>
     <string name="lockdown_not_a_site">Not a website</string>
     <string name="lockdown_setup">Set up</string>
+    <string name="lockdown_mac">Mac</string>
+    <string name="lockdown_mac_value">On · %1$d today</string>
+    <string name="lockdown_mac_url">Database address</string>
+    <string name="lockdown_mac_code">Pairing code</string>
+    <string name="lockdown_mac_bad_url">Starts with https://</string>
+    <string name="copy">Copy</string>
+    <string name="info_lockdown_mac">Shares lockdown with the paired Mac: on and off, the timer, schedules and blocked websites. The phone sends only when something changes and reads the Mac\'s requests only when it\'s unlocked or the home screen shows, at most once a minute. The number is today\'s requests.</string>
     <string name="lockdown_start">Start</string>
     <string name="lockdown_start_title">Start lockdown</string>
     <string name="lockdown_until_off">Until I turn it off</string>

@@ -20,6 +20,7 @@ import androidx.core.view.updatePadding
 import app.olauncher.R
 import app.olauncher.helper.Limits
 import app.olauncher.helper.Lockdown
+import app.olauncher.helper.LockdownSync
 import app.olauncher.helper.LockdownSystem
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.isAccessServiceEnabled
@@ -56,6 +57,7 @@ class LockdownFragment : LockdownBaseFragment() {
 
     override fun onResume() {
         super.onResume()
+        app.olauncher.helper.LockdownSync.pull(requireContext(), force = true)
         if (arguments?.getBoolean(LOCK_FOR) == true) {
             arguments?.remove(LOCK_FOR)
             askLockFor()
@@ -266,8 +268,70 @@ class LockdownFragment : LockdownBaseFragment() {
                     else -> { prefs.lockdownNotification = !prefs.lockdownNotification; render() }
                 }
             },
+            row(card, getString(R.string.lockdown_mac), macValue(), R.string.info_lockdown_mac) { macOptions() },
             row(card, getString(R.string.lockdown_setup), null, R.string.info_lockdown_setup) { openSetup() },
         )
+    }
+
+    // --- Mac ---
+
+    /** Off, or on with how many requests it made today (what it costs) */
+    private fun macValue(): String {
+        val context = requireContext()
+        if (!LockdownSync.isOn(context)) return getString(R.string.off)
+        val last = LockdownSync.lastRequest(context).takeIf { it > 0 }?.let { LockdownGate.time(context, it) }
+        return getString(R.string.lockdown_mac_value, LockdownSync.requestsToday(context)) + (last?.let { " · $it" } ?: "")
+    }
+
+    private fun macOptions() {
+        val context = requireContext()
+        if (!LockdownSync.isOn(context)) return askMacUrl()
+        AppDialog(context)
+            .setTitle(R.string.lockdown_mac)
+            .setItems(arrayOf(getString(R.string.lockdown_mac_code), getString(R.string.turn_off))) { _, which ->
+                if (which == 0) showMacCode()
+                // Taking the Mac out of lockdown loosens it
+                else gate.loosen { LockdownSync.turnOff(context); render() }
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    /** The database both share, once; then the pairing code to type on the Mac */
+    private fun askMacUrl() {
+        val context = requireContext()
+        val input = android.widget.EditText(context).apply {
+            hint = getString(R.string.lockdown_mac_url)
+            setText(LockdownSync.url(context))
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+        }
+        AppDialog(context)
+            .setTitle(R.string.lockdown_mac_url)
+            .setView(LockdownGate.padded(context, input))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val url = input.text.toString().trim()
+                if (!url.startsWith("https://")) return@setPositiveButton context.showToast(getString(R.string.lockdown_mac_bad_url))
+                LockdownSync.turnOn(context, url)
+                render()
+                showMacCode()
+            }
+            .show()
+    }
+
+    private fun showMacCode() {
+        val context = requireContext()
+        val code = LockdownSync.key(context)
+        AppDialog(context)
+            .setTitle(R.string.lockdown_mac_code)
+            .setMessage(code)
+            .setNegativeButton(R.string.close, null)
+            .setPositiveButton(R.string.copy) { _, _ ->
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(getString(R.string.lockdown_mac_code), code))
+                context.showToast(getString(R.string.copied))
+            }
+            .show()
     }
 
     /** Starts a timed lockdown, or adds to the one running. It can't be shortened. */

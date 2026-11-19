@@ -38,6 +38,7 @@ object LockdownSystem {
         runCatching { syncGrayscale(context, prefs) }
         runCatching { syncNotification(context, prefs) }
         runCatching { TileService.requestListeningState(context, ComponentName(context, LockdownTileService::class.java)) }
+        runCatching { LockdownSync.push(context) }
     }
 
     // --- Grayscale ---

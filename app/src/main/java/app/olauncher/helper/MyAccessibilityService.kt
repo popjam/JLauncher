@@ -47,6 +47,12 @@ class MyAccessibilityService : AccessibilityService() {
         keyboardPackages = (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .enabledInputMethodList.map { it.packageName }.toSet()
         main.postDelayed(recheck, RECHECK_MS)
+        runCatching { registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT)) }
+    }
+
+    /** The phone was unlocked: a moment the Mac's requests are read, as it's in use */
+    private val unlocked = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = LockdownSync.pull(context)
     }
 
     /**
@@ -115,6 +121,7 @@ class MyAccessibilityService : AccessibilityService() {
             foregroundPackage = pkg
             systemOnTop = false
             AppPause.onHomeShown()
+            LockdownSync.pull(this)
             removeGate()
             if (!blockSticky) removeBlock()
             return
@@ -634,6 +641,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        runCatching { unregisterReceiver(unlocked) }
         main.removeCallbacks(guard)
         main.removeCallbacks(recheck)
         main.removeCallbacks(siteCheck)
@@ -644,6 +652,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
+        runCatching { unregisterReceiver(unlocked) }
         main.removeCallbacks(guard)
         main.removeCallbacks(recheck)
         main.removeCallbacks(siteCheck)
