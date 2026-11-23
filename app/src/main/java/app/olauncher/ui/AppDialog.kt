@@ -30,6 +30,35 @@ class AppDialog(context: Context) : AlertDialog.Builder(context) {
             }
         }
 
+        /**
+         * A button like the popups' own, for a popup that lays out its buttons itself: [boxed] for
+         * the main one (Save, Next), plain for the rest; [color] for one that deletes.
+         */
+        fun button(context: Context, text: Int, boxed: Boolean = false, color: Int? = null, onTap: () -> Unit): android.widget.Button =
+            android.widget.Button(context, null, 0, if (boxed) R.style.AppDialogButton_Boxed else R.style.AppDialogButton).apply {
+                setText(text)
+                stateListAnimator = null
+                if (color != null) setTextColor(color)
+                setOnClickListener { onTap() }
+            }
+
+        /**
+         * A popup in the same frame as the others showing [content] instead of a title, message and
+         * buttons: centred, the page dimmed behind it.
+         */
+        fun custom(context: Context, content: View, cancelable: Boolean = true) = android.app.Dialog(context).apply {
+            requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+            setContentView(content)
+            setCancelable(cancelable)
+            setCanceledOnTouchOutside(cancelable)
+            window?.apply {
+                setBackgroundDrawableResource(R.drawable.dialog_window)
+                setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                setGravity(android.view.Gravity.CENTER)
+                setDimAmount(0.7f)
+            }
+        }
+
         /** [view] as an outlined box, like the check-in's thoughts */
         fun box(view: android.widget.TextView) {
             val context = view.context

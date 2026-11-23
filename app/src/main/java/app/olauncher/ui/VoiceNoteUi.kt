@@ -112,7 +112,7 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 14.dpToPx() })
     }
 
-    val dialog = sheetDialog(ui, card, cancelable = false).apply {
+    val dialog = AppDialog.custom(ui, card, cancelable = false).apply {
     }
 
     fun showState() {
@@ -262,32 +262,10 @@ private class LevelBars(context: Context, private val ink: Int) : View(context) 
 
 private fun clockOf(ms: Long) = "%d:%02d".format(ms / 60_000, ms / 1000 % 60)
 
-/** The rounded card the voice popup is drawn on */
+/** What the voice popup shows, inside the popups' frame ([AppDialog.custom]) */
 private fun sheetCard(context: Context) = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
-    val ink = context.getColorFromAttr(R.attr.primaryColor)
-    background = GradientDrawable().apply {
-        cornerRadius = Style.radiusLarge
-        setColor(ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryInverseColor), 245))
-        setStroke((0.5f * context.resources.displayMetrics.density).toInt().coerceAtLeast(1), ColorUtils.setAlphaComponent(ink, 90))
-    }
     setPadding(24.dpToPx(), 22.dpToPx(), 24.dpToPx(), 20.dpToPx())
-}
-
-/** A dialog showing [card] across the screen, the page dimmed behind it */
-private fun sheetDialog(context: Context, card: View, cancelable: Boolean) = Dialog(context).apply {
-    requestWindowFeature(Window.FEATURE_NO_TITLE)
-    setContentView(FrameLayout(context).apply {
-        setPadding(20.dpToPx(), 0, 20.dpToPx(), 0)
-        addView(card)
-    })
-    setCancelable(cancelable)
-    setCanceledOnTouchOutside(cancelable)
-    window?.apply {
-        setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        setDimAmount(0.7f)
-    }
 }
 
 /**

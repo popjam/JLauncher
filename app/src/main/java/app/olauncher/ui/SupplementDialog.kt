@@ -114,7 +114,7 @@ object SupplementDialog {
         val buttons = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 12.dpToPx(), 0, 12.dpToPx())
+            setPadding(0, 16.dpToPx(), 0, 12.dpToPx())
         }
         box.addView(buttons, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
@@ -207,15 +207,8 @@ object SupplementDialog {
             }.show()
         }
 
-        val accent = TypedValue().also { context.theme.resolveAttribute(android.R.attr.colorAccent, it, true) }.data
-        fun button(text: Int, color: Int = accent, onTap: () -> Unit) = TextView(context).apply {
-            setText(text)
-            textSize = Style.TEXT_BODY
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(color)
-            setPadding(10.dpToPx(), 10.dpToPx(), 10.dpToPx(), 10.dpToPx())
-            setOnClickListener { onTap() }
-        }
+        // The popups' own buttons, laid out here since there are up to four
+        fun button(text: Int, color: Int? = null, boxed: Boolean = false, onTap: () -> Unit) = AppDialog.button(context, text, boxed, color, onTap)
         fun finish() {
             dialog.dismiss()
             onDone()
@@ -245,7 +238,7 @@ object SupplementDialog {
         }
         buttons.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
         buttons.addView(button(R.string.cancel) { dialog.dismiss() })
-        save = button(if (editing) R.string.save else R.string.add) {
+        save = button(if (editing) R.string.save else R.string.add, boxed = true) {
             val value = amountValue() ?: return@button
             if (supplement == null) {
                 store.addSupplement(name.text.toString(), unit.text.toString(), value, schedule(), from)
