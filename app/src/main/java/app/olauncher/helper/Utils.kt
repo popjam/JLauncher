@@ -59,14 +59,16 @@ import java.util.Scanner
 import kotlin.math.pow
 import kotlin.math.sqrt
 
+/** The toast showing now, cancelled when a new one comes, so quick taps don't queue them up */
+private var lastToast: Toast? = null
+
 fun Context.showToast(message: String?, duration: Int = Toast.LENGTH_SHORT) {
     if (message.isNullOrBlank()) return
-    Toast.makeText(this, message, duration).show()
+    lastToast?.cancel()
+    lastToast = Toast.makeText(applicationContext, message, duration).also { it.show() }
 }
 
-fun Context.showToast(stringResource: Int, duration: Int = Toast.LENGTH_SHORT) {
-    Toast.makeText(this, getString(stringResource), duration).show()
-}
+fun Context.showToast(stringResource: Int, duration: Int = Toast.LENGTH_SHORT) = showToast(getString(stringResource), duration)
 
 suspend fun getAppsList(
     context: Context,
