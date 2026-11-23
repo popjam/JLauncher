@@ -38,7 +38,11 @@ class WeatherFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentWeatherBinding.inflate(inflater, container, false)
-        return binding.root
+        // Pulling down closes it, like the other pages
+        return PullDismissLayout(requireContext()).apply {
+            addView(binding.root)
+            onDismiss = { if (isAdded) androidx.navigation.fragment.NavHostFragment.findNavController(this@WeatherFragment).popBackStack() }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

@@ -82,9 +82,8 @@ class StatsHomeFragment : CardPageFragment() {
     /** 0 compares the same day, 1 the second stat the day after */
     private var compareLag = 0
 
-    /** The date the thoughts box holds, so redrawing doesn't overwrite typing */
-    private var noteDate: LocalDate? = null
-    private var noteInput: EditText? = null
+    /** The picked day's part of the Daily card, drawn again when a voice note adds to its note */
+    private var dayView: LinearLayout? = null
 
     private lateinit var bubble: LinearLayout
     private lateinit var scrim: View
@@ -165,7 +164,6 @@ class StatsHomeFragment : CardPageFragment() {
         return PullDismissLayout(context).apply {
             addView(page)
             onDismiss = { if (isAdded) findNavController().popBackStack() }
-            sideDismiss = arguments?.getInt(app.olauncher.helper.SwipeTargets.SWIPE_BACK) ?: 0
         }
     }
 
@@ -176,7 +174,6 @@ class StatsHomeFragment : CardPageFragment() {
 
     override fun onResume() {
         super.onResume()
-        noteDate = null
         // Coming back unchanged (same stats, same day, same cards) keeps what's drawn
         val shown = listOf(store.lastSaved(), LocalDate.now(), app.olauncher.helper.Arrangement.shown(requireContext(),
             app.olauncher.helper.Arrangement.STATS_HOME, app.olauncher.helper.Arrangement.STATS_HOME_CARDS))
@@ -187,11 +184,6 @@ class StatsHomeFragment : CardPageFragment() {
 
     /** What the page was last drawn from */
     private var renderedFor: List<Any>? = null
-
-    override fun onPause() {
-        saveNote()
-        super.onPause()
-    }
 
     private fun load() {
         data = store.load()
@@ -293,13 +285,9 @@ class StatsHomeFragment : CardPageFragment() {
             })
         })
         heatmap.onRowHeld = { row -> gridStats.getOrNull(row)?.let { openStat(it.id) } }
-        heatmap.onPointHeld = { point ->
-            saveNote()
-            openDay(LocalDate.ofEpochDay(point.toLong()))
-        }
+        heatmap.onPointHeld = { point -> openDay(LocalDate.ofEpochDay(point.toLong())) }
         heatmap.onPointSelected = { point ->
             point?.let {
-                saveNote()
                 selectedDate = LocalDate.ofEpochDay(it.toLong())
                 renderDay(day)
             }
@@ -338,9 +326,10 @@ class StatsHomeFragment : CardPageFragment() {
         redraws.add { draw(false) }
     }
 
-    /** The picked day: its date, Mood's faces to tap and its thoughts to write. */
+    /** The picked day: its date, Mood's faces to tap and its note, which opens on its own page to write. */
     private fun renderDay(container: LinearLayout) {
         val context = requireContext()
+        dayView = container
         container.removeAllViews()
         val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
         val today = LocalDate.now()
@@ -361,7 +350,6 @@ class StatsHomeFragment : CardPageFragment() {
                 setBackgroundResource(R.drawable.bg_stat_chip)
                 setPadding(12.dpToPx(), 5.dpToPx(), 12.dpToPx(), 5.dpToPx())
                 setOnClickListener {
-                    saveNote()
                     selectedDate = today
                     renderDay(container)
                 }
@@ -382,7 +370,6 @@ class StatsHomeFragment : CardPageFragment() {
                     setPadding(pad, pad, pad, pad)
                     setOnClickListener {
                         store.setFace(selectedDate, MoodStore.MOOD, if (chosen == face) null else face)
-                        saveNote()
                         load()
                         renderDay(container)
                         redraws.forEach { it() }
@@ -390,56 +377,46 @@ class StatsHomeFragment : CardPageFragment() {
                 }, LinearLayout.LayoutParams(0, 46.dpToPx(), 1f))
             }
         })
-        val input = EditText(context, null, 0, R.style.TextSmall).apply {
-            setText(day?.note.orEmpty())
+        // The note, to read: tapping it opens it on its own page to write, holding it records
+        val date = selectedDate
+        container.addView(TextView(context, null, 0, R.style.TextSmall).apply {
+            text = day?.note.orEmpty()
             hint = getString(R.string.thoughts_hint)
             textSize = Style.TEXT_BODY
             setTextColor(ink)
             setHintTextColor(faint(110))
+            setLineSpacing(2.dpToPx().toFloat(), 1.05f)
+            maxLines = 8
+            ellipsize = android.text.TextUtils.TruncateAt.END
             background = GradientDrawable().apply {
                 cornerRadius = Style.radiusSmall
                 setColor(faint(14))
             }
-            gravity = Gravity.TOP or Gravity.START
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            foreground = context.getDrawable(android.R.drawable.list_selector_background)
             minLines = 2
             setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
-            setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveNote() }
-            // Holding it while not typing records a voice note, written into the note
+            setOnClickListener { openNote(date) }
             setOnLongClickListener {
-                if (hasFocus() && androidx.core.view.ViewCompat.getRootWindowInsets(this)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true) return@setOnLongClickListener false
-                recordInto(selectedDate)
+                recordInto(date)
                 true
             }
-        }
-        noteInput = input
-        noteDate = selectedDate
-        container.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 10.dpToPx()
         })
-        container.addView(endRow(journalButton(ink, selectedDate) { saveNote() }, voiceButton(ink) { recordInto(selectedDate) }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        container.addView(endRow(voiceButton(ink) { recordInto(date) }), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 8.dpToPx()
         })
     }
 
-    /** Records a voice note for [date], its words added to that day's note */
+    /** Records a voice note for [date], its words added to that day's note, which is shown again if it's still the day picked */
     private fun recordInto(date: LocalDate) {
-        saveNote()
-        // The words are already added to the day's note; onto the end of the box too if it's still showing that day
-        recordVoiceNote(date, onText = { text ->
-            val input = noteInput
-            if (noteDate == date && input != null && view != null) {
-                val now = input.text?.toString().orEmpty().trim()
-                input.setText(if (now.isEmpty()) text else now + "\n\n" + text)
+        recordVoiceNote(date, onText = {
+            val container = dayView
+            if (view != null && container != null && selectedDate == date) {
+                load()
+                renderDay(container)
             }
         })
-    }
-
-    private fun saveNote() {
-        val date = noteDate ?: return
-        val input = noteInput ?: return
-        val note = MoodStore.sanitizeNote(input.text?.toString())
-        if (note != store.load().days[date.toString()]?.note) store.setNote(date, note)
     }
 
     /** Each picked stat's face on [date], by name */
@@ -583,6 +560,8 @@ class StatsHomeFragment : CardPageFragment() {
         val (date, note) = old[Random(today.toEpochDay()).nextInt(old.size)]
         val card = Card(getString(R.string.remember))
         card.subtitle(date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault())))
+        // Tapping it opens the note
+        card.root.setOnClickListener { openNote(date) }
         val context = requireContext()
         card.addBody(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -986,7 +965,8 @@ class StatsHomeFragment : CardPageFragment() {
         val group: String,
         val headline: Boolean = false,
         val onTap: () -> Unit,
-        val onHold: () -> Unit = onTap,
+        /** Something other than [onTap] for holding it, if anything */
+        val onHold: (() -> Unit)? = null,
     )
 
     /** What an insight can be about: how you rate things (mood, energy, anxiety…) and how long you sleep */
@@ -1149,7 +1129,7 @@ class StatsHomeFragment : CardPageFragment() {
             val yKey = y.key
             found += Insight(x.icon, x.color, strength, capital(text), detail, "pair:" + listOf(baseOf(x), baseOf(y)).sorted().joinToString(),
                 onTap = { if (opens != null) openIfStat(opens) else showInCompare(xKey, yKey, lag) },
-                onHold = { openIfStat(opens ?: xKey.substringBefore(':')) })
+                onHold = if (opens != null) null else ({ openIfStat(xKey.substringBefore(':')) }))
         }
         return found
     }
@@ -1347,7 +1327,7 @@ class StatsHomeFragment : CardPageFragment() {
             val yKey = y.key
             Insight(y.icon, y.color, strength, text, detail, "low:" + y.key,
                 onTap = { if (opens != null) openIfStat(opens) else showInCompare(MoodStore.MOOD, yKey, 0) },
-                onHold = { openIfStat(opens ?: yKey) })
+                onHold = if (opens != null) null else ({ openIfStat(yKey) }))
         }
     }
 
@@ -1433,9 +1413,11 @@ class StatsHomeFragment : CardPageFragment() {
                         updatePadding(top = 2.dpToPx())
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                setOnLongClickListener {
-                    insight.onHold()
-                    true
+                insight.onHold?.let { hold ->
+                    setOnLongClickListener {
+                        hold()
+                        true
+                    }
                 }
                 setOnClickListener { insight.onTap() }
             })
@@ -1700,8 +1682,7 @@ class StatsHomeFragment : CardPageFragment() {
     override fun onDestroyView() {
         compareRoot = null
         compareRedraw = null
-        noteInput?.hideKeyboard()
-        noteInput = null
+        dayView = null
         redraws.clear()
         super.onDestroyView()
     }

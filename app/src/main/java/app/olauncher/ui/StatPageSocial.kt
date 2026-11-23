@@ -5,6 +5,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -18,6 +19,7 @@ import app.olauncher.helper.Places
 import app.olauncher.helper.Social
 import app.olauncher.helper.dpToPx
 import app.olauncher.helper.setStatDot
+import app.olauncher.helper.showToast
 import app.olauncher.ui.CardPageFragment.Card
 import app.olauncher.ui.StatPageFragment.Companion.SLEEP_MIN_NIGHTS
 import app.olauncher.ui.StatPageFragment.Companion.SOCIAL_DAYS
@@ -123,63 +125,59 @@ internal fun StatPageFragment.socialHomesCard(days: Map<LocalDate, Social.Day>) 
     }
     val mood = stats.firstOrNull { it.id == MoodStore.MOOD }
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    card.root.addView(list, card.root.indexOfChild(card.scene) + 1)
+    homeList.attach(list, pageScroll())
+    // A home or work: tapping one not set sets it; tapping or holding one that is offers Edit and Remove
+    fun homeRow(slot: Int, home: Social.Home?, name: String, detail: String, title: android.widget.TextView.() -> Unit) {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
+            setBackgroundResource(android.R.drawable.list_selector_background)
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(card.textView(Style.TEXT_BODY, 255).apply {
+                    text = name
+                    title()
+                })
+                addView(card.textView(Style.TEXT_SMALL, 140).apply {
+                    text = detail
+                    updatePadding(top = 2.dpToPx())
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (home == null) addView(card.textView(Style.TEXT_SMALL, 255).apply {
+                setText(R.string.social_set)
+                setBackgroundResource(R.drawable.bg_stat_chip)
+                setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
+                setOnClickListener { editHome(slot, null) }
+            })
+        }
+        list.addView(row)
+        homeList.item(row, slot, label = name, onTap = if (home == null) ({ editHome(slot, null) }) else null, actions = if (home == null) emptyList() else listOf(
+            HoldList.Action(getString(R.string.edit)) { editHome(slot, home) },
+            HoldList.Action(getString(R.string.remove)) { removeHome(slot) },
+        ))
+    }
     // The homes in order of time spent at them, ones not set last
     homes.indices.sortedByDescending { if (homes[it] == null) -1 else nights.getValue(it) }.forEach { slot ->
         val home = homes[slot]
         val dates = stayed.filterValues { it == slot }.keys
         val moodText = mood?.let { m -> dates.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
             ?.let { getString(R.string.music_mood, decimal(it)) }
-        list.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(card.textView(Style.TEXT_BODY, 255).apply {
-                    text = home?.name ?: getString(R.string.social_home_n, slot + 1)
-                    setStatDot(homeColors[slot])
-                })
-                addView(card.textView(Style.TEXT_SMALL, 140).apply {
-                    text = if (home == null) getString(R.string.social_not_set)
-                    else listOfNotNull(home.ssid, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
-                    updatePadding(top = 2.dpToPx())
-                })
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(card.textView(Style.TEXT_SMALL, 255).apply {
-                setText(if (home == null) R.string.social_set else R.string.edit)
-                setBackgroundResource(R.drawable.bg_stat_chip)
-                setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
-                setOnClickListener { editHome(slot, home) }
-            })
-        })
+        homeRow(slot, home, home?.name ?: getString(R.string.social_home_n, slot + 1),
+            if (home == null) getString(R.string.social_not_set)
+            else listOfNotNull(home.ssid, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")) {
+            setStatDot(homeColors[slot])
+        }
     }
     // Work, set the same way; it fills in the Work stat
     val work = Social.work(context)
-    list.addView(LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(card.textView(Style.TEXT_BODY, 255).apply {
-                text = work?.name ?: getString(R.string.work)
-                setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.BRIEFCASE, homeColors[Social.WORK], 13.dpToPx()), null, null, null)
-                compoundDrawablePadding = 8.dpToPx()
-            })
-            addView(card.textView(Style.TEXT_SMALL, 140).apply {
-                text = if (work == null) getString(R.string.social_work_not_set) else listOf(work.ssid,
-                    resources.getQuantityString(R.plurals.day_count, stayedWork, stayedWork)).joinToString(" · ")
-                updatePadding(top = 2.dpToPx())
-            })
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(card.textView(Style.TEXT_SMALL, 255).apply {
-            setText(if (work == null) R.string.social_set else R.string.edit)
-            setBackgroundResource(R.drawable.bg_stat_chip)
-            setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
-            setOnClickListener { editHome(Social.WORK, work) }
-        })
-    })
-    card.root.addView(list, card.root.indexOfChild(card.scene) + 1)
+    homeRow(Social.WORK, work, work?.name ?: getString(R.string.work),
+        if (work == null) getString(R.string.social_work_not_set)
+        else listOf(work.ssid, resources.getQuantityString(R.plurals.day_count, stayedWork, stayedWork)).joinToString(" · ")) {
+        setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.BRIEFCASE, homeColors[Social.WORK], 13.dpToPx()), null, null, null)
+        compoundDrawablePadding = 8.dpToPx()
+    }
     if (homes.any { it != null } || work != null) {
         val now = days[today]?.stretches?.lastOrNull()
         card.subtitle(when {
@@ -277,7 +275,8 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
 
 /**
  * Places you go, found from where the phone's been: ones to name (tap to see where on the map), and the
- * ones named, with their time this month. Holding a named one renames, recolours or removes it.
+ * ones named, with their time this month. Tapping one shows it on the map; holding one opens its menu
+ * (name or rename, recolour, open in map, not a place or remove, select several).
  */
 internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) {
     val context = requireContext()
@@ -287,27 +286,31 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
     val suggestions = Places.suggestions(context)
     val named = Places.places(context)
     if (suggestions.isEmpty() && named.isEmpty()) return card.showNote(getString(R.string.places_none_yet))
-    val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    // Suggestions and named places are separate lists, so selecting several only takes in one kind
+    val suggestionRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    val namedRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    val list = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(suggestionRows)
+        addView(namedRows)
+    }
+    suggestionList.attach(suggestionRows, pageScroll())
+    placeList.attach(namedRows, pageScroll())
     fun openMap(lat: Double, lon: Double, label: String) {
         val uri = android.net.Uri.parse("geo:0,0?q=" + lat + "," + lon + "(" + android.net.Uri.encode(label) + ")")
         runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
-            .onFailure { android.widget.Toast.makeText(context, R.string.places_no_map, android.widget.Toast.LENGTH_SHORT).show() }
+            .onFailure { context.showToast(R.string.places_no_map) }
     }
-    fun row(title: String, detail: String, color: Int?, onTap: () -> Unit, onHold: (() -> Unit)?, buttons: List<Pair<Int, () -> Unit>>): android.widget.TextView {
+    fun row(into: LinearLayout, title: String, detail: String, color: Int?, buttons: List<Pair<Int, () -> Unit>>): Pair<View, android.widget.TextView> {
         val titleView = card.textView(Style.TEXT_BODY, 255).apply {
             text = title
             if (color != null) setStatDot(color)
         }
-        list.addView(LinearLayout(context).apply {
+        val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
             setBackgroundResource(android.R.drawable.list_selector_background)
-            setOnClickListener { onTap() }
-            if (onHold != null) setOnLongClickListener {
-                onHold()
-                true
-            }
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(titleView)
@@ -324,8 +327,9 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
                     setOnClickListener { action() }
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 6.dpToPx() })
             }
-        })
-        return titleView
+        }
+        into.addView(row)
+        return row to titleView
     }
     fun ask(title: String, start: String, onSave: (String) -> Unit) {
         val input = EditText(context).apply {
@@ -346,24 +350,23 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
     // To name: where it is from the address lookup, filled in once known
     suggestions.forEach { suggestion ->
         var near: String? = null
-        val titleView = row(getString(R.string.places_new), listOf(
+        fun nameIt() = ask(getString(R.string.places_name_title), near.orEmpty()) { name ->
+            Places.name(context, suggestion, name)
+            if (_binding != null) render()
+        }
+        fun show() = openMap(suggestion.lat, suggestion.lon, near ?: getString(R.string.places_new))
+        val (rowView, titleView) = row(suggestionRows, getString(R.string.places_new), listOf(
             resources.getQuantityString(R.plurals.places_visits, suggestion.visits, suggestion.visits),
             resources.getQuantityString(R.plurals.day_count, suggestion.days, suggestion.days),
             duration(suggestion.ms),
         ).joinToString(" · "), null,
-            onTap = { openMap(suggestion.lat, suggestion.lon, near ?: getString(R.string.places_new)) }, onHold = null,
-            buttons = listOf(
-                R.string.places_name to {
-                    ask(getString(R.string.places_name_title), near.orEmpty()) { name ->
-                        Places.name(context, suggestion, name)
-                        if (_binding != null) render()
-                    }
-                },
-                R.string.places_not to {
-                    Places.dismiss(context, suggestion)
-                    if (_binding != null) render()
-                },
-            ))
+            buttons = listOf(R.string.places_name to { nameIt() }))
+        // Tapping shows it on the map; the menu names it, shows it, or says it's not a place
+        suggestionList.item(rowView, suggestionKey(suggestion), label = getString(R.string.places_new), onTap = { show() }, actions = listOf(
+            HoldList.Action(getString(R.string.places_name)) { nameIt() },
+            HoldList.Action(getString(R.string.open_in_map)) { show() },
+            HoldList.Action(getString(R.string.places_not)) { dismissSuggestions(setOf(suggestionKey(suggestion))) },
+        ))
         Thread {
             val name = runCatching { Places.nearName(context, suggestion.lat, suggestion.lon) }.getOrNull() ?: return@Thread
             titleView.post {
@@ -379,40 +382,64 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
         val month = days.filterKeys { it >= monthStart }.values
         val ms = month.sumOf { d -> d.stretches.filter { it.place == place.id }.sumOf { it.ms } }
         val went = month.count { d -> d.stretches.any { it.place == place.id } }
-        row(place.name, listOf(getString(R.string.places_this_month, duration(ms)),
-            resources.getQuantityString(R.plurals.day_count, went, went)).joinToString(" · "), place.color,
-            onTap = { openMap(place.lat, place.lon, place.name) },
-            onHold = {
-                AppDialog(context)
-                    .setTitle(place.name)
-                    .setItems(arrayOf(getString(R.string.places_rename), getString(R.string.places_recolor), getString(R.string.places_remove))) { _, which ->
-                        when (which) {
-                            0 -> ask(getString(R.string.places_rename), place.name) { name ->
-                                Places.rename(context, place.id, name)
-                                if (_binding != null) render()
-                            }
-                            1 -> {
-                                Places.recolor(context, place.id)
-                                if (_binding != null) render()
-                            }
-                            else -> AppDialog(context)
-                                .setMessage(getString(R.string.places_remove_ask, place.name))
-                                .setNegativeButton(R.string.cancel, null)
-                                .setPositiveButton(R.string.places_remove) { _, _ ->
-                                    lockdownPlaceChange(place.id) {
-                                        Places.remove(context, place.id)
-                                        if (_binding != null) render()
-                                    }
-                                }
-                                .show()
-                        }
-                    }
-                    .show()
-            }, buttons = emptyList())
+        val (rowView, _) = row(namedRows, place.name, listOf(getString(R.string.places_this_month, duration(ms)),
+            resources.getQuantityString(R.plurals.day_count, went, went)).joinToString(" · "), place.color, buttons = emptyList())
+        // Tapping shows it on the map; the menu renames, recolours, shows or removes it
+        placeList.item(rowView, place.id, label = place.name, onTap = { openMap(place.lat, place.lon, place.name) }, actions = listOf(
+            HoldList.Action(getString(R.string.rename)) {
+                ask(getString(R.string.places_rename), place.name) { name ->
+                    Places.rename(context, place.id, name)
+                    if (_binding != null) render()
+                }
+            },
+            HoldList.Action(getString(R.string.places_recolor)) {
+                Places.recolor(context, place.id)
+                if (_binding != null) render()
+            },
+            HoldList.Action(getString(R.string.open_in_map)) { openMap(place.lat, place.lon, place.name) },
+            HoldList.Action(getString(R.string.remove)) { removePlaces(setOf(place.id)) },
+        ))
     }
     if (suggestions.isNotEmpty()) card.subtitle(resources.getQuantityString(R.plurals.places_to_name, suggestions.size, suggestions.size))
     card.root.addView(list, card.root.indexOfChild(card.scene))
     card.scene.isVisible = false
+}
+
+/** What a suggestion is kept by in [StatPageFragment.suggestionList], so it's the same one after the page is drawn again */
+private fun suggestionKey(suggestion: Places.Suggestion) = "${suggestion.lat},${suggestion.lon}"
+
+/** Says the suggestions kept as [keys] aren't places: they're not suggested again */
+internal fun StatPageFragment.dismissSuggestions(keys: Set<String>) {
+    val context = requireContext()
+    Places.suggestions(context).filter { suggestionKey(it) in keys }.forEach { Places.dismiss(context, it) }
+    if (_binding != null) render()
+}
+
+/** Removes the named places [ids], after asking, as their time goes back to being out; through the unlock if lockdown turns on at any */
+internal fun StatPageFragment.removePlaces(ids: Set<Int>) {
+    val context = requireContext()
+    val places = Places.places(context).filter { it.id in ids }
+    if (places.isEmpty()) return
+    val title = if (places.size == 1) getString(R.string.delete_what, places.first().name)
+    else resources.getQuantityString(R.plurals.places_delete_n, places.size, places.size)
+    val detail = getString(if (places.size == 1) R.string.places_delete_detail else R.string.places_delete_n_detail)
+    AppDialog.confirmDelete(context, title, detail) {
+        val remove = {
+            places.forEach { Places.remove(context, it.id) }
+            if (_binding != null) render()
+        }
+        val locked = app.olauncher.data.Prefs(context).lockdownPlaces
+        if (places.any { it.id in locked }) LockdownGate(this).loosen(remove) else remove()
+    }
+}
+
+/** Takes away a home's or work's Wi-Fi; through the unlock if lockdown turns on there */
+internal fun StatPageFragment.removeHome(slot: Int) {
+    val context = requireContext()
+    lockdownPlaceChange(slot) {
+        if (slot == Social.WORK) Social.setWork(context, null) else Social.setHome(context, slot, null)
+        if (_binding != null) render()
+    }
 }
 
 /** This week at work: days, hours, and when you usually get there and leave, from work's Wi-Fi */
@@ -471,14 +498,6 @@ internal fun StatPageFragment.editHome(slot: Int, home: Social.Home?) {
             }
             // Only a new Wi-Fi changes where lockdown's place is; renaming doesn't
             if (home != null && home.ssid != wifi) lockdownPlaceChange(slot, save) else save()
-        }
-        .apply {
-            if (home != null) setNeutralButton(R.string.social_remove) { _, _ ->
-                lockdownPlaceChange(slot) {
-                    if (slot == Social.WORK) Social.setWork(context, null) else Social.setHome(context, slot, null)
-                    if (_binding != null) render()
-                }
-            }
         }
         .show()
 }

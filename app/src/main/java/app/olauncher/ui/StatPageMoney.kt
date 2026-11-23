@@ -124,6 +124,7 @@ internal fun StatPageFragment.spendingCard() {
         return
     }
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    purchaseList.attach(list, pageScroll())
     val subscriptions = Subscriptions.all(context)
     fun isSubscription(p: Spending.Purchase) = subscriptions.any { it.merchant == p.merchant && abs(it.cents - p.cents) <= maxOf(50L, it.cents / 4) }
     purchases.take(SPENDING_SHOWN).forEach { purchase ->
@@ -134,10 +135,8 @@ internal fun StatPageFragment.spendingCard() {
             updatePadding(top = 7.dpToPx(), bottom = 7.dpToPx())
             alpha = if (purchase.essential) 0.6f else 1f
             setBackgroundResource(android.R.drawable.list_selector_background)
-            setOnLongClickListener {
-                askEssential(purchase)
-                true
-            }
+            // Tapping or holding offers what can be done with it
+            purchaseList.item(this, purchase, label = getString(R.string.essential_title, purchase.merchant, money(purchase.cents)), actions = essentialActions(purchase))
             addView(card.textView(Style.TEXT_BODY, 255).apply {
                 text = money(purchase.cents)
                 setTypeface(null, Typeface.BOLD)
@@ -253,10 +252,10 @@ internal fun androidx.fragment.app.Fragment.openMoneySettings() {
 }
 
 /**
- * Holding a purchase: count it (or everything in its category, or at its shop without one) as an
- * essential or not, or put it back to how it would go by itself.
+ * A purchase's menu: count it (or everything in its category, or at its shop without one) as an
+ * essential or not, put it back to how it would go by itself, or mark it as a subscription or not.
  */
-internal fun StatPageFragment.askEssential(purchase: Spending.Purchase) {
+internal fun StatPageFragment.essentialActions(purchase: Spending.Purchase): List<HoldList.Action> {
     val context = requireContext()
     val group = purchase.group
     val rule = Spending.groupRule(context, group)
@@ -273,15 +272,11 @@ internal fun StatPageFragment.askEssential(purchase: Spending.Purchase) {
     if (Subscriptions.of(context, purchase) != null) {
         options += getString(R.string.subscription_not) to { Subscriptions.remove(context, purchase.merchant) }
     } else {
-        options += getString(R.string.subscription_is) to { askPeriod(purchase.merchant, purchase.cents, null) }
+        // Asks how often, then draws the page again itself
+        return options.map { (label, run) -> HoldList.Action(label) { run(); if (_binding != null) render() } } +
+            HoldList.Action(getString(R.string.subscription_is)) { askPeriod(purchase.merchant, purchase.cents, null) }
     }
-    AppDialog(context)
-        .setTitle(getString(R.string.essential_title, purchase.merchant, money(purchase.cents)))
-        .setItems(options.map { it.first }.toTypedArray()) { _, which ->
-            options[which].second()
-            if (_binding != null) render()
-        }
-        .show()
+    return options.map { (label, run) -> HoldList.Action(label) { run(); if (_binding != null) render() } }
 }
 
 /** How often [merchant] charges, to mark it as a subscription; [current] ticked */
@@ -308,8 +303,8 @@ internal fun periodName(period: Subscriptions.Period) = when (period) {
 
 /**
  * Subscriptions: what they come to a month, then each with what it charges, how often and when next.
- * Found from charges that repeat, or marked by holding a purchase; holding one here removes it or
- * changes how often it charges.
+ * Found from charges that repeat, or marked from a purchase's menu; tapping or holding one here
+ * removes it or changes how often it charges.
  */
 internal fun StatPageFragment.subscriptionsCard() {
     val context = requireContext()
@@ -323,23 +318,18 @@ internal fun StatPageFragment.subscriptionsCard() {
     card.headline(money(subscriptions.sumOf { it.monthlyCents }),
         resources.getQuantityString(R.plurals.subscriptions_a_month, subscriptions.size, subscriptions.size))
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    subscriptionList.attach(list, pageScroll())
     subscriptions.forEach { sub ->
         list.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             updatePadding(top = 7.dpToPx(), bottom = 7.dpToPx())
             setBackgroundResource(android.R.drawable.list_selector_background)
-            setOnLongClickListener {
-                val options = listOf<Pair<String, () -> Unit>>(
-                    getString(R.string.subscription_not) to { Subscriptions.remove(context, sub.merchant); if (_binding != null) render() },
-                    getString(R.string.subscription_change) to { askPeriod(sub.merchant, sub.cents, sub.period) },
-                )
-                AppDialog(context)
-                    .setTitle(getString(R.string.essential_title, sub.merchant, money(sub.cents)))
-                    .setItems(options.map { it.first }.toTypedArray()) { _, which -> options[which].second() }
-                    .show()
-                true
-            }
+            // Found by the app, so tapping or holding only offers what can be done with it
+            subscriptionList.item(this, sub.merchant, label = getString(R.string.essential_title, sub.merchant, money(sub.cents)), actions = listOf(
+                HoldList.Action(getString(R.string.subscription_not)) { Subscriptions.remove(context, sub.merchant); if (_binding != null) render() },
+                HoldList.Action(getString(R.string.subscription_change)) { askPeriod(sub.merchant, sub.cents, sub.period) },
+            ))
             addView(card.textView(Style.TEXT_BODY, 255).apply {
                 text = money(sub.cents)
                 setTypeface(null, Typeface.BOLD)
@@ -364,10 +354,6 @@ internal fun StatPageFragment.subscriptionsCard() {
             })
         })
     }
-    list.addView(card.textView(Style.TEXT_SMALL, 110).apply {
-        text = getString(R.string.subscriptions_hint)
-        updatePadding(top = 8.dpToPx())
-    })
     card.addBody(list)
 }
 

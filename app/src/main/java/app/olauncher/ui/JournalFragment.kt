@@ -39,7 +39,8 @@ import java.util.Locale
 /**
  * Every note written, newest first, each with that day's mood face and the start of the note, and a
  * search across them that shows the parts around what was searched for. Today's note is at the top.
- * Tapping a note opens it on a page of its own ([JournalEntryFragment]) to read or write at length.
+ * Tapping a note opens it on a page of its own ([JournalEntryFragment]) to read or write at length;
+ * holding one offers Remove and Select. Holding today's records a voice note.
  */
 class JournalFragment : Fragment() {
 
@@ -53,6 +54,11 @@ class JournalFragment : Fragment() {
 
     /** How many notes the list shows, before More is tapped */
     private var limit = PAGE
+
+    private lateinit var scroll: ScrollView
+
+    /** The notes listed, removed one or several at a time */
+    private val noteList = HoldList<LocalDate>(onRemove = { deleteNotes(it) })
 
     private val handler = Handler(Looper.getMainLooper())
     private val ink get() = requireContext().getColorFromAttr(R.attr.primaryColor)
@@ -113,7 +119,7 @@ class JournalFragment : Fragment() {
         val page = FrameLayout(context).apply {
             setBackgroundColor(context.getColorFromAttr(R.attr.primaryShadeDarkColor))
             isClickable = true
-            addView(ScrollView(context).apply {
+            addView(ScrollView(context).also { scroll = it }.apply {
                 overScrollMode = View.OVER_SCROLL_NEVER
                 isVerticalScrollBarEnabled = false
                 addView(content)
@@ -135,6 +141,22 @@ class JournalFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         refresh()
+    }
+
+    override fun onPause() {
+        noteList.end()
+        super.onPause()
+    }
+
+    /** Deletes the notes of [dates], after asking once, as what was written is lost */
+    private fun deleteNotes(dates: Set<LocalDate>) {
+        if (dates.isEmpty()) return
+        val title = if (dates.size == 1) getString(R.string.note_delete_title) else resources.getQuantityString(R.plurals.notes_delete_n, dates.size, dates.size)
+        val detail = if (dates.size == 1) getString(R.string.note_delete_detail, dateText(dates.first())) else getString(R.string.notes_delete_n_detail)
+        AppDialog.confirmDelete(requireContext(), title, detail) {
+            dates.forEach { store.setNote(it, null) }
+            if (view != null) refresh()
+        }
     }
 
     override fun onDestroyView() {
@@ -190,6 +212,11 @@ class JournalFragment : Fragment() {
             setPadding(16.dpToPx(), 14.dpToPx(), 16.dpToPx(), 12.dpToPx())
             isClickable = true
             setOnClickListener { open(date) }
+            // Holding it records, like the note box on the day's page
+            setOnLongClickListener {
+                recordVoiceNote(date)
+                true
+            }
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -232,6 +259,7 @@ class JournalFragment : Fragment() {
             else -> resources.getQuantityString(R.plurals.journal_found, shown.size, shown.size)
         }
         list.removeAllViews()
+        noteList.attach(list, scroll)
         val ink = ink
         var lastMonth: String? = null
         shown.take(limit).forEach { (date, day) ->
@@ -249,7 +277,7 @@ class JournalFragment : Fragment() {
                 })
             }
             val note = day.note.orEmpty()
-            list.addView(LinearLayout(context).apply {
+            val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(4.dpToPx(), 12.dpToPx(), 4.dpToPx(), 12.dpToPx())
                 setBackgroundResource(android.R.drawable.list_selector_background)
@@ -276,8 +304,12 @@ class JournalFragment : Fragment() {
                         ellipsize = android.text.TextUtils.TruncateAt.END
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                setOnClickListener { open(date, query) }
-            })
+            }
+            list.addView(row)
+            // Tapping opens it; holding offers Remove and Select
+            noteList.item(row, date, label = dateText(date), onTap = { open(date, query) }, actions = listOf(
+                HoldList.Action(getString(R.string.remove)) { deleteNotes(setOf(date)) },
+            ))
         }
         // A long journal comes a page at a time
         if (shown.size > limit) list.addView(pillButton(context, ink, getString(R.string.journal_more), null) {

@@ -61,6 +61,16 @@ class SupplementsFragment : CardPageFragment() {
     /** The stat By amount shows */
     private var amountStat: String = MoodStore.MOOD
 
+    private var scroll: ScrollView? = null
+
+    /** The supplements being taken: tap one to show it below, hold for Edit, Remove and Select */
+    private val takingList = HoldList<String>(onRemove = { deleteSupplements(it) })
+
+    override fun onPause() {
+        takingList.end()
+        super.onPause()
+    }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val context = requireContext()
         store = MoodStore(context)
@@ -79,12 +89,14 @@ class SupplementsFragment : CardPageFragment() {
         val page = FrameLayout(context).apply {
             setBackgroundColor(context.getColorFromAttr(R.attr.primaryShadeDarkColor))
             isClickable = true
-            addView(ScrollView(context).apply {
+            addView(ScrollView(context).also { scroll = it }.apply {
                 overScrollMode = View.OVER_SCROLL_NEVER
                 isVerticalScrollBarEnabled = false
                 addView(content)
             })
         }
+        // Among the stat pages, their pager closes it
+        if (arguments?.getBoolean(IN_PAGER) == true) return page
         return PullDismissLayout(context).apply {
             addView(page)
             onDismiss = { if (isAdded) findNavController().popBackStack() }
@@ -136,6 +148,18 @@ class SupplementsFragment : CardPageFragment() {
 
     private fun edit(supplement: Supplement?) = SupplementDialog.show(requireContext(), store, supplement) { render() }
 
+    /** Deletes the supplements [ids] and all their days, after asking once */
+    private fun deleteSupplements(ids: Set<String>) {
+        val doomed = data.supplements.filter { it.id in ids }
+        if (doomed.isEmpty()) return
+        val title = if (doomed.size == 1) getString(R.string.delete_what, doomed.first().name)
+        else resources.getQuantityString(R.plurals.supplements_delete_n, doomed.size, doomed.size)
+        AppDialog.confirmDelete(requireContext(), title, getString(if (doomed.size == 1) R.string.supplement_delete_detail else R.string.supplements_delete_n_detail)) {
+            doomed.forEach { store.deleteSupplement(it.id) }
+            if (view != null) render()
+        }
+    }
+
     private val ripple by lazy {
         TypedValue().also { requireContext().theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true) }.resourceId
     }
@@ -150,24 +174,24 @@ class SupplementsFragment : CardPageFragment() {
 
     // --- Taking ---
 
-    /** The supplements, each with its amount, schedule and today; tapping one shows it below, ✎ changes it */
+    /** The supplements, each with its amount, schedule and today; tapping one shows it below, holding one opens its menu */
     private fun takingCard(list: List<Supplement>) {
         val context = requireContext()
         val card = Card(getString(R.string.supplement_taking))
         val rows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        takingList.attach(rows, scroll)
         list.forEach { s ->
             val stopped = s.isStopped(today)
             val change = s.changeOn(today) ?: s.changes.lastOrNull() ?: return@forEach
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(10.dpToPx(), 9.dpToPx(), 4.dpToPx(), 9.dpToPx())
+                setPadding(10.dpToPx(), 9.dpToPx(), 10.dpToPx(), 9.dpToPx())
                 if (s.id == selected) background = GradientDrawable().apply {
                     cornerRadius = Style.radiusSmall
                     setColor(faint(22))
                 } else setBackgroundResource(ripple)
                 alpha = if (stopped) 0.5f else 1f
-                setOnClickListener { select(s.id) }
             }
             row.addView(dot(if (stopped) faint(90) else s.color))
             row.addView(LinearLayout(context).apply {
@@ -189,13 +213,11 @@ class SupplementsFragment : CardPageFragment() {
                 text = todayText(s)
                 setPadding(8.dpToPx(), 0, 0, 0)
             })
-            row.addView(card.textView(Style.TEXT_TITLE, 160).apply {
-                text = "✎"
-                contentDescription = getString(R.string.edit)
-                setPadding(14.dpToPx(), 6.dpToPx(), 8.dpToPx(), 6.dpToPx())
-                setOnClickListener { edit(s) }
-            })
             rows.addView(row)
+            takingList.item(row, s.id, label = s.name, onTap = { select(s.id) }, actions = listOf(
+                HoldList.Action(getString(R.string.edit)) { edit(s) },
+                HoldList.Action(getString(R.string.remove)) { deleteSupplements(setOf(s.id)) },
+            ))
         }
         rows.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -522,6 +544,8 @@ class SupplementsFragment : CardPageFragment() {
     companion object {
         /** The supplement to show first, by id */
         const val SELECTED = "selected"
+        /** Shown among the stat pages ([StatFragment]), which close it */
+        const val IN_PAGER = "inPager"
         private const val MONTH = "month"
         private const val MIN_DAYS = 3
         private const val MAX_CHANGES = 3

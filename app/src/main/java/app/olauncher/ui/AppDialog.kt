@@ -59,6 +59,20 @@ class AppDialog(context: Context) : AlertDialog.Builder(context) {
             }
         }
 
+        /**
+         * Asks before deleting something whose history or typed text would be lost: [title] ("Delete
+         * Vitamin D?"), [detail] saying what goes, then Delete and Cancel. Anything else is deleted
+         * without asking.
+         */
+        fun confirmDelete(context: Context, title: String, detail: String, onDelete: () -> Unit) {
+            AppDialog(context)
+                .setTitle(title)
+                .setMessage(detail)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.action_delete) { _, _ -> onDelete() }
+                .show()
+        }
+
         /** [view] as an outlined box, like the check-in's thoughts */
         fun box(view: android.widget.TextView) {
             val context = view.context

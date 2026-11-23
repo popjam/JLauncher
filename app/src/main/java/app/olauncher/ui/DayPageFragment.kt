@@ -122,6 +122,7 @@ class DayPageFragment : CardPageFragment() {
             else -> date.format(DateTimeFormatter.ofPattern(if (date.year == today.year) "EEEE d MMMM" else "EEE d MMM yyyy", Locale.getDefault()))
         }
         cardList.removeAllViews()
+        shownStats = stats
         topCard(stats, day)
         statsCard(stats, day)
         screenCard(day)
@@ -295,10 +296,20 @@ class DayPageFragment : CardPageFragment() {
 
     // --- What filled itself in ---
 
+    /** The stats as last drawn, for the cards below to open their stat's page */
+    private var shownStats = emptyList<StatInfo>()
+
+    /** Tapping the card opens the page of the stat of [kind], if it's one of the stats */
+    private fun Card.opensStat(kind: StatKind) {
+        val id = shownStats.firstOrNull { it.kind == kind }?.id ?: return
+        root.setOnClickListener { openStat(id) }
+    }
+
     /** Screen time on each device, and the phone's top app */
     private fun screenCard(day: MoodStore.Day?) {
         val total = day?.totalUsageMs ?: return
         val card = Card(getString(R.string.screen_time), icon = StatIcons.SCREEN, iconColor = faint(200))
+        card.opensStat(StatKind.SCREEN)
         card.headline(duration(total), day.topApp?.let { app -> getString(R.string.day_top_app, app, duration(day.topAppMs ?: 0)) } ?: "")
         val rows = listOfNotNull(
             day.usageMs?.let { Triple(StatIcons.PHONE, getString(R.string.device_phone), it) },
@@ -312,6 +323,7 @@ class DayPageFragment : CardPageFragment() {
     private fun sleepCard() {
         val night = Sleep.nights(requireContext())[date] ?: return
         val card = Card(getString(R.string.day_sleep), icon = StatIcons.SLEEP, iconColor = faint(200))
+        card.opensStat(StatKind.SLEEP)
         card.headline(duration(night.asleepMs), getString(R.string.sleep_span, clock(night.bedtime.toLocalTime()), clock(night.wake.toLocalTime())))
         card.scene.visibility = View.GONE
     }
@@ -336,6 +348,7 @@ class DayPageFragment : CardPageFragment() {
             else -> Style.Palette.GREEN
         }
         val card = Card(getString(R.string.day_places), icon = StatIcons.SOCIAL, iconColor = faint(200))
+        card.opensStat(StatKind.SOCIAL)
         val (start, end) = Social.dayBounds(context, date)
         val length = (end - start).toFloat()
         val stretches = day.stretches
@@ -366,6 +379,7 @@ class DayPageFragment : CardPageFragment() {
         val purchases = Spending.purchases(requireContext()).filter { it.date == date }
         if (purchases.isEmpty()) return
         val card = Card(getString(R.string.day_money), icon = StatIcons.MONEY, iconColor = faint(200))
+        card.opensStat(StatKind.MONEY)
         val spent = purchases.filter { !it.essential }.sumOf { it.cents }
         val essentials = purchases.filter { it.essential }.sumOf { it.cents }
         card.headline(money(spent), listOfNotNull(getString(R.string.spent).lowercase(Locale.getDefault()),
@@ -380,6 +394,7 @@ class DayPageFragment : CardPageFragment() {
     private fun musicCard() {
         val day = Music.days(requireContext())[date] ?: return
         val card = Card(getString(R.string.day_music), icon = StatIcons.MUSIC, iconColor = faint(200))
+        card.opensStat(StatKind.MUSIC)
         card.headline(duration(day.ms), day.artists.maxByOrNull { it.value }?.key?.let { getString(R.string.day_mostly, it) } ?: "")
         val tracks = day.plays.entries.sortedByDescending { it.value }.take(3).map { (key, n) ->
             val (title, artist) = Music.splitTrack(key)

@@ -81,25 +81,31 @@ class HoldList<K : Any>(
 
     /**
      * Makes [row] one of the list's items, kept as [key]: [onTap] for a tap (null opens the menu when
-     * [tapOpensMenu], else nothing), [actions] in its menu, titled [label].
+     * [tapOpensMenu], else nothing), [actions] in its menu, titled [label]. A row that isn't
+     * [selectable] (one that can't be removed) still moves, but its menu has no Select and select mode
+     * passes it by.
      */
-    fun item(row: View, key: K, label: String? = null, actions: List<Action> = emptyList(), onTap: (() -> Unit)? = null) {
+    fun item(row: View, key: K, label: String? = null, actions: List<Action> = emptyList(), selectable: Boolean = true, onTap: (() -> Unit)? = null) {
         keys[row] = key
+        if (!selectable) unselectable.add(key) else unselectable.remove(key)
         fun menu() = showMenu(row, key, label, actions)
         row.isClickable = true
         row.setOnClickListener {
             when {
-                selecting -> toggle(key)
+                selecting -> if (selectable) toggle(key)
                 onTap != null -> onTap()
                 tapOpensMenu -> menu()
             }
         }
         row.setOnLongClickListener(null)
-        row.setOnTouchListener(HoldToDrag(onHold = { if (selecting) toggle(key) else menu() }) { _, x, y ->
+        row.setOnTouchListener(HoldToDrag(onHold = { if (selecting) { if (selectable) toggle(key) } else menu() }) { _, x, y ->
             if (onReorder != null && !selecting) drag(row, x, y) else null
         })
-        if (selecting) tick(row, key in selected)
+        if (selecting && selectable) tick(row, key in selected)
     }
+
+    /** Keys of rows that can't be selected */
+    private val unselectable = mutableSetOf<Any>()
 
     /** Leaves select mode */
     fun end() {
@@ -117,7 +123,7 @@ class HoldList<K : Any>(
     private fun rows(): List<View> = list?.let { l -> (0 until l.childCount).map { l.getChildAt(it) }.filter { keys[it] != null } }.orEmpty()
 
     private fun showMenu(row: View, key: K, label: String?, actions: List<Action>) {
-        val all = actions + listOfNotNull(if (onRemove != null) Action(row.context.getString(R.string.select)) { select(key) } else null)
+        val all = actions + listOfNotNull(if (onRemove != null && key !in unselectable) Action(row.context.getString(R.string.select)) { select(key) } else null)
         if (all.isEmpty()) return
         val dialog = AppDialog(row.context)
         if (label != null) dialog.setTitle(label)
@@ -128,13 +134,15 @@ class HoldList<K : Any>(
         selecting = true
         selected.clear()
         selected.add(first)
-        rows().forEach { tick(it, keyOf(it) in selected) }
+        tickAll()
         showBar()
     }
 
+    private fun tickAll() = rows().forEach { row -> keyOf(row)?.takeIf { it !in unselectable }?.let { tick(row, it in selected) } }
+
     private fun toggle(key: K) {
         if (!selected.add(key)) selected.remove(key)
-        rows().forEach { tick(it, keyOf(it) in selected) }
+        tickAll()
         if (selected.isEmpty()) end() else updateBar()
     }
 

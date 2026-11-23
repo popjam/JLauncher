@@ -135,6 +135,18 @@ class StatPageFragment : CardPageFragment() {
     /** Location access and homes when the Social cards were drawn; null without them */
     internal var socialShownState: String? = null
 
+    /** Places and their suggestions, homes and work (Social), and purchases and subscriptions (Money) */
+    internal val placeList = HoldList<Int>(onRemove = { removePlaces(it) })
+    internal val suggestionList = HoldList<String>(onRemove = { dismissSuggestions(it) }, removeLabel = R.string.places_not)
+    internal val homeList = HoldList<Int>(tapOpensMenu = true)
+    internal val purchaseList = HoldList<Spending.Purchase>(tapOpensMenu = true)
+    internal val subscriptionList = HoldList<String>(tapOpensMenu = true)
+
+    override fun onPause() {
+        listOf(placeList, suggestionList, homeList, purchaseList, subscriptionList).forEach { it.end() }
+        super.onPause()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null

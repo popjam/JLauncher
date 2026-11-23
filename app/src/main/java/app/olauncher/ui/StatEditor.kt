@@ -238,14 +238,10 @@ object StatEditor {
     }
 
     private fun confirmDelete(context: Context, moodStore: MoodStore, stat: MoodStore.Stat, onDone: (String?) -> Unit) {
-        AppDialog(context)
-            .setMessage(context.getString(R.string.delete_stat_message, stat.name))
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.delete_stat) { _, _ ->
-                moodStore.deleteStat(stat.id)
-                onDone(null)
-            }
-            .show()
+        AppDialog.confirmDelete(context, context.getString(R.string.delete_what, stat.name), context.getString(R.string.stat_delete_detail)) {
+            moodStore.deleteStat(stat.id)
+            onDone(null)
+        }
     }
 
     /** A face with a full-width box beside it for its label. */

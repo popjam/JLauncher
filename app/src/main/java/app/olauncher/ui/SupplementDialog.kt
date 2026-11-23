@@ -226,14 +226,10 @@ object SupplementDialog {
             }
             buttons.addView(startAgain)
             buttons.addView(button(R.string.supplement_delete, Style.DANGER_SOFT) {
-                AppDialog(context)
-                    .setMessage(context.getString(R.string.supplement_delete_confirm, supplement.name))
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.supplement_delete) { _, _ ->
-                        store.deleteSupplement(supplement.id)
-                        finish()
-                    }
-                    .show()
+                AppDialog.confirmDelete(context, context.getString(R.string.delete_what, supplement.name), context.getString(R.string.supplement_delete_detail)) {
+                    store.deleteSupplement(supplement.id)
+                    finish()
+                }
             })
         }
         buttons.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))

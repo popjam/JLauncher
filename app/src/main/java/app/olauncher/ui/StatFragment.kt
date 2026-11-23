@@ -1,5 +1,6 @@
 package app.olauncher.ui
 
+import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -14,7 +15,8 @@ import app.olauncher.helper.allStats
 
 /**
  * The stat pages, opened on the stat tapped in the list, swiping sideways to the others in its order
- * and pulling down from the top to go back. The pages either side are built ahead so the swipe stays smooth.
+ * (Supplements among them, where it sits in the list) and pulling down from the top to go back. The
+ * pages either side are built ahead so the swipe stays smooth.
  */
 class StatFragment : Fragment(R.layout.fragment_stat) {
 
@@ -23,14 +25,15 @@ class StatFragment : Fragment(R.layout.fragment_stat) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        if (ids.isEmpty()) ids = requireContext().allStats(MoodStore(requireContext()).load()).map { it.id }
+        if (ids.isEmpty()) ids = pageIds(requireContext())
         view.findViewById<PullDismissLayout>(R.id.pull).onDismiss = { if (isAdded) findNavController().popBackStack() }
         val pager = view.findViewById<ViewPager2>(R.id.statPager)
         pager.offscreenPageLimit = 1
         pager.adapter = object : FragmentStateAdapter(this) {
             override fun getItemCount() = ids.size
-            override fun createFragment(position: Int) =
-                StatPageFragment().apply { arguments = bundleOf(STAT_ID to ids[position]) }
+            override fun createFragment(position: Int): Fragment =
+                if (ids[position] == MoodStore.SUPPLEMENTS) SupplementsFragment().apply { arguments = bundleOf(SupplementsFragment.IN_PAGER to true) }
+                else StatPageFragment().apply { arguments = bundleOf(STAT_ID to ids[position]) }
         }
         // The pages own their scrolling; the pager's own overscroll glow only gets in the way
         (pager.getChildAt(0) as? ViewGroup)?.overScrollMode = View.OVER_SCROLL_NEVER
@@ -42,5 +45,15 @@ class StatFragment : Fragment(R.layout.fragment_stat) {
 
     companion object {
         const val STAT_ID = "statId"
+
+        /** The pages in the stats list's order: every stat, and Supplements where it was dragged to (at the top until then) */
+        fun pageIds(context: Context): List<String> {
+            val data = MoodStore(context).load()
+            val ids = context.allStats(data).map { it.id }.toMutableList()
+            val place = data.order.indexOf(MoodStore.SUPPLEMENTS).takeIf { it >= 0 }
+                ?.let { at -> ids.count { data.order.indexOf(it) in 0 until at } } ?: 0
+            ids.add(place, MoodStore.SUPPLEMENTS)
+            return ids
+        }
     }
 }

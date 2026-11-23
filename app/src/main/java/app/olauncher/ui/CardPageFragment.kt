@@ -145,13 +145,18 @@ abstract class CardPageFragment : Fragment() {
         cards.addView(footer)
     }
 
+    /** The scroll view the cards are in, for a [HoldList] or a dragged card to scroll near its edges */
+    internal fun pageScroll(): android.widget.ScrollView? {
+        var scroll: android.view.ViewParent? = cards.parent
+        while (scroll != null && scroll !is android.widget.ScrollView) scroll = scroll.parent
+        return scroll as? android.widget.ScrollView
+    }
+
     /** A card picked up by its title: moved among the others, or hidden */
     private fun dragCard(root: android.view.View, x: Float, y: Float): DragSession? {
         val name = arrangeName ?: return null
         val key = cardKeys[root] ?: return null
-        var scroll: android.view.ViewParent? = cards.parent
-        while (scroll != null && scroll !is android.widget.ScrollView) scroll = scroll.parent
-        val list = ListDrag(cards, scroll as? android.widget.ScrollView) { cardKeys[it] != null }
+        val list = ListDrag(cards, pageScroll()) { cardKeys[it] != null }
         list.start(root)
         return DragSession(root, x, y, zones = listOf(DragSession.Zone(HIDE_CARD, getString(R.string.hide), Gravity.TOP or Gravity.CENTER_HORIZONTAL)),
             onMove = { _, fingerY -> list.move(fingerY) }, onEnd = { list.stop() }) { drop ->

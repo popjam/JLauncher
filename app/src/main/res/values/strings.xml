@@ -37,6 +37,34 @@
     <string name="remove">Remove</string>
     <string name="select">Select</string>
     <string name="n_selected">%1$d selected</string>
+    <string name="action_delete">Delete</string>
+    <string name="delete_what">Delete %1$s?</string>
+    <string name="open_in_map">Open in map</string>
+    <string name="stat_delete_detail">All its history goes</string>
+    <plurals name="stats_delete_n">
+        <item quantity="one">Delete %1$d stat?</item>
+        <item quantity="other">Delete %1$d stats?</item>
+    </plurals>
+    <string name="stats_delete_n_detail">All their history goes</string>
+    <string name="supplement_delete_detail">All its days go</string>
+    <plurals name="supplements_delete_n">
+        <item quantity="one">Delete %1$d supplement?</item>
+        <item quantity="other">Delete %1$d supplements?</item>
+    </plurals>
+    <string name="supplements_delete_n_detail">All their days go</string>
+    <string name="places_delete_detail">Its time counts as out again, and it won’t be suggested again</string>
+    <plurals name="places_delete_n">
+        <item quantity="one">Delete %1$d place?</item>
+        <item quantity="other">Delete %1$d places?</item>
+    </plurals>
+    <string name="places_delete_n_detail">Their time counts as out again, and they won’t be suggested again</string>
+    <string name="note_delete_title">Delete note?</string>
+    <string name="note_delete_detail">Everything written on %1$s goes</string>
+    <plurals name="notes_delete_n">
+        <item quantity="one">Delete %1$d note?</item>
+        <item quantity="other">Delete %1$d notes?</item>
+    </plurals>
+    <string name="notes_delete_n_detail">Everything written on those days goes</string>
     <string name="gestures">Gestures</string>
     <string name="theme_mode">Theme</string>
     <string name="system_default">System</string>
@@ -674,9 +702,7 @@
     <string name="places_name_title">Name this place</string>
     <string name="places_this_month">%1$s this month</string>
     <string name="places_rename">Rename</string>
-    <string name="places_recolor">Change colour</string>
-    <string name="places_remove">Remove</string>
-    <string name="places_remove_ask">Remove %1$s? Its time goes back to being out, and it won’t be suggested again.</string>
+    <string name="places_recolor">Recolour</string>
     <string name="places_no_map">No maps app to show it</string>
     <string name="places_find">Find places</string>
     <plurals name="places_checks">
@@ -999,7 +1025,6 @@
     <string name="add">Add</string>
     <string name="save">Save</string>
     <string name="delete_stat">Delete</string>
-    <string name="delete_stat_message">Delete %1$s and all its history?</string>
     <string name="graph_so_far">%1$s · so far</string>
     <string name="graph_month_range">%1$s – %2$s</string>
     <string name="previous_days">Previous %1$d days</string>
@@ -1134,7 +1159,6 @@
         <item quantity="one">a month, 1 subscription</item>
         <item quantity="other">a month, %1$d subscriptions</item>
     </plurals>
-    <string name="subscriptions_hint">Hold one to remove it or change how often it charges</string>
     <string name="subscription_is">It\'s a subscription</string>
     <string name="subscription_not">Not a subscription</string>
     <string name="subscription_change">Change how often</string>
@@ -1354,7 +1378,6 @@
     <string name="supplement_stop">Stop</string>
     <string name="supplement_start_again">Start again</string>
     <string name="supplement_delete">Delete</string>
-    <string name="supplement_delete_confirm">Delete %1$s and all its days?</string>
     <string name="supplement_on_today">Today</string>
     <string name="supplement_off_today">Off today</string>
     <string name="supplement_week_of">Week %1$d of %2$d</string>
