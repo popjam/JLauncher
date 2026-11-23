@@ -77,6 +77,7 @@ class NewsletterSettingsFragment : CardPageFragment() {
                 overScrollMode = View.OVER_SCROLL_NEVER
                 isVerticalScrollBarEnabled = false
                 addView(content)
+                scroll = this
             })
         }
         return PullDismissLayout(context).apply {
@@ -86,6 +87,13 @@ class NewsletterSettingsFragment : CardPageFragment() {
     }
 
     private var headerHolder: LinearLayout? = null
+    private var scroll: ScrollView? = null
+
+    /** The subreddits: held to move, rename or remove them, or to pick several to remove */
+    private val subList = HoldList<Int>(
+        onReorder = { order -> settings?.let { s -> NewsletterSync.subreddits(s).let { subs -> changed(NewsletterSync.withSubreddits(s, order.map { subs[it] })) } } },
+        onRemove = { picked -> settings?.let { s -> removeSubreddits(s, NewsletterSync.subreddits(s), picked) } },
+    )
 
     override fun onResume() {
         super.onResume()
@@ -93,6 +101,7 @@ class NewsletterSettingsFragment : CardPageFragment() {
     }
 
     override fun onPause() {
+        subList.end()
         // Anything waiting goes now
         if (savePending) saveNow()
         super.onPause()
@@ -193,12 +202,38 @@ class NewsletterSettingsFragment : CardPageFragment() {
 
     private fun subredditsSection(s: JSONObject, subs: List<NewsletterSync.Subreddit>) {
         val card = Card(getString(R.string.newsletter_subreddits_count, subs.size))
-        val rows = subs.mapIndexed { i, sub ->
-            row(sub.name, ownSummary(sub.own)) {
+        val subRows = subs.map { sub -> settingRow(sub.name, ownSummary(sub.own), onTap = null) }
+        val list = card.rowsSection(subRows + row(getString(R.string.newsletter_add_subreddit), null, faded = true) { askAdd(s, subs) })
+        subList.attach(list, scroll)
+        subRows.forEachIndexed { i, row ->
+            subList.item(row, i, label = subs[i].name, onTap = {
                 findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(PROFILE to profile, SUBREDDIT to i))
+            }, actions = listOf(
+                HoldList.Action(getString(R.string.rename)) { askRename(s, subs, i) },
+                HoldList.Action(getString(R.string.remove)) { removeSubreddits(s, subs, setOf(i)) },
+            ))
+        }
+    }
+
+    /** Takes the subreddits at [picked] off, keeping at least one */
+    private fun removeSubreddits(s: JSONObject, subs: List<NewsletterSync.Subreddit>, picked: Set<Int>) {
+        if (picked.size >= subs.size) return requireContext().showToast(R.string.newsletter_keep_one)
+        changed(NewsletterSync.withSubreddits(s, subs.filterIndexed { i, _ -> i !in picked }))
+    }
+
+    /** Another subreddit in the place of the one at [index], keeping its own settings */
+    private fun askRename(s: JSONObject, subs: List<NewsletterSync.Subreddit>, index: Int) {
+        val field = field(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, subs[index].name)
+        AppDialog(requireContext())
+            .setTitle(R.string.rename)
+            .setView(padded(field))
+            .setPositiveButton(R.string.save) { _, _ ->
+                val name = NewsletterSync.cleanName(field.text.toString())
+                    ?: return@setPositiveButton requireContext().showToast(R.string.newsletter_bad_name)
+                changed(NewsletterSync.withSubreddits(s, subs.mapIndexed { i, x -> if (i == index) NewsletterSync.Subreddit(name, x.own) else x }))
             }
-        } + row(getString(R.string.newsletter_add_subreddit), null, faded = true) { askAdd(s, subs) }
-        card.body(rows)
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     /** What a subreddit sets its own way, shortly: "controversial · day · 10" */

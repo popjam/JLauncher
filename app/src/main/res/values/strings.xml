@@ -34,6 +34,9 @@
     <string name="auto_show_keyboard">Auto show keyboard</string>
     <string name="hide">Hide</string>
     <string name="rename">Rename</string>
+    <string name="remove">Remove</string>
+    <string name="select">Select</string>
+    <string name="n_selected">%1$d selected</string>
     <string name="gestures">Gestures</string>
     <string name="theme_mode">Theme</string>
     <string name="system_default">System</string>
