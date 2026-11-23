@@ -34,6 +34,20 @@ class BlockItemsTest {
     }
 
     @Test
+    fun theTvHasItsOwnSwitch() {
+        val phone = BlockItems.set(emptyMap(), Kind.APP, "YouTube", phone = true, mac = null, now = 5, pkg = "com.google.android.youtube")
+        val tv = BlockItems.set(phone, Kind.APP, "YouTube", phone = null, mac = null, now = 9, tv = true, tvName = "YouTube")
+        // A copy from before the TV was blocked doesn't undo it
+        val item = BlockItems.mergeAll(tv, phone).values.single()
+        assertTrue(item.tv && item.phone)
+        assertEquals(setOf("YouTube"), BlockItems.tvApps(mapOf(item.id to item)))
+        assertEquals(tv, BlockItems.decode(BlockItems.encode(tv)))
+        // Matched, it's blocked on the TV too
+        val matched = BlockItems.matched(BlockItems.set(emptyMap(), Kind.APP, "Netflix", phone = true, mac = null, now = 1, tvName = "Netflix"))
+        assertEquals(setOf("Netflix"), BlockItems.tvApps(matched))
+    }
+
+    @Test
     fun matchingBlocksOnBothWhereItCan() {
         var items = BlockItems.set(emptyMap(), Kind.SITE, "youtube.com", phone = false, mac = true, now = 1)
         items = BlockItems.set(items, Kind.APP, "Instagram", phone = true, mac = null, now = 1, pkg = "com.instagram.android")

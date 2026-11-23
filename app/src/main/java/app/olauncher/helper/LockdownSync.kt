@@ -22,6 +22,8 @@ import kotlin.concurrent.thread
  *   for showing, breaks, what ending early needs, and what the Mac blocks.
  * - /lockdown/<key>/items is the shared list of blocked apps and sites ([BlockItems]), which both sides
  *   change, each switch keeping the time it changed.
+ * - /lockdown/<key>/tv is the TV's apps, sent by the PC that watches the TV (tools/tv-time), which
+ *   follows the phone's lockdown from /phone's "tv": whether to block, and the blocked apps.
  * - /lockdown/<key>/mac/commands is what the Mac asks for (start, add time, end, a break), each once;
  *   the phone removes them as it does them. /mac/installed is the Mac's apps, to choose from here.
  *
@@ -66,6 +68,12 @@ object LockdownSync {
         val o = JSONObject(store(context).getString("macInstalled", "{}")!!)
         o.keys().asSequence().associateWith { o.getString(it) }
     }.getOrDefault(emptyMap())
+
+    /** The TV's apps, by name, as the PC last sent them; empty without a TV */
+    fun tvInstalled(context: Context): List<String> = runCatching {
+        val a = JSONArray(store(context).getString("tvInstalled", "[]"))
+        (0 until a.length()).map { a.getString(it) }
+    }.getOrDefault(emptyList())
 
     /** When the Mac was last heard from (its commands or apps), or 0 */
     fun macSeen(context: Context) = store(context).getLong("macSeen", 0L)
@@ -126,6 +134,11 @@ object LockdownSync {
                 .put("until", if (phoneOn) Lockdown.activeUntil(context, prefs) ?: 0L else 0L)
                 .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.PHONE)))
             .put("matched", prefs.lockdownMatchDevices)
+            // The TV follows the phone's lockdown, and is free during the phone's break
+            .put("tv", JSONObject()
+                .put("blocking", Lockdown.isActive(context, prefs))
+                .put("until", if (phoneOn) Lockdown.activeUntil(context, prefs) ?: 0L else 0L)
+                .put("apps", JSONArray(BlockItems.tvApps(items).sorted())))
             .put("sites", JSONArray(sites))
             .put("macApps", JSONArray(BlockItems.macApps(items).sorted()))
             .put("challenge", challenge.encode())
@@ -248,6 +261,8 @@ object LockdownSync {
             for (i in 0 until list.length()) list.optJSONObject(i)?.let { o.put(it.optString("b"), it.optString("n")) }
             s.edit().putString("macInstalled", o.toString()).apply()
         }
+        // The TV's apps
+        root.optJSONObject("tv")?.optJSONArray("installed")?.let { s.edit().putString("tvInstalled", it.toString()).apply() }
         // The shared list: taken together with this phone's copy
         val remote = root.optJSONObject("items")?.let { BlockItems.decode(it.toString()) }.orEmpty()
         var local = prefs.lockdownItems

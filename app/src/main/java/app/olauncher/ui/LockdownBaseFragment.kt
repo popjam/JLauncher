@@ -434,6 +434,16 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         }
     }
 
+    /** The TV's switch, like a device's: it follows the phone's lockdown */
+    internal fun tvPill(on: Boolean, enabled: Boolean, onTap: () -> Unit): TextView = devicePill(Lockdown.Device.PHONE, on, enabled, onTap).apply {
+        text = getString(R.string.device_tv)
+        val color = currentTextColor
+        val icon = StatIcons.drawable(StatIcons.TV, color, 13.dpToPx())
+        icon.setBounds(0, 0, 13.dpToPx(), 13.dpToPx())
+        setCompoundDrawablesRelative(icon, null, null, null)
+        contentDescription = text.toString() + ", " + getString(if (on) R.string.on else R.string.off)
+    }
+
     /** Picks devices: the phone, the Mac or both; straight to [onPicked] with the phone when there's no Mac */
     internal fun pickDevices(title: String, current: Int, onPicked: (Int) -> Unit) {
         if (!Lockdown.macPaired(requireContext())) return onPicked(Lockdown.Device.PHONE.bit)

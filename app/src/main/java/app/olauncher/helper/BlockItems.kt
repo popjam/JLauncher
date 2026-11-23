@@ -4,7 +4,8 @@ import org.json.JSONObject
 
 /**
  * What lockdown blocks on each device: apps and websites, each blocked on the phone, the Mac, both or
- * neither. The list is shared with the Mac and either side can change it.
+ * neither, and apps on the TV too. The list is shared with the Mac and either side can change it; the
+ * TV (through the PC) only reads it.
  *
  * An app is known by its name, so the same app on both (Discord on the phone and on the Mac) is one
  * item with the phone's package and the Mac's bundle id. Each device's switch keeps the time it was
@@ -27,16 +28,22 @@ object BlockItems {
         val phoneAt: Long = 0,
         val mac: Boolean = false,
         val macAt: Long = 0,
+        /** The app's name on the TV, if it's there */
+        val tvName: String? = null,
+        val tv: Boolean = false,
+        val tvAt: Long = 0,
     ) {
         val id get() = idFor(kind, name)
-        val shown get() = phone || mac
+        val shown get() = phone || mac || tv
 
         /** Whether it can be blocked on the phone, the Mac: sites anywhere, apps where they are */
         val onPhone get() = kind == Kind.SITE || pkg != null
         val onMac get() = kind == Kind.SITE || bundle != null
+        val onTv get() = kind == Kind.APP && tvName != null
 
         fun json(): JSONObject = JSONObject().put("k", if (kind == Kind.APP) "app" else "site").put("n", name)
             .put("p", pkg ?: "").put("m", bundle ?: "").put("ph", phone).put("tph", phoneAt).put("mc", mac).put("tmc", macAt)
+            .put("t", tvName ?: "").put("tv", tv).put("ttv", tvAt)
     }
 
     fun fromJson(o: JSONObject): Item? {
@@ -48,6 +55,7 @@ object BlockItems {
             bundle = o.optString("m").ifEmpty { null },
             phone = o.optBoolean("ph"), phoneAt = o.optLong("tph"),
             mac = o.optBoolean("mc"), macAt = o.optLong("tmc"),
+            tvName = o.optString("t").ifEmpty { null }, tv = o.optBoolean("tv"), tvAt = o.optLong("ttv"),
         )
     }
 
@@ -67,7 +75,10 @@ object BlockItems {
     fun merge(a: Item, b: Item): Item {
         val phone = if (b.phoneAt > a.phoneAt) b else a
         val mac = if (b.macAt > a.macAt) b else a
+        val tv = if (b.tvAt > a.tvAt) b else a
         return a.copy(
+            tvName = a.tvName ?: b.tvName,
+            tv = tv.tv, tvAt = tv.tvAt,
             name = if (a.kind == Kind.APP && b.name.length > a.name.length && a.pkg == null) b.name else a.name,
             pkg = a.pkg ?: b.pkg,
             bundle = a.bundle ?: b.bundle,
@@ -96,12 +107,13 @@ object BlockItems {
      * package or bundle id at the same time.
      */
     fun set(items: Map<String, Item>, kind: Kind, name: String, phone: Boolean?, mac: Boolean?, now: Long,
-            pkg: String? = null, bundle: String? = null): Map<String, Item> {
+            pkg: String? = null, bundle: String? = null, tv: Boolean? = null, tvName: String? = null): Map<String, Item> {
         val id = idFor(kind, name)
         val old = items[id] ?: Item(kind, name)
-        var item = old.copy(pkg = old.pkg ?: pkg, bundle = old.bundle ?: bundle)
+        var item = old.copy(pkg = old.pkg ?: pkg, bundle = old.bundle ?: bundle, tvName = old.tvName ?: tvName)
         if (phone != null && phone != old.phone) item = item.copy(phone = phone, phoneAt = now)
         if (mac != null && mac != old.mac) item = item.copy(mac = mac, macAt = now)
+        if (tv != null && tv != old.tv) item = item.copy(tv = tv, tvAt = now)
         return items + (id to item)
     }
 
@@ -110,14 +122,16 @@ object BlockItems {
     fun phoneSites(items: Map<String, Item>) = items.values.filter { it.kind == Kind.SITE && it.phone }.map { it.name }.toSet()
     fun macApps(items: Map<String, Item>) = items.values.filter { it.kind == Kind.APP && it.mac && it.bundle != null }.mapNotNull { it.bundle }.toSet()
     fun macSites(items: Map<String, Item>) = items.values.filter { it.kind == Kind.SITE && it.mac }.map { it.name }.toSet()
+    /** The TV's blocked apps, by their names there */
+    fun tvApps(items: Map<String, Item>) = items.values.filter { it.kind == Kind.APP && it.tv && it.tvName != null }.mapNotNull { it.tvName }.toSet()
 
     /**
      * With devices matched, whatever is blocked on one is blocked on the other where it can be: sites
      * on both, and apps on both that are on both.
      */
     fun matched(items: Map<String, Item>): Map<String, Item> = items.mapValues { (_, it) ->
-        val on = it.phone || it.mac
-        it.copy(phone = on && it.onPhone, mac = on && it.onMac)
+        val on = it.phone || it.mac || it.tv
+        it.copy(phone = on && it.onPhone, mac = on && it.onMac, tv = on && it.onTv)
     }
 
     /** The items whose copy in [remote] isn't the same as in [local], to send */

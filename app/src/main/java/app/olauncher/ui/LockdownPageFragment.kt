@@ -127,7 +127,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
     // --- Apps and websites, on each device ---
 
     /** An app that can be blocked: its name, and where it is */
-    private data class Candidate(val name: String, val pkg: String?, val bundle: String?)
+    private data class Candidate(val name: String, val pkg: String?, val bundle: String?, val tvName: String? = null)
 
     /** Every app on the phone and the Mac, one per name */
     private fun candidates(): List<Candidate> {
@@ -140,15 +140,27 @@ class LockdownPageFragment : LockdownBaseFragment() {
             val key = BlockItems.key(name)
             byKey[key] = byKey[key]?.copy(bundle = bundle) ?: Candidate(name, null, bundle)
         }
+        LockdownSync.tvInstalled(context).forEach { name ->
+            val key = BlockItems.key(name)
+            byKey[key] = byKey[key]?.copy(tvName = name) ?: Candidate(name, null, null, name)
+        }
         return byKey.values.sortedBy { it.name.lowercase(Locale.getDefault()) }
     }
+
+    /** The TV's apps by their plain names, to give list items their name there */
+    private val tvByKey get() = LockdownSync.tvInstalled(requireContext()).associateBy { BlockItems.key(it) }
+
+    /** [item] with its TV name, when the TV has an app by that name */
+    private fun withTv(item: BlockItems.Item, tv: Map<String, String>) =
+        if (item.kind == BlockItems.Kind.APP && item.tvName == null) item.copy(tvName = tv[BlockItems.key(item.name)]) else item
 
     private fun blocksPage() {
         val context = requireContext()
         val paired = Lockdown.macPaired(context)
         val matched = prefs.lockdownMatchDevices && paired
         val stored = prefs.lockdownItems
-        val items = if (matched) BlockItems.matched(stored) else stored
+        val tv = tvByKey
+        val items = (if (matched) BlockItems.matched(stored) else stored).mapValues { withTv(it.value, tv) }
         modeSection()
         if (matched) {
             val note = section("")
@@ -164,7 +176,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             fromApps.joinToString(", ") { it.first })))
 
         val blockedApps = items.values.filter { it.kind == BlockItems.Kind.APP && it.shown && matchesQuery(it.name) }
-            .filter { it.bundle != null || it.pkg == null || context.isPackageInstalled(it.pkg) }
+            .filter { it.bundle != null || it.tvName != null || it.pkg == null || context.isPackageInstalled(it.pkg) }
             .sortedBy { it.name.lowercase(Locale.getDefault()) }
         val appCard = section(getString(R.string.lockdown_apps_count_title, blockedApps.size))
         if (blockedApps.isEmpty()) appCard.add(line(appCard, getString(R.string.lockdown_none_chosen)))
@@ -175,7 +187,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         if (apps == null) return
         val add = section(getString(R.string.lockdown_add_apps))
         add.add(*others.map { c ->
-            itemRow(add, BlockItems.Item(BlockItems.Kind.APP, c.name, c.pkg, c.bundle), paired, matched)
+            itemRow(add, BlockItems.Item(BlockItems.Kind.APP, c.name, c.pkg, c.bundle, tvName = c.tvName), paired, matched)
         }.toTypedArray())
     }
 
@@ -193,6 +205,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(devicePill(Lockdown.Device.PHONE, item.phone, item.onPhone) { toggle(item, Lockdown.Device.PHONE, matched) })
             if (paired) addView(devicePill(Lockdown.Device.MAC, item.mac, item.onMac) { toggle(item, Lockdown.Device.MAC, matched) })
+            if (LockdownSync.tvInstalled(context).isNotEmpty()) addView(tvPill(item.tv, item.onTv) { toggleTv(item, matched) })
         }
     }
 
@@ -203,7 +216,8 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val change = {
             val phone = if (matched || device == Lockdown.Device.PHONE) (!on && item.onPhone) else null
             val mac = if (matched || device == Lockdown.Device.MAC) (!on && item.onMac) else null
-            prefs.lockdownItems = BlockItems.set(prefs.lockdownItems, item.kind, item.name, phone, mac, now, item.pkg, item.bundle)
+            prefs.lockdownItems = BlockItems.set(prefs.lockdownItems, item.kind, item.name, phone, mac, now, item.pkg, item.bundle,
+                tv = if (matched) !on && item.onTv else null, tvName = item.tvName)
             if (!on) addedHere += item.id + device.name
             render()
             if (!on && !isAccessServiceEnabled(requireContext()) && device == Lockdown.Device.PHONE) runCatching {
@@ -211,6 +225,19 @@ class LockdownPageFragment : LockdownBaseFragment() {
             }
         }
         if (on && item.id + device.name !in addedHere) gate.loosen(change) else change()
+    }
+
+    /** Blocks or unblocks [item] on the TV (on every device, while matched) */
+    private fun toggleTv(item: BlockItems.Item, matched: Boolean) {
+        val on = item.tv
+        val change = {
+            prefs.lockdownItems = BlockItems.set(prefs.lockdownItems, item.kind, item.name,
+                phone = if (matched) !on && item.onPhone else null, mac = if (matched) !on && item.onMac else null,
+                now = System.currentTimeMillis(), pkg = item.pkg, bundle = item.bundle, tv = !on, tvName = item.tvName)
+            if (!on) addedHere += item.id + "TV"
+            render()
+        }
+        if (on && item.id + "TV" !in addedHere) gate.loosen(change) else change()
     }
 
     private fun addSite(text: String) {
