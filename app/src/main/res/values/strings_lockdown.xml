@@ -67,7 +67,7 @@
     <string name="lockdown_per_week">Per week</string>
     <string name="info_break_limits">The most breaks in the last hour, today or this week.</string>
     <string name="lockdown_break_stack">Stack breaks</string>
-    <string name="info_break_stack">Taking a break during a break adds its time on. When off, a break has to end before the next one.</string>
+    <string name="info_break_stack">Taking a break during a break adds its time on, and time left when you end a break early is added to your next one that day. When off, a break has to end before the next one, and time left is lost.</string>
     <string name="lockdown_break_make_up">Make up the time</string>
     <string name="info_break_make_up">Adds each break\'s length to the end of lockdown.</string>
     <string name="lockdown_no_breaks_during">No breaks during</string>

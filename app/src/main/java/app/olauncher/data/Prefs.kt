@@ -586,6 +586,15 @@ class Prefs(context: Context) {
         get() = prefs.getLong("LOCKDOWN_BREAK_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_BREAK_UNTIL", value) }
 
+    /** Time left over from breaks ended early, for the next break on [lockdownBreakSavedDay] */
+    var lockdownBreakSaved: Long
+        get() = prefs.getLong("LOCKDOWN_BREAK_SAVED", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_BREAK_SAVED", value) }
+
+    var lockdownBreakSavedDay: String
+        get() = prefs.getString("LOCKDOWN_BREAK_SAVED_DAY", "").orEmpty()
+        set(value) = prefs.edit { putString("LOCKDOWN_BREAK_SAVED_DAY", value) }
+
     var lockdownMacBreakUntil: Long
         get() = prefs.getLong("LOCKDOWN_MAC_BREAK_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_MAC_BREAK_UNTIL", value) }

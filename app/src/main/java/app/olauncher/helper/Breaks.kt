@@ -212,9 +212,16 @@ object Breaks {
     private fun offAt(config: Config, time: Long, zone: ZoneId) =
         config.off.isNotEmpty() && LocalDateTime.ofInstant(Instant.ofEpochMilli(time), zone).let { local -> config.off.any { it.covers(local) } }
 
-    /** When a break taken at [now] ends: added to the running one when they stack */
-    fun newEnd(config: Config, now: Long, breakUntil: Long): Long =
-        (if (config.stack && breakUntil > now) breakUntil else now) + config.minutes * 60_000L
+    /**
+     * When a break taken at [now] ends: added to the running one when they stack, and with [saved] (time
+     * left over from breaks ended early) on top
+     */
+    fun newEnd(config: Config, now: Long, breakUntil: Long, saved: Long = 0L): Long =
+        (if (config.stack && breakUntil > now) breakUntil else now) + config.minutes * 60_000L + (if (config.stack) saved.coerceAtLeast(0L) else 0L)
+
+    /** The time saved for the next break after one running until [breakUntil] is ended at [now]: what's left of it is kept when they stack */
+    fun savedAfterEnd(config: Config, now: Long, breakUntil: Long, saved: Long): Long =
+        if (!config.stack) 0L else saved.coerceAtLeast(0L) + (breakUntil - now).coerceAtLeast(0L)
 
     /** [log] with a new break, or the running one ended at [now] when it's ended early */
     fun started(log: List<Entry>, id: String, now: Long, end: Long, device: String) = log + Entry(id, now, end, device)

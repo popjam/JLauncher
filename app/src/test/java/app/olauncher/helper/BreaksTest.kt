@@ -44,6 +44,23 @@ class BreaksTest {
     }
 
     @Test
+    fun timeLeftFromABreakEndedEarlyGoesOnTheNextWhenTheyStack() {
+        val stack = five.copy(stack = true)
+        // A 5m break ended after 2m keeps 3m
+        val saved = Breaks.savedAfterEnd(stack, at(18, 12, 2), at(18, 12, 5), 0)
+        assertEquals(3 * minute, saved)
+        // Which adds up with more ended early
+        assertEquals(4 * minute, Breaks.savedAfterEnd(stack, at(18, 13, 4), at(18, 13, 5), saved))
+        // And goes on the next break
+        assertEquals(at(18, 14) + 8 * minute, Breaks.newEnd(stack, at(18, 14), 0, saved))
+        // Not kept or used when breaks don't stack
+        assertEquals(0L, Breaks.savedAfterEnd(five, at(18, 12, 2), at(18, 12, 5), 0))
+        assertEquals(at(18, 14) + 5 * minute, Breaks.newEnd(five, at(18, 14), 0, saved))
+        // An automatic break (nothing taken by hand) adds nothing
+        assertEquals(saved, Breaks.savedAfterEnd(stack, at(18, 12, 2), 0, saved))
+    }
+
+    @Test
     fun timeBetweenBreaksRunsFromTheLastOnesEnd() {
         val config = five.copy(cooldown = 30)
         val log = listOf(took(18, 11))

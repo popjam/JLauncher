@@ -702,16 +702,24 @@ object Lockdown {
                    at: Long = System.currentTimeMillis()) {
         val config = breaks(prefs)
         if (!config.on) return
-        val end = Breaks.newEnd(config, at, breakUntil(prefs))
+        val end = Breaks.newEnd(config, at, breakUntil(prefs), savedBreak(prefs))
         prefs.lockdownBreakUntil = end
+        prefs.lockdownBreakSaved = 0L
         prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.trim(Breaks.started(breakLog(prefs), id, at, end, device.name.lowercase()), at))
         // Lockdown ends a break's length later
         if (config.makeUp) addTime(context, config.minutes * 60_000L, prefs)
     }
 
+    /** Time left over from breaks ended early today, added to the next break when breaks stack */
+    fun savedBreak(prefs: Prefs): Long =
+        if (prefs.lockdownBreakSavedDay == LocalDate.now().toString() && breaks(prefs).stack) prefs.lockdownBreakSaved else 0L
+
     /** Ends the break now on every device, an automatic one too */
     fun endBreak(prefs: Prefs) {
         val now = System.currentTimeMillis()
+        // What's left of a break taken by hand is kept for the next one today, when breaks stack
+        prefs.lockdownBreakSaved = Breaks.savedAfterEnd(breaks(prefs), now, prefs.lockdownBreakUntil, savedBreak(prefs))
+        prefs.lockdownBreakSavedDay = LocalDate.now().toString()
         prefs.lockdownBreakUntil = 0L
         autoBreak(prefs, now)?.let { prefs.lockdownAutoBreakSkip = it.second }
         prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.ended(breakLog(prefs), now, Device.values().map { it.name.lowercase() }.toSet()))
