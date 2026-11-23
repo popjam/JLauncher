@@ -108,7 +108,7 @@
     <string name="sleep_7_8">7–8h</string>
     <string name="sleep_8_plus">8h+</string>
     <string name="music_listening">Listening</string>
-    <string name="social_homes">Homes</string>
+    <string name="social_homes">Home and work</string>
     <string name="mac_screen_time">Mac and TV</string>
     <string name="device_phone">Phone</string>
     <string name="device_mac">Mac</string>
@@ -431,7 +431,7 @@
         <item quantity="one">%d note found</item>
         <item quantity="other">%d notes found</item>
     </plurals>
-    <string name="day_note_hint">Note · hold to talk</string>
+    <string name="day_note_hint">Note</string>
     <string name="note_hint">Note</string>
     <string name="day_stats">Stats</string>
     <string name="day_top_app">mostly %1$s, %2$s</string>
@@ -778,7 +778,7 @@
     <string name="swipe_down">Swipe down</string>
     <string name="accessibility">Accessibility</string>
     <string name="check_in">Check-in</string>
-    <string name="homes_and_work">Homes</string>
+    <string name="homes_and_work">Home and work</string>
     <string name="places_today">Today</string>
     <string name="settings_carry_over">Carry over</string>
     <string name="settings_automatic">Automatic</string>
