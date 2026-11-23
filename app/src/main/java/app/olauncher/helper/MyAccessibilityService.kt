@@ -43,6 +43,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        CrashLog.install(this)
         instance = this
         keyboardPackages = (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .enabledInputMethodList.map { it.packageName }.toSet()
@@ -63,23 +64,25 @@ class MyAccessibilityService : AccessibilityService() {
     private val recheck = object : Runnable {
         override fun run() {
             val service = this@MyAccessibilityService
-            Limits.refresh(service)
-            checkSystemOnTop()
-            foregroundPackage?.takeIf { it != packageName && blockView == null && !systemOnTop }?.let { pkg ->
-                val prefs = Prefs(service)
-                val block = Lockdown.blockFor(service, pkg, opening = false, prefs)
-                if (block != null) {
-                    removeGate()
-                    showBlock(appLabel(pkg), block, pkg)
-                } else warnIfLow(pkg, prefs)
+            CrashLog.guard {
+                Limits.refresh(service)
+                checkSystemOnTop()
+                foregroundPackage?.takeIf { it != packageName && blockView == null && !systemOnTop }?.let { pkg ->
+                    val prefs = Prefs(service)
+                    val block = Lockdown.blockFor(service, pkg, opening = false, prefs)
+                    if (block != null) {
+                        removeGate()
+                        showBlock(appLabel(pkg), block, pkg)
+                    } else warnIfLow(pkg, prefs)
+                }
+                if (blockView == null) checkSite()
+                LockdownSystem.sync(service)
             }
-            if (blockView == null) checkSite()
-            LockdownSystem.sync(service)
             main.postDelayed(this, RECHECK_MS)
         }
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent) {
+    override fun onAccessibilityEvent(event: AccessibilityEvent) = CrashLog.guard {
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 onWindowChanged(event)
@@ -313,7 +316,7 @@ class MyAccessibilityService : AccessibilityService() {
     private var sitePending = false
     private val siteCheck = Runnable {
         sitePending = false
-        checkSite()
+        CrashLog.guard { checkSite() }
     }
 
     /**
@@ -407,7 +410,7 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastLeft = 0L
     private val guard = Runnable {
         guardPending = false
-        guardNow()
+        CrashLog.guard { guardNow() }
     }
 
     /**

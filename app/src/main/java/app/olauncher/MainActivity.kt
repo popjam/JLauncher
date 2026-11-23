@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        app.olauncher.helper.CrashLog.install(this)
         prefs = Prefs(this)
         app.olauncher.helper.Week.load(this)
         if (isEinkDisplay()) prefs.appTheme = AppCompatDelegate.MODE_NIGHT_NO

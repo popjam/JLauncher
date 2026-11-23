@@ -1169,6 +1169,12 @@ class SettingsFragment : CardPageFragment() {
             },
             row(card, getString(R.string.version), BuildConfig.VERSION_NAME, R.string.info_version, onTap = null),
             updateRow(card),
+            app.olauncher.helper.CrashLog.last(context)?.let { text ->
+                row(card, getString(R.string.last_error), text.substringBefore(" · ").replace('T', ' '), R.string.info_last_error) {
+                    startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND)
+                        .setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text), getString(R.string.last_error)))
+                }
+            },
         )
         showRestoreSummary()
     }

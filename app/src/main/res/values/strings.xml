@@ -828,6 +828,8 @@
     <string name="info_default">Makes this your home screen, or switches to another.</string>
     <string name="info_app_info">Android’s page for this app: permissions, storage and battery.</string>
     <string name="info_version">The version of JLauncher on this phone.</string>
+    <string name="last_error">Last error</string>
+    <string name="info_last_error">The last time JLauncher went wrong, with the details needed to fix it. Tap to send them.</string>
     <string name="tracking_check">Check</string>
     <string name="places_title_short">Places</string>
     <string name="lockdown">Lockdown</string>
