@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
             menu.addItem(action("Pair with phone…") { Dialog.show { PairView() } })
             menu.addItem(.separator())
+            menu.addItem(Updater.menuItem(action: action))
             menu.addItem(action("Quit") { NSApp.terminate(nil) })
             return
         }
@@ -140,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             else { model.unpair() }
         })
         menu.addItem(.separator())
+        menu.addItem(Updater.menuItem(action: action))
         menu.addItem(action("Quit") { NSApp.terminate(nil) })
     }
 
