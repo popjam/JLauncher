@@ -361,8 +361,16 @@ struct ItemsView: View {
         let change = {
             Model.shared.setItem(kind: row.kind, name: row.name, phone: phone ? !on : nil, mac: phone ? nil : !on, pkg: row.pkg, bundle: row.bundle)
         }
-        // Taking something off during lockdown loosens it
+        // Taking something off during lockdown loosens it; not at all while a timer runs on any device
         if on && (Model.shared.status.on || Model.shared.phone?.phoneOn == true) {
+            if let until = Lockdown.lockedUntil(Model.shared.state, now: Date().ms) {
+                return Dialog.show {
+                    Card {
+                        Title(text: "Locked until \(Format.time(until))")
+                        BoxButton(title: "OK") { Dialog.show(width: 460) { ItemsView() } }
+                    }
+                }
+            }
             Unlocking.run(title: "Unblock \(row.name)?", action: "Unblock") {
                 change()
                 Dialog.show(width: 460) { ItemsView() }

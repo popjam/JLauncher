@@ -177,13 +177,30 @@ eq(Wait.state(requestedAt: now - 60_000, waitMinutes: 15, now: now), .waiting(le
 eq(Wait.state(requestedAt: now - 15 * 60_000, waitMinutes: 15, now: now), .ready(left: 10 * 60_000))
 eq(Wait.state(requestedAt: now - 25 * 60_000, waitMinutes: 15, now: now), .none)
 
+// --- Locked until: the latest running timer on any device ---
+p = phone
+eq(Lockdown.lockedUntil(p, now: now), nil)
+p.timedUntil = now + hour
+eq(Lockdown.lockedUntil(p, now: now), now + hour)
+p.timedUntil = now - 1; p.phoneTimedUntil = now - 1; p.tvTimedUntil = now
+eq(Lockdown.lockedUntil(p, now: now), nil)
+p.timedUntil = now + hour; p.phoneTimedUntil = now + 3 * hour; p.tvTimedUntil = now + 2 * hour
+eq(Lockdown.lockedUntil(p, now: now), now + 3 * hour)
+// The Mac's own timed start counts before the phone has done it, on the phone too
+let started = Lockdown.effective(phone: phone, pending: [Command(type: .start, devices: Devices.both, until: now + hour, at: now)], now: now)
+eq(Lockdown.lockedUntil(started, now: now), now + hour)
+eq(started.phoneTimedUntil, now + hour)
+eq(Lockdown.lockedUntil(Lockdown.effective(phone: phone, pending: [Command(type: .start, until: 0, at: now)], now: now), now: now), nil)
+
 // --- Reading the phone's state and the stream ---
 let json: [String: Any] = ["v": 2, "mac": ["manual": true, "timedUntil": 1_763_000_000_000 as Int64, "windows": [[1, 2], [5, 3]], "breakUntil": 7],
-                           "phone": ["on": true, "until": 9], "sites": ["0": "reddit.com", "1": "x.com"], "challenge": "WAIT:30",
+                           "phone": ["on": true, "until": 9, "timedUntil": 11], "tv": ["timedUntil": 12], "sites": ["0": "reddit.com", "1": "x.com"], "challenge": "WAIT:30",
                            "applied": ["a"], "breaks": "{\"minutes\":2}"]
 let read = PhoneState(json: json)!
 check(read.manual && read.timedUntil == 1_763_000_000_000 && read.breakUntil == 7 && read.phoneOn && read.phoneUntil == 9, "fields")
 eq(read.windows, [Window(start: 1, end: 2)])
+check(read.phoneTimedUntil == 11 && read.tvTimedUntil == 12, "timers")
+check(PhoneState(json: ["mac": [:], "phone": ["on": true]])!.phoneTimedUntil == 0, "no phone timer")
 eq(read.sites, ["reddit.com", "x.com"])
 eq(read.challenge, Challenge(type: .wait, amount: 30))
 eq(read.applied ?? [], ["a"])

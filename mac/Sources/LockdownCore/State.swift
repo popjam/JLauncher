@@ -97,6 +97,9 @@ public struct PhoneState: Equatable {
     public var phoneOn = false
     public var phoneUntil: Ms = 0
     public var phoneBreakUntil: Ms = 0
+    /// When the phone's and the TV's timed lockdowns end, or 0
+    public var phoneTimedUntil: Ms = 0
+    public var tvTimedUntil: Ms = 0
     public var matched = false
     public var sites: [String] = []
     public var macApps: [String] = []
@@ -144,7 +147,9 @@ public struct PhoneState: Equatable {
                 phoneOn = phone["on"] as? Bool ?? false
                 phoneUntil = ms(phone["until"])
                 phoneBreakUntil = ms(phone["breakUntil"])
+                phoneTimedUntil = ms(phone["timedUntil"])
             }
+            if let tv = o["tv"] as? [String: Any] { tvTimedUntil = ms(tv["timedUntil"]) }
             matched = o["matched"] as? Bool ?? false
             macApps = strings(o["macApps"])
             challenge = Challenge.decode(o["challenge"] as? String) ?? Challenge(type: .nothing)
@@ -255,15 +260,19 @@ public enum Lockdown {
     static func apply(_ command: Command, to state: inout PhoneState) {
         switch command.type {
         case .start:
+            // A timed start for the phone counts there too, so unblocking is refused straight away
+            if command.devices & Devices.phone != 0 && command.until > state.phoneTimedUntil { state.phoneTimedUntil = command.until }
             guard command.forMac else { return }
             if command.until <= 0 { state.manual = true }
             else if command.until > state.timedUntil { state.timedUntil = command.until }
         case .add:
+            if command.devices & Devices.phone != 0 { state.phoneTimedUntil = max(state.phoneTimedUntil, command.at) + command.ms }
             guard command.forMac else { return }
             // From the end of whatever keeps it on then (the phone's addTime), else from when it was asked
             let base = max(coveredUntil(state, at: command.at) ?? command.at, state.timedUntil)
             state.timedUntil = base + command.ms
         case .end:
+            if command.devices & Devices.phone != 0 { state.phoneTimedUntil = 0 }
             guard command.forMac else { return }
             state.manual = false
             state.timedUntil = 0
@@ -293,6 +302,12 @@ public enum Lockdown {
 
     /// What End can end: only "on until turned off" and the timer, as on the phone.
     public static func endable(_ state: PhoneState, now: Ms) -> Bool { state.manual || state.timedUntil > now }
+
+    /// When the latest running timer on any device (Mac, phone, TV) ends, or nil if none is running.
+    /// While one runs, nothing is taken off the block list one at a time, as on the phone.
+    public static func lockedUntil(_ state: PhoneState, now: Ms) -> Ms? {
+        [state.timedUntil, state.phoneTimedUntil, state.tvTimedUntil].filter { $0 > now }.max()
+    }
 }
 
 /// The wait unlock, mirrored from the phone: asking starts a wait, then End works for 10 minutes.
