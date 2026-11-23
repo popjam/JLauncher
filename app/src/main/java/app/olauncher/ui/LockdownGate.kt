@@ -169,7 +169,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             .setMessage(R.string.lockdown_hold_message)
             .setView(padded(context, text))
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.lockdown_continue) { _, _ -> onPass() }
+            .setPositiveButton(R.string.okay) { _, _ -> onPass() }
             .create()
         val tick = object : Runnable {
             override fun run() {
@@ -341,7 +341,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             AppDialog(context)
                 .setTitle(R.string.catastrophic_warning)
                 .setMessage(R.string.lockdown_password_warning)
-                .setPositiveButton(R.string.proceed) { _, _ -> setNewPassword(false, onSet) }
+                .setPositiveButton(R.string.lockdown_next) { _, _ -> setNewPassword(false, onSet) }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
             return
@@ -393,7 +393,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             .setTitle(title)
             .setView(box)
             .setPositiveButton(R.string.okay) { _, _ -> onEntered(input.text.toString()) }
-            .setNegativeButton(R.string.close, null)
+            .setNegativeButton(R.string.cancel, null)
         if (generate != null) builder.setNeutralButton(R.string.generate_password) { _, _ -> generatePassword(generate) }
         else if (prefs.passwordRecoveryEnabled) builder.setNeutralButton(R.string.recover_password) { _, _ -> recoveryOptions() }
         builder.show()
@@ -406,7 +406,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         AppDialog(context)
             .setTitle(R.string.catastrophic_warning)
             .setMessage(context.getString(R.string.generated_password_warning, password))
-            .setPositiveButton(R.string.proceed) { _, _ -> savePassword(password, onSet) }
+            .setPositiveButton(R.string.save) { _, _ -> savePassword(password, onSet) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
@@ -419,14 +419,14 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         val ways = mutableListOf<Pair<String, () -> Unit>>()
         if (prefs.recoveryTap500) ways += context.getString(R.string.recovery_tap_500) to { context.showToast(context.getString(R.string.recovery_tap_500_info)) }
         if (prefs.recoveryClue) ways += context.getString(R.string.recovery_clue) to {
-            AppDialog(context).setTitle(R.string.your_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
+            AppDialog(context).setTitle(R.string.recovery_clue).setMessage(prefs.recoveryClueText).setPositiveButton(R.string.okay, null).show()
         }
         if (prefs.recoveryEssay) ways += context.getString(R.string.recovery_essay) to { essay() }
         if (ways.isEmpty()) return context.showToast(context.getString(R.string.no_recovery_methods))
         AppDialog(context)
             .setTitle(R.string.recover_password)
             .setItems(ways.map { it.first }.toTypedArray()) { _, which -> ways[which].second() }
-            .setNegativeButton(R.string.close, null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -552,11 +552,11 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             is Breaks.Can.OnBreak -> context.getString(R.string.lockdown_break_until, time(context, can.until))
             is Breaks.Can.Cooldown -> context.getString(R.string.lockdown_break_next, time(context, can.until))
             is Breaks.Can.OffNow -> context.getString(R.string.lockdown_break_not_now, time(context, can.until))
-            is Breaks.Can.Limit -> context.getString(when (can.period) {
-                "hour" -> R.string.lockdown_break_limit_hour
-                "day" -> R.string.lockdown_break_limit_day
-                else -> R.string.lockdown_break_limit_week
-            }, can.count) + " · " + context.getString(R.string.lockdown_break_next, time(context, can.until))
+            is Breaks.Can.Limit -> context.resources.getQuantityString(when (can.period) {
+                "hour" -> R.plurals.lockdown_break_limit_hour
+                "day" -> R.plurals.lockdown_break_limit_day
+                else -> R.plurals.lockdown_break_limit_week
+            }, can.count, can.count) + " · " + context.getString(R.string.lockdown_break_next, time(context, can.until))
         }
 
         /** A device's name, or the devices': "Phone", "Phone and TV", "All devices" */

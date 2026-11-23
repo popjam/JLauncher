@@ -122,6 +122,26 @@ object Lockdown {
 
     fun formatSchedules(schedules: List<Schedule>) = schedules.joinToString(";") { "${it.days}:${it.start}:${it.end}" }
 
+    /** Whether [schedules] cover the [minute]th minute of the week (0 is Monday 0:00), as [Schedule.covers] would */
+    fun coversMinuteOfWeek(schedules: List<Schedule>, minute: Int): Boolean {
+        // 1 January 2024 was a Monday
+        val time = LocalDate.of(2024, 1, 1).atStartOfDay().plusMinutes(minute.toLong())
+        return schedules.any { it.covers(time) }
+    }
+
+    /**
+     * Whether some time covered by [old] isn't covered by [new]: changing schedules that way loosens
+     * (lockdown, or no breaks, for less of the week)
+     */
+    fun coverageLost(old: List<Schedule>, new: List<Schedule>): Boolean =
+        old.isNotEmpty() && old != new && (0 until 7 * 1440).any { coversMinuteOfWeek(old, it) && !coversMinuteOfWeek(new, it) }
+
+    /**
+     * Whether changing a Lock after trigger from [old] to [new] loosens: more screen time before it
+     * goes off, or a different end, which comes sooner for some of the times it could go off
+     */
+    fun triggerLoosens(old: Trigger, new: Trigger) = new.minutes > old.minutes || new.until != old.until
+
     // --- Windows: lockdowns with a start and an end ---
 
     data class Window(val start: LocalDateTime, val end: LocalDateTime) {

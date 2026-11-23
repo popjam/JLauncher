@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lockdown's devices, breaks, screen time triggers and what ending early needs -->
+<!-- Lockdown: its sections (Blocks, Turns on, Screen time, Breaks, Unlock, On screen, Devices), Limits, and what unlocking needs -->
 <resources>
     <!-- Devices -->
     <string name="lockdown_devices">Devices</string>
@@ -8,16 +8,15 @@
     <string name="lockdown_device_tv">TV</string>
     <string name="lockdown_device_all">All devices</string>
     <string name="lockdown_tv">TV</string>
-    <string name="info_lockdown_tv">Puts the TV in the same lockdown as the phone, through the PC that watches it, using the same database as the Mac. While lockdown is on, blocked apps that are on the TV are closed there. Switching it off counts as loosening.</string>
+    <string name="info_lockdown_tv">Puts the TV in the same lockdown, through the computer that watches it, using the same server as the Mac. It closes the blocked apps it has. Switching it off counts as loosening.</string>
 
     <!-- What it blocks -->
     <string name="lockdown_apps_and_sites">Apps and websites</string>
-    <string name="info_lockdown_blocks">Apps and websites blocked during lockdown. Each switched-on device blocks the ones it can: the TV blocks apps only. Tap one to block or unblock it.</string>
+    <string name="info_lockdown_blocks">The apps and websites blocked during lockdown. Each switched-on device blocks the ones it can: the TV blocks apps only.</string>
     <string name="lockdown_search_or_add">Search apps or add a site</string>
     <string name="lockdown_websites_count">Websites · %1$d</string>
     <string name="lockdown_apps_count_title">Apps · %1$d</string>
     <string name="lockdown_add_apps">Add apps</string>
-    <string name="lockdown_add_site_hint">Type a site above to add it</string>
     <string name="lockdown_sites_from_apps_line">Also blocked with their apps: %1$s</string>
     <string name="lockdown_during_phone">On the phone</string>
     <plurals name="lockdown_sites_count">
@@ -37,18 +36,16 @@
 
     <!-- Screen time triggers -->
     <string name="lockdown_why_screen_time">Screen time</string>
-    <string name="info_lockdown_triggers">Turns lockdown on once today\'s total screen time on the phone, the Mac and the TV passes an amount, until a set time, such as 7:00 the next morning.</string>
+    <string name="info_lockdown_triggers">Turns lockdown on once today\'s total screen time on the phone, Mac and TV passes an amount, until a set time.</string>
     <string name="lockdown_lock_after">Lock after</string>
-    <string name="lockdown_triggers_none">None set</string>
     <string name="lockdown_trigger_name">%1$s over %2$s · until %3$s</string>
     <string name="lockdown_source_total">Total</string>
     <string name="lockdown_trigger_amount">After</string>
     <string name="lockdown_trigger_until">Locked until</string>
-    <string name="lockdown_running">On now</string>
 
     <!-- Breaks -->
     <string name="lockdown_breaks">Breaks</string>
-    <string name="info_lockdown_breaks">A few minutes with nothing blocked, without ending lockdown. Hold the home lock to take one; tap it to end it.</string>
+    <string name="info_lockdown_breaks">A few minutes with nothing blocked, without ending lockdown. A break lifts lockdown on every device.</string>
     <string name="lockdown_take_break">Take a break</string>
     <string name="lockdown_end_break">End break</string>
     <string name="lockdown_on_break">On a break</string>
@@ -59,44 +56,28 @@
     <string name="lockdown_break_not_locked">Lockdown isn\'t on</string>
     <string name="lockdown_break_next">Next at %1$s</string>
     <string name="lockdown_break_not_now">No breaks until %1$s</string>
-    <string name="lockdown_break_limit_hour">%1$d an hour used</string>
-    <string name="lockdown_break_limit_day">%1$d today used</string>
-    <string name="lockdown_break_limit_week">%1$d this week used</string>
-    <string name="lockdown_breaks_today">%1$d today</string>
     <string name="lockdown_n_a_day">%1$d a day</string>
     <string name="lockdown_break_length">Length</string>
     <string name="info_break_length">How long a break lasts.</string>
-    <string name="lockdown_no_breaks">No breaks</string>
-    <string name="lockdown_taking_one">Taking one</string>
-    <string name="info_break_needs">What has to be done to take a break.</string>
-    <string name="lockdown_how_often">How often</string>
+    <string name="info_break_needs">What you have to do to take a break.</string>
     <string name="lockdown_break_gap">Time between breaks</string>
-    <string name="info_break_gap">How long after a break ends before another can be taken.</string>
+    <string name="info_break_gap">How long after a break ends before you can take another.</string>
     <string name="lockdown_per_hour">Per hour</string>
     <string name="lockdown_per_day">Per day</string>
     <string name="lockdown_per_week">Per week</string>
-    <string name="info_break_limits">The most breaks in the last hour, today, or this week (from Monday).</string>
-    <string name="lockdown_no_limit">No limit</string>
+    <string name="info_break_limits">The most breaks in the last hour, today or this week.</string>
     <string name="lockdown_break_stack">Stack breaks</string>
-    <string name="info_break_stack">Taking a break during a break adds its time on. Off: a break has to end before the next.</string>
+    <string name="info_break_stack">Taking a break during a break adds its time on. When off, a break has to end before the next one.</string>
     <string name="lockdown_break_make_up">Make up the time</string>
-    <string name="info_break_make_up">Each break is added to the end of lockdown, so it ends that much later.</string>
+    <string name="info_break_make_up">Adds each break\'s length to the end of lockdown.</string>
     <string name="lockdown_no_breaks_during">No breaks during</string>
-    <string name="lockdown_no_breaks_during_none">Breaks can be taken any time</string>
-    <string name="info_break_off">Breaks can\'t be taken at these times. Tap to remove.</string>
+    <string name="info_break_off">Times when breaks can\'t be taken.</string>
     <string name="lockdown_breaks_taken">Breaks</string>
     <string name="lockdown_break_time">%1$s on breaks</string>
 
-    <!-- Ending early and challenges -->
-    <string name="lockdown_difficulty">Difficulty</string>
-    <string name="info_lockdown_difficulty">Pick how hard ending early is, from nothing at all to not possible.</string>
-    <string name="lockdown_what_it_covers">Also needed for</string>
-    <string name="lockdown_challenge_covers">Loosening anything while lockdown is on, and ending it early from the Mac.</string>
-    <string name="challenge_hold_n">Keep open %1$s</string>
-    <string name="challenge_taps_n">%1$d taps</string>
+    <!-- Unlock and what it needs -->
+    <string name="challenge_hold_n">Keep open for %1$s</string>
     <string name="challenge_phrase">Type the phrase</string>
-    <string name="challenge_phrase_n">Type the phrase %1$d times</string>
-    <string name="challenge_random_n">Type %1$d random characters</string>
     <string name="challenge_never">Not possible</string>
     <string name="challenge_type_hold">Keep a countdown open</string>
     <string name="challenge_type_taps">Tap</string>
@@ -105,7 +86,7 @@
     <string name="challenge_type_wait">Ask, then wait</string>
     <string name="challenge_the_phrase">Phrase</string>
     <string-array name="challenge_difficulty">
-        <item>Simple</item>
+        <item>Very easy</item>
         <item>Easy</item>
         <item>Medium</item>
         <item>Hard</item>
@@ -114,7 +95,6 @@
         <item>Impossible</item>
     </string-array>
     <string name="lockdown_hold_message">Keep this open. Leaving starts it again.</string>
-    <string name="lockdown_continue">Continue</string>
     <string name="lockdown_tap">Tap</string>
     <string name="lockdown_taps_left">%1$d left</string>
     <string name="lockdown_not_matching">Doesn\'t match</string>
@@ -127,7 +107,6 @@
     <string name="lockdown_usually">Usually on %1$s</string>
 
     <!-- Limits -->
-    <string name="limits_and_lockdown">Limits and lockdown</string>
     <string name="limits_add">Add a limit</string>
     <string name="limits_at_limit">%1$d at their limit</string>
     <string name="limits_none_yet">No limits</string>
@@ -138,11 +117,65 @@
     <string name="limit_one_more_minute">One more minute</string>
     <string name="limit_ignore_today">Ignore for today</string>
     <string name="pause_grows">Grows each open</string>
-    <string name="info_pause_grows">Each open today adds the pause length again, up to 1 minute. It starts again at midnight. Applies to every paused app.</string>
+    <string name="info_pause_grows">Each open today adds the pause length again, up to 1 minute. Starts again at midnight. Applies to every paused app.</string>
 
     <!-- Devices and automatic breaks -->
     <string name="lockdown_seen">Seen %1$s</string>
     <string name="lockdown_auto_breaks">Automatic breaks</string>
     <string name="lockdown_auto_break_value">%1$s every %2$s</string>
-    <string name="info_auto_breaks">Breaks that start by themselves during any lockdown, at the set length and gap, counted from when lockdown started. They lift lockdown on every device like other breaks, and don\'t count towards the break limits.</string>
+    <string name="info_auto_breaks">Breaks that start by themselves during any lockdown, at the set length and gap, counted from when lockdown started. They lift lockdown on every device and don\'t count towards break limits.</string>
+
+    <!-- Lockdown's sections -->
+    <string name="lockdown_blocks">Blocks</string>
+    <string name="lockdown_turns_on">Turns on</string>
+    <string name="info_lockdown_turns_on">Turns lockdown on by itself at set times or at chosen places.</string>
+    <string name="lockdown_schedule">Schedule</string>
+    <string name="lockdown_screen_time">Screen time</string>
+    <string name="lockdown_unlock_needs">Unlock needs</string>
+    <string name="info_lockdown_unlock">What you have to do to end lockdown early or loosen it, including from the Mac. Options run from just tapping, to typing a phrase or password, to not being allowed at all.</string>
+    <string name="lockdown_break_needs">Break needs</string>
+    <string name="lockdown_on_screen">On screen</string>
+    <string name="lockdown_always_allowed">Always allowed</string>
+    <string name="lockdown_always_allowed_count_title">Always allowed · %1$d</string>
+    <string name="info_lockdown_always_allowed">With Only allow these, apps that always work during lockdown, as well as the allowed apps. The phone app always works.</string>
+    <string name="lockdown_greyscale">Greyscale</string>
+    <string name="lockdown_greyscale_setup">Needs a one-time permission. Run this on a computer connected to the phone:</string>
+    <string name="info_lockdown_greyscale">Turns the screen grey during lockdown. Needs a one-time permission given from a computer.</string>
+    <string name="info_lockdown_devices">The phone and every switched-on device share one lockdown. Each blocks what it can.</string>
+    <string name="info_lockdown_phone">The phone is always in lockdown.</string>
+    <string name="lockdown_blocks_phone">Blocks apps, sites and settings changes</string>
+    <string name="lockdown_blocks_mac">Blocks apps and sites</string>
+    <string name="lockdown_blocks_tv">Blocks apps</string>
+    <plurals name="lockdown_schedules_count">
+        <item quantity="one">%d schedule</item>
+        <item quantity="other">%d schedules</item>
+    </plurals>
+    <plurals name="lockdown_breaks_taken">
+        <item quantity="one">%d taken</item>
+        <item quantity="other">%d taken</item>
+    </plurals>
+    <plurals name="lockdown_break_limit_hour">
+        <item quantity="one">%d break this hour</item>
+        <item quantity="other">%d breaks this hour</item>
+    </plurals>
+    <plurals name="lockdown_break_limit_day">
+        <item quantity="one">%d break today</item>
+        <item quantity="other">%d breaks today</item>
+    </plurals>
+    <plurals name="lockdown_break_limit_week">
+        <item quantity="one">%d break this week</item>
+        <item quantity="other">%d breaks this week</item>
+    </plurals>
+    <plurals name="challenge_taps">
+        <item quantity="one">%d tap</item>
+        <item quantity="other">%d taps</item>
+    </plurals>
+    <plurals name="challenge_random">
+        <item quantity="one">Type %d random character</item>
+        <item quantity="other">Type %d random characters</item>
+    </plurals>
+    <plurals name="challenge_phrase_times">
+        <item quantity="one">Type the phrase %d time</item>
+        <item quantity="other">Type the phrase %d times</item>
+    </plurals>
 </resources>

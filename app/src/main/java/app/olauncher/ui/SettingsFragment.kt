@@ -965,19 +965,14 @@ class SettingsFragment : CardPageFragment() {
     private val gate by lazy { LockdownGate(this) { render() } }
 
     /**
-     * Limits and Lockdown each have their own page; here they're the first section's two rows, with a
-     * dot by the value while either is in force (red for lockdown, teal for limits).
+     * Lockdown has its own page (Limits is in it, under Screen time); here it's the first section's
+     * row, with a red dot by the value while it's in force.
      */
     private fun lockdownSection() {
         val context = requireContext()
-        val card = Card(getString(R.string.limits_and_lockdown))
-        val limits = Limits.appsWithRules(context, prefs)
+        val card = Card(getString(R.string.lockdown))
         val on = Lockdown.isActive(context, prefs)
         card.body(
-            row(card, getString(R.string.limits), if (limits == 0) getString(R.string.off)
-                else resources.getQuantityString(R.plurals.lockdown_apps_count, limits, limits), R.string.info_app_limits) {
-                findNavController().navigate(R.id.lockdownPageFragment, androidx.core.os.bundleOf(LockdownPageFragment.PAGE to LockdownPageFragment.LIMITS))
-            }.also { if (limits > 0) it.valueDot(Style.accent(darkPage)) },
             row(card, getString(R.string.lockdown), LockdownGate.status(context), R.string.info_lockdown) {
                 findNavController().navigate(R.id.lockdownFragment)
             }.also { if (on) it.valueDot(Style.DANGER) },

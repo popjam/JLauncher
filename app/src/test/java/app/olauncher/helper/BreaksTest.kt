@@ -162,4 +162,14 @@ class BreaksTest {
         val trimmed = Breaks.trim(listOf(a, a.copy(end = a.end + minute), took(1, 9)), at(18, 12))
         assertEquals(listOf(a.copy(end = a.end + minute)), trimmed)
     }
+
+    @Test
+    fun timesOffLoosenOnlyWhenTheyCoverLess() {
+        val nights = Lockdown.Schedule(Lockdown.EVERY_DAY, 22 * 60, 6 * 60)
+        val config = five.copy(off = listOf(nights))
+        assertFalse(config.loosensTo(config.copy(off = listOf(Lockdown.Schedule(Lockdown.EVERY_DAY, 21 * 60, 7 * 60)))))
+        assertTrue(config.loosensTo(config.copy(off = listOf(Lockdown.Schedule(Lockdown.EVERY_DAY, 23 * 60, 6 * 60)))))
+        assertTrue(config.loosensTo(config.copy(off = emptyList())))
+        assertFalse(five.loosensTo(config))
+    }
 }

@@ -453,7 +453,7 @@ class MyAccessibilityService : AccessibilityService() {
         lastLeft = now
         // The sheet covers the page at once, so nothing on it can be tapped while it closes underneath
         Lockdown.countBlocked(this)
-        showSheet(getString(R.string.lockdown_suspicious), listOf(getString(R.string.lockdown_suspicious_line), LockdownGate.lockedMessage(this)),
+        showSheet(getString(R.string.lockdown_suspicious_line), listOf(LockdownGate.lockedMessage(this)),
             BlockScreen.BLOCKED, BlockScreen.SHADE_DIM, null, toHome = false, sticky = true, quiet = false)
         performGlobalAction(GLOBAL_ACTION_BACK)
         performGlobalAction(GLOBAL_ACTION_HOME)

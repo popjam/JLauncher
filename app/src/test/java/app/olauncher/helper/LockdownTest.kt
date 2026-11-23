@@ -127,4 +127,38 @@ class LockdownTest {
         assertTrue(Lockdown.covers(Lockdown.ALL, Lockdown.Device.TV))
         assertFalse(Lockdown.covers(Lockdown.Device.PHONE.bit, Lockdown.Device.TV))
     }
+
+    @Test
+    fun editingAScheduleLoosensOnlyWhenItCoversLess() {
+        // Longer, or on more days: stricter
+        assertFalse(Lockdown.coverageLost(listOf(evenings), listOf(Schedule(Lockdown.WEEKDAYS, 21 * 60, 7 * 60))))
+        assertFalse(Lockdown.coverageLost(listOf(evenings), listOf(Schedule(Lockdown.EVERY_DAY, 22 * 60, 7 * 60))))
+        // Later start, earlier end, fewer days, or gone: looser
+        assertTrue(Lockdown.coverageLost(listOf(evenings), listOf(Schedule(Lockdown.WEEKDAYS, 23 * 60, 7 * 60))))
+        assertTrue(Lockdown.coverageLost(listOf(evenings), listOf(Schedule(Lockdown.WEEKDAYS, 22 * 60, 6 * 60))))
+        assertTrue(Lockdown.coverageLost(listOf(evenings), listOf(Schedule(0b0001111, 22 * 60, 7 * 60))))
+        assertTrue(Lockdown.coverageLost(listOf(evenings, workHours), listOf(workHours)))
+        // Still covered by other schedules: nothing lost
+        assertFalse(Lockdown.coverageLost(listOf(workHours), listOf(Schedule(Lockdown.WEEKDAYS, 9 * 60, 12 * 60), Schedule(Lockdown.WEEKDAYS, 12 * 60, 17 * 60))))
+        assertFalse(Lockdown.coverageLost(emptyList(), listOf(evenings)))
+    }
+
+    @Test
+    fun minutesOfTheWeekCountFromMonday() {
+        // Monday 22:00 and the Saturday morning after Friday night are covered; Sunday morning isn't
+        assertTrue(Lockdown.coversMinuteOfWeek(listOf(evenings), 22 * 60))
+        assertTrue(Lockdown.coversMinuteOfWeek(listOf(evenings), 5 * 1440 + 6 * 60))
+        assertFalse(Lockdown.coversMinuteOfWeek(listOf(evenings), 6 * 1440 + 6 * 60))
+    }
+
+    @Test
+    fun editingALockAfterTriggerLoosensWithMoreTimeOrAnotherEnd() {
+        val old = Lockdown.Trigger(180, 6 * 60)
+        assertFalse(Lockdown.triggerLoosens(old, Lockdown.Trigger(120, 6 * 60)))
+        assertFalse(Lockdown.triggerLoosens(old, old))
+        assertTrue(Lockdown.triggerLoosens(old, Lockdown.Trigger(240, 6 * 60)))
+        // Another end comes sooner for some of the times it could go off (just after 6:00, for 7:00)
+        assertTrue(Lockdown.triggerLoosens(old, Lockdown.Trigger(180, 7 * 60)))
+        assertTrue(Lockdown.triggerLoosens(old, Lockdown.Trigger(180, 5 * 60)))
+    }
 }

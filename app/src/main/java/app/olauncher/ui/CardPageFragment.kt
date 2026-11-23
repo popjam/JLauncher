@@ -218,6 +218,89 @@ abstract class CardPageFragment : Fragment() {
         return list
     }
 
+    // --- Collapsible sections: one open at a time, each header showing its value ---
+
+    /**
+     * Makes [this] card a settings section ([panel]) that opens and closes: its header shows the
+     * title, [value] (a summary of what's set, like "5m · 3 a day" or "Off") and an arrow; tapping it
+     * opens the section and closes whichever other section in [sections] was open. Holding the header
+     * shows [about]. Returns the rows' list, as [rowsSection] does, for a [HoldList] to attach to.
+     *
+     * ```
+     * private val sections = OneOpen()          // a field, so the open one stays open as the page rebuilds
+     *
+     * Card(getString(R.string.breaks)).collapsibleSection(sections, "breaks", "5m · 3 a day", getString(R.string.info_breaks),
+     *     listOf(lengthRow, perDayRow))
+     * ```
+     */
+    internal fun Card.collapsibleSection(sections: OneOpen, key: String, value: String?, about: String?, rows: List<View?>): LinearLayout {
+        val list = rowsSection(rows)
+        val header = titleView.parent as LinearLayout
+        headerEnd.removeAllViews()
+        if (value != null) headerEnd.addView(collapsibleValue(value))
+        val arrow = collapsibleArrow()
+        headerEnd.addView(arrow)
+        header.setBackgroundResource(android.R.drawable.list_selector_background)
+        header.updatePadding(top = 4.dpToPx(), bottom = 4.dpToPx())
+        header.setOnClickListener { sections.toggle(key) }
+        val title = titleView.text.toString()
+        if (about != null) header.setOnLongClickListener { explainSetting(header, title, about); true }
+        val params = header.layoutParams as ViewGroup.MarginLayoutParams
+        sections.register(key, OneOpen.Part(header, list, arrow) { open ->
+            // The gap under the header only while its rows show
+            params.bottomMargin = if (open) 10.dpToPx() else 0
+            header.layoutParams = params
+        })
+        return list
+    }
+
+    /**
+     * A row inside a section that opens and closes: [title], [value] and an arrow, with [rows]
+     * (usually indented a level, [settingRow]'s `level = 1`) under it while it's open. It shares
+     * [sections] with the page's other collapsible sections and rows, so one is open at a time.
+     * Put [Collapsible.view] among the section's rows; [Collapsible.rows] is the list holding [rows].
+     */
+    internal fun collapsibleGroup(sections: OneOpen, key: String, title: String, value: String?, about: String?, rows: List<View?>): Collapsible {
+        val header = settingRow(title, value, about) { sections.toggle(key) }
+        val arrow = collapsibleArrow()
+        header.addView(arrow)
+        val list = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            dividerDrawable = rowDivider()
+            showDividers = LinearLayout.SHOW_DIVIDER_BEGINNING or LinearLayout.SHOW_DIVIDER_MIDDLE
+            rows.filterNotNull().forEach { addView(it) }
+        }
+        val view = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(header)
+            addView(list)
+        }
+        sections.register(key, OneOpen.Part(header, list, arrow))
+        return Collapsible(view, list)
+    }
+
+    /** What [collapsibleGroup] makes: the [view] to put in a section, and the list of its [rows] */
+    internal class Collapsible(val view: View, val rows: LinearLayout)
+
+    private fun collapsibleValue(value: String) = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
+        text = value
+        textSize = Style.TEXT_BODY
+        setTextColor(faint(215))
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        maxWidth = (resources.displayMetrics.widthPixels * 0.45f).toInt()
+        updatePadding(left = 12.dpToPx())
+    }
+
+    private fun collapsibleArrow() = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
+        text = "▾"
+        textSize = Style.TEXT_BODY
+        setTextColor(faint(150))
+        gravity = Gravity.CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        layoutParams = LinearLayout.LayoutParams(24.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 6.dpToPx() }
+    }
+
     /** The card [explainSetting] shows, one at a time */
     internal var infoPopup: android.widget.PopupWindow? = null
 
@@ -551,5 +634,54 @@ abstract class CardPageFragment : Fragment() {
             indices.add(count - 1)
         }
         return indices
+    }
+}
+
+/**
+ * Which of a page's collapsible sections ([CardPageFragment.collapsibleSection]) and rows
+ * ([CardPageFragment.collapsibleGroup]) is open: at most one at a time, by key. Keep one per page in
+ * a field, so the open one stays open while the page rebuilds and after coming back to it; register
+ * the sections again each time the page is built (making them does that).
+ *
+ * - [toggle] opens a section (closing the one open) or closes it, as tapping its header does.
+ * - [show] opens one from code, such as the section a search match is in; null closes them all.
+ * - [onChange] hears each change, to keep which is open somewhere, say.
+ */
+class OneOpen(open: String? = null, private val onChange: ((String?) -> Unit)? = null) {
+
+    /** The open section's key, or null */
+    var open: String? = open
+        private set
+
+    /** A section's views: its [header], the [body] shown only while it's open, its [arrow], and anything else to change */
+    internal class Part(val header: View, val body: View, val arrow: View, val onOpen: ((Boolean) -> Unit)? = null)
+
+    private val parts = mutableMapOf<String, Part>()
+
+    internal fun register(key: String, part: Part) {
+        parts[key] = part
+        apply(key, part)
+    }
+
+    fun toggle(key: String) = show(if (open == key) null else key)
+
+    fun show(key: String?) {
+        open = key
+        parts.forEach { (k, part) -> apply(k, part) }
+        onChange?.invoke(key)
+        // Keep the opened section in view, as the one closing above it may move it up
+        val part = key?.let { parts[it] } ?: return
+        part.header.post {
+            if (!part.header.isAttachedToWindow) return@post
+            val height = part.header.height + part.body.height
+            part.header.requestRectangleOnScreen(android.graphics.Rect(0, 0, part.header.width, minOf(height, part.header.rootView.height / 2)), false)
+        }
+    }
+
+    private fun apply(key: String, part: Part) {
+        val shown = key == open
+        part.body.isVisible = shown
+        part.arrow.rotation = if (shown) 180f else 0f
+        part.onOpen?.invoke(shown)
     }
 }

@@ -70,7 +70,7 @@ object Breaks {
                 (new.stack && !stack) ||
                 (!new.makeUp && makeUp) ||
                 limitLoosens(perHour, new.perHour) || limitLoosens(perDay, new.perDay) || limitLoosens(perWeek, new.perWeek) ||
-                off.any { it !in new.off } ||
+                Lockdown.coverageLost(off, new.off) ||
                 Challenge.loosens(challenge, new.challenge, phraseLength) ||
                 autoLoosens
         }

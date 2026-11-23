@@ -89,7 +89,7 @@ private fun StatPageFragment.lockdownNowCard() {
         counts(BlockItems.macApps(items).size, BlockItems.macSites(items).size)
     if (Lockdown.tvPaired(context)) lines += LockdownGate.deviceName(context, Lockdown.Device.TV.bit) to counts(BlockItems.tvApps(items).size, 0)
     body.addView(card.textView(Style.TEXT_SMALL, 140).apply {
-        text = getString(R.string.lockdown_what_it_blocks).uppercase()
+        text = getString(R.string.lockdown_blocks).uppercase()
         letterSpacing = 0.1f
         updatePadding(top = 16.dpToPx(), bottom = 4.dpToPx())
     })

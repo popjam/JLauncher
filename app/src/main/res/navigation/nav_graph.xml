@@ -167,7 +167,7 @@
             app:popExitAnim="@anim/fade_exit" />
     </fragment>
 
-    <!-- Lockdown's page, and its own pages (apps, websites, places, stages, limits, one app) -->
+    <!-- Lockdown: its page, its setup, and its long lists (apps and websites, allowed apps, Limits, one app) -->
     <fragment
         android:id="@+id/lockdownFragment"
         android:name="app.olauncher.ui.LockdownFragment"
