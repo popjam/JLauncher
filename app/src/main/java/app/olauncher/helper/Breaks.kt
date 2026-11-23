@@ -11,8 +11,8 @@ import java.time.temporal.TemporalAdjusters
 /**
  * Short breaks from lockdown: for a few minutes, nothing lockdown blocks is blocked. How long they
  * are, how often and when they can be taken, and what has to be done to take one, are all set here.
- * Breaks are shared between the devices (one break, counted once, lifts them all) or each
- * device has its own.
+ * Breaks are shared between the devices: one break, counted once, lifts them all. Automatic breaks
+ * start by themselves at set times during any lockdown and don't count against the limits.
  *
  * The rules are plain functions of the settings, the log of breaks and the time, so they're the same
  * everywhere and can be tested.
@@ -38,33 +38,41 @@ object Breaks {
         val perWeek: Int = 0,
         /** When breaks can't be taken */
         val off: List<Lockdown.Schedule> = emptyList(),
-        /** One break for both devices, counted once; otherwise each device has its own */
-        val shared: Boolean = true,
         /** What has to be done to take one */
         val challenge: Challenge = Challenge(Challenge.Type.NONE),
+        /** Automatic breaks: [autoMinutes] long, starting every [autoEvery] minutes of lockdown; 0 for none */
+        val autoMinutes: Int = 0,
+        val autoEvery: Int = 0,
     ) {
         val on get() = minutes > 0
 
+        /** Whether automatic breaks are set; they don't need manual breaks to be on */
+        val autoOn get() = autoMinutes > 0 && autoEvery > autoMinutes
+
+        // "shared" stays in what's written, always on, for the Mac app, which reads it
         fun encode(): String = JSONObject()
             .put("minutes", minutes).put("cooldown", cooldown).put("stack", stack).put("makeUp", makeUp)
             .put("perHour", perHour).put("perDay", perDay).put("perWeek", perWeek)
-            .put("off", Lockdown.formatSchedules(off)).put("shared", shared).put("challenge", challenge.encode())
+            .put("off", Lockdown.formatSchedules(off)).put("shared", true).put("challenge", challenge.encode())
+            .put("autoMinutes", autoMinutes).put("autoEvery", autoEvery)
             .toString()
 
         /**
          * Whether going from this to [new] makes breaks easier to get, so it needs lockdown's unlock:
-         * longer, sooner, more of them, fewer times off, kept apart from the other device, or easier to ask for.
+         * longer, sooner, more of them, fewer times off, easier to ask for, or automatic ones longer or
+         * more often.
          */
         fun loosensTo(new: Config, phraseLength: Int = 40): Boolean {
             fun limitLoosens(old: Int, value: Int) = old > 0 && (value <= 0 || value > old)
+            val autoLoosens = new.autoOn && (!autoOn || new.autoMinutes > autoMinutes || new.autoEvery < autoEvery)
             return (new.minutes > minutes) ||
                 new.cooldown < cooldown ||
                 (new.stack && !stack) ||
                 (!new.makeUp && makeUp) ||
                 limitLoosens(perHour, new.perHour) || limitLoosens(perDay, new.perDay) || limitLoosens(perWeek, new.perWeek) ||
                 off.any { it !in new.off } ||
-                (!new.shared && shared) ||
-                Challenge.loosens(challenge, new.challenge, phraseLength)
+                Challenge.loosens(challenge, new.challenge, phraseLength) ||
+                autoLoosens
         }
 
         companion object {
@@ -79,8 +87,9 @@ object Breaks {
                     perDay = o.optInt("perDay", 0).coerceAtLeast(0),
                     perWeek = o.optInt("perWeek", 0).coerceAtLeast(0),
                     off = Lockdown.parseSchedules(o.optString("off")),
-                    shared = o.optBoolean("shared", true),
                     challenge = Challenge.decode(o.optString("challenge")) ?: Challenge(Challenge.Type.NONE),
+                    autoMinutes = o.optInt("autoMinutes", 0).coerceAtLeast(0),
+                    autoEvery = o.optInt("autoEvery", 0).coerceAtLeast(0),
                 )
             }.getOrDefault(Config())
         }
@@ -119,21 +128,19 @@ object Breaks {
         data class Limit(val period: String, val count: Int, val until: Long) : Can()
     }
 
-    /** The breaks that count against [device]'s limits: all of them when shared */
-    fun counted(config: Config, log: List<Entry>, device: String) = if (config.shared) log else log.filter { it.device == device }
-
     /**
-     * Whether [device] can take a break at [now] (wall clock, in [zone]), with lockdown on there
-     * ([locked]) and its break, if any, running until [breakUntil].
+     * Whether a break can be taken at [now] (wall clock, in [zone]), with lockdown on ([locked]) and a
+     * break, if any, running until [breakUntil]. Breaks are shared by every device: one taken anywhere
+     * counts for all. Automatic breaks aren't in the log, so they don't count.
      */
-    fun check(config: Config, log: List<Entry>, now: Long, device: String, locked: Boolean, breakUntil: Long,
+    fun check(config: Config, log: List<Entry>, now: Long, locked: Boolean, breakUntil: Long,
               zone: ZoneId = ZoneId.systemDefault()): Can {
         if (!config.on) return Can.Off
         if (!locked) return Can.NotLocked
         if (breakUntil > now && !config.stack) return Can.OnBreak(breakUntil)
         val local = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
         config.off.firstOrNull { it.covers(local) }?.let { return Can.OffNow(epoch(it.endAfter(local), zone)) }
-        val mine = counted(config, log, device).filter { it.start <= now }
+        val mine = log.filter { it.start <= now }
         // The time between breaks runs from the end of the last one, once it's over
         if (config.cooldown > 0 && breakUntil <= now) {
             mine.maxOfOrNull { it.end }?.let { last ->
@@ -158,8 +165,33 @@ object Breaks {
         return Can.Yes
     }
 
-    /** How many breaks [device] has had today, this week */
-    fun countSince(config: Config, log: List<Entry>, device: String, since: Long) = counted(config, log, device).count { it.start >= since }
+    /** How many breaks have been taken since [since] */
+    fun countSince(log: List<Entry>, since: Long) = log.count { it.start >= since }
+
+    // --- Automatic breaks ---
+
+    /**
+     * The automatic break running at [now] in a lockdown that started at [runStart] (wall clock), as
+     * start to end, or null: one starts every [Config.autoEvery] minutes after the lockdown started and
+     * lasts [Config.autoMinutes].
+     */
+    fun autoWindow(config: Config, runStart: Long, now: Long): Pair<Long, Long>? {
+        if (!config.autoOn || runStart <= 0L || now < runStart) return null
+        val every = config.autoEvery * 60_000L
+        val n = (now - runStart) / every
+        if (n < 1) return null
+        val start = runStart + n * every
+        val end = start + config.autoMinutes * 60_000L
+        return if (now < end) start to end else null
+    }
+
+    /** When the next automatic break starts after [now], in a lockdown that started at [runStart], or null */
+    fun nextAuto(config: Config, runStart: Long, now: Long): Long? {
+        if (!config.autoOn || runStart <= 0L) return null
+        val every = config.autoEvery * 60_000L
+        val n = ((now - runStart).coerceAtLeast(0) / every) + 1
+        return runStart + n * every
+    }
 
     /** When a break taken at [now] ends: added to the running one when they stack */
     fun newEnd(config: Config, now: Long, breakUntil: Long): Long =

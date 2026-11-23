@@ -42,7 +42,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     fun loosen(action: () -> Unit) {
         val prefs = prefs
         if (Lockdown.isOpen(context, prefs)) return action()
-        Lockdown.Device.values().mapNotNull { Lockdown.timedEnd(context, prefs, it) }.maxOrNull()?.let { end ->
+        Lockdown.timedEnd(context, prefs)?.let { end ->
             return locked(context, context.getString(R.string.lockdown_locked_until, time(context, end)))
         }
         val challenge = Lockdown.challenge(prefs)
@@ -59,14 +59,14 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     }
 
     /**
-     * Ends lockdown on [devices] early: switched on and timed lockdowns end; schedules, screen time,
-     * places and stages carry on. Needs what ending early is set to need.
+     * Ends lockdown early on every device: switched on and timed lockdowns end; schedules, screen time
+     * and places carry on. Needs what ending early is set to need.
      */
-    fun endEarly(devices: Int) {
+    fun endEarly() {
         val prefs = prefs
         val end = {
-            Lockdown.turnOff(prefs, devices)
-            Lockdown.endTimed(prefs, devices)
+            Lockdown.turnOff(prefs)
+            Lockdown.endTimed(prefs)
             if (Lockdown.challenge(prefs).type == Challenge.Type.WAIT) Lockdown.cancelWait(prefs)
             app.olauncher.helper.LockdownSystem.sync(context)
             onChanged()
@@ -81,8 +81,18 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         }
     }
 
-    /** The phone's timed lockdown (and the Mac's, matched) ended early */
-    fun endTimed() = endEarly(Lockdown.startDevices(context, prefs))
+    /**
+     * Switches [device] (the Mac or the TV) on, or off through the unlock, since a switched-off device
+     * gets no lockdown
+     */
+    fun setDeviceOn(device: Lockdown.Device, on: Boolean) {
+        val change = {
+            Lockdown.setDeviceOn(context, device, on)
+            app.olauncher.helper.LockdownSystem.sync(context)
+            onChanged()
+        }
+        if (on) change() else loosen(change)
+    }
 
     private fun confirmEnd(end: () -> Unit) {
         AppDialog(context)
@@ -94,20 +104,20 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
 
     // --- Breaks ---
 
-    /** Takes a break on [device], after whatever taking one needs; says why not when it can't be taken */
-    fun takeBreak(device: Lockdown.Device = Lockdown.Device.PHONE, onStarted: () -> Unit = {}) {
+    /** Takes a break on every device, after whatever taking one needs; says why not when it can't be taken */
+    fun takeBreak(onStarted: () -> Unit = {}) {
         val prefs = prefs
         val config = Lockdown.breaks(prefs)
-        when (val can = Lockdown.canBreak(context, prefs, device)) {
+        when (val can = Lockdown.canBreak(context, prefs)) {
             Breaks.Can.Yes -> {}
             else -> return context.showToast(cantBreakText(context, can))
         }
         val start = {
             // Checked again, in case time passed while the challenge was done
-            if (Lockdown.canBreak(context, prefs, device) == Breaks.Can.Yes) {
-                Lockdown.startBreak(context, prefs, device)
+            if (Lockdown.canBreak(context, prefs) == Breaks.Can.Yes) {
+                Lockdown.startBreak(context, prefs)
                 app.olauncher.helper.LockdownSystem.sync(context)
-                context.showToast(context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, device))))
+                context.showToast(context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs))))
                 onChanged()
                 onStarted()
             }
@@ -123,9 +133,9 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         }
     }
 
-    /** Ends [device]'s break now, so lockdown blocks again */
-    fun endBreak(device: Lockdown.Device = Lockdown.Device.PHONE) {
-        Lockdown.endBreak(prefs, device)
+    /** Ends the break now, so lockdown blocks again */
+    fun endBreak() {
+        Lockdown.endBreak(prefs)
         app.olauncher.helper.LockdownSystem.sync(context)
         onChanged()
     }
@@ -487,7 +497,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             Lockdown.Reason.TIME_LIMIT, Lockdown.Reason.OPENS_LIMIT -> context.getString(R.string.lockdown_reason_limit)
             Lockdown.Reason.NOT_ALLOWED -> block.until?.let { context.getString(R.string.lockdown_reason_not_allowed_until, endName(context, it)) }
                 ?: context.getString(R.string.lockdown_reason_not_allowed)
-            Lockdown.Reason.BLOCKED, Lockdown.Reason.STAGE -> block.until?.let { context.getString(R.string.lockdown_reason_blocked_until, endName(context, it)) }
+            Lockdown.Reason.BLOCKED -> block.until?.let { context.getString(R.string.lockdown_reason_blocked_until, endName(context, it)) }
                 ?: context.getString(R.string.lockdown_reason_blocked)
         }
 
@@ -502,11 +512,11 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 Lockdown.Reason.TIME_LIMIT, Lockdown.Reason.OPENS_LIMIT -> context.getString(R.string.lockdown_resets_midnight)
                 else -> if (block.until == null) context.getString(R.string.lockdown_until_turned_off) else null
             }
+            val today = LocalDate.now().dayOfWeek
             val used = when (block.reason) {
-                Lockdown.Reason.TIME_LIMIT -> pkg?.let { context.getString(R.string.lockdown_used, Formats.duration(Limits.rule(prefs, it).minutes * 60_000L)) }
-                Lockdown.Reason.OPENS_LIMIT -> pkg?.let { val n = Limits.rule(prefs, it).opens
+                Lockdown.Reason.TIME_LIMIT -> pkg?.let { context.getString(R.string.lockdown_used, Formats.duration(Limits.rule(prefs, it).minutesOn(today) * 60_000L)) }
+                Lockdown.Reason.OPENS_LIMIT -> pkg?.let { val n = Limits.rule(prefs, it).opensOn(today)
                     context.resources.getQuantityString(R.plurals.lockdown_opens, n, n) }
-                Lockdown.Reason.STAGE -> context.getString(R.string.lockdown_screen_time_used, Formats.duration(Limits.totalToday(context)))
                 else -> null
             }
             return listOfNotNull(used, ends).joinToString(" · ")
@@ -521,9 +531,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 Lockdown.Why.SCHEDULE -> Lockdown.schedules(prefs).firstOrNull { it.covers(java.time.LocalDateTime.now()) }
                     ?.let { context.getString(R.string.lockdown_why_schedule, scheduleName(context, it)) }
                 Lockdown.Why.PLACE -> placeName(context, Social.currentPlace(context))?.let { context.getString(R.string.lockdown_why_place, it) }
-                Lockdown.Why.STAGE -> context.getString(R.string.lockdown_why_stage)
                 Lockdown.Why.SCREEN_TIME -> context.getString(R.string.lockdown_why_screen_time)
-                Lockdown.Why.OTHER_DEVICE -> context.getString(R.string.lockdown_why_matched)
                 null -> null
             }
         }
@@ -570,41 +578,16 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         fun deviceStatus(context: Context, device: Lockdown.Device): String {
             val prefs = Prefs(context)
             if (!Lockdown.isOn(context, prefs, device)) return context.getString(R.string.off)
-            if (Lockdown.onBreak(prefs, device)) return context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, device)))
+            if (Lockdown.onBreak(prefs)) return context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs)))
             return Lockdown.activeUntil(context, prefs, device)?.let { context.getString(R.string.lockdown_on_until, time(context, it)) }
                 ?: context.getString(R.string.on)
         }
 
-        /** Today's screen time against the next stage, and how far along as a percent of the last stage; null without stages */
-        fun screenTimeLine(context: Context): Pair<String, Int?>? {
-            val stages = Limits.stages(Prefs(context))
-            val last = stages.lastOrNull { it > 0 } ?: return null
-            val used = Limits.totalToday(context)
-            val next = Limits.nextStage(stages, used)
-            val text = if (next == null) context.getString(R.string.lockdown_screen_time, Formats.duration(used))
-                else context.getString(R.string.lockdown_screen_time_next, Formats.duration(used), stageShort(context, next.first),
-                    Formats.duration(next.second * 60_000L))
-            return text to (used * 100 / (last * 60_000L)).toInt().coerceIn(0, 100)
-        }
-
-        fun stageName(context: Context, stage: Int): String = context.getString(when (stage) {
-            1 -> R.string.lockdown_stage_slow
-            2 -> R.string.lockdown_stage_block
-            else -> R.string.lockdown_stage_lockdown
-        })
-
-        /** A stage's one-word name, under its mark on the bar */
-        fun stageShort(context: Context, stage: Int): String = context.getString(when (stage) {
-            1 -> R.string.lockdown_stage_slow_short
-            2 -> R.string.lockdown_stage_block_short
-            else -> R.string.lockdown_stage_lockdown_short
-        })
-
         /** The notification's title */
         fun notificationTitle(context: Context): String {
             val prefs = Prefs(context)
-            if (Lockdown.onBreak(prefs, Lockdown.Device.PHONE))
-                return context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, Lockdown.Device.PHONE)))
+            if (Lockdown.onBreak(prefs))
+                return context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs)))
             return Lockdown.activeUntil(context)?.let { context.getString(R.string.lockdown_on_until_title, time(context, it)) }
                 ?: context.getString(R.string.lockdown_on_title)
         }
@@ -646,13 +629,10 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         fun status(context: Context): String {
             val prefs = Prefs(context)
             if (!Lockdown.isOn(context, prefs)) {
-                Lockdown.deviceList(context).firstOrNull { it != Lockdown.Device.PHONE && Lockdown.isOn(context, prefs, it) }?.let {
-                    return context.getString(R.string.lockdown_device_only, deviceName(context, it.bit), deviceStatus(context, it))
-                }
                 return Lockdown.nextScheduled(prefs)?.let { context.getString(R.string.lockdown_off_next, time(context, it)) }
                     ?: context.getString(R.string.off)
             }
-            if (Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) return deviceStatus(context, Lockdown.Device.PHONE)
+            if (Lockdown.onBreak(prefs)) return deviceStatus(context, Lockdown.Device.PHONE)
             val on = Lockdown.activeUntil(context, prefs)?.let { context.getString(R.string.lockdown_on_until, time(context, it)) }
                 ?: context.getString(R.string.on)
             if (Lockdown.timedActive(context, prefs) || Lockdown.challenge(prefs).type != Challenge.Type.WAIT) return on

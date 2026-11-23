@@ -4,24 +4,54 @@ import android.content.Context
 import android.os.SystemClock
 import app.olauncher.data.Prefs
 import app.olauncher.helper.usageStats.EventLogWrapper
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.concurrent.thread
 
 /**
- * Daily limits and screen time stages: how much each app may be used a day (time and opens), and how
- * lockdown tightens as the day's screen time grows. Limits apply every day; they reset at midnight.
+ * Daily limits: how much each app may be used a day (time and opens), each set for every day of the
+ * week or day by day. They reset at midnight. A limit is strict (the app is blocked once it's reached)
+ * or gentle (a screen says it's reached, and offers one more minute or ignoring it for the day).
  *
- * The rules are kept with the settings (backed up); today's opens and warnings are kept on their own
- * (only for this phone and day). Today's usage is read from the phone's usage data now and then, off
- * the main thread, and the last reading is used for checks.
+ * The rules are kept with the settings (backed up); today's opens, warnings and pauses are kept on their
+ * own (only for this phone and day). Today's usage is read from the phone's usage data now and then,
+ * off the main thread, and the last reading is used for checks.
  */
 object Limits {
 
-    /** An app's daily limits: minutes of use and opens, 0 for none */
-    data class Rule(val minutes: Int = 0, val opens: Int = 0) {
-        val isEmpty get() = minutes <= 0 && opens <= 0
+    /**
+     * An app's daily limits: minutes of use and opens for each day of the week (Monday first), 0 for
+     * none; [gentle] when reaching one shows a notice instead of blocking.
+     */
+    data class Rule(val minutes: List<Int> = ZEROS, val opens: List<Int> = ZEROS, val gentle: Boolean = false) {
+        init {
+            require(minutes.size == 7 && opens.size == 7)
+        }
+
+        fun minutesOn(day: DayOfWeek) = minutes[day.value - 1]
+        fun opensOn(day: DayOfWeek) = opens[day.value - 1]
+
+        val isEmpty get() = minutes.all { it <= 0 } && opens.all { it <= 0 }
+        val hasMinutes get() = minutes.any { it > 0 }
+        val hasOpens get() = opens.any { it > 0 }
+
+        /** Whether every day has the same limits */
+        val sameEveryDay get() = minutes.distinct().size == 1 && opens.distinct().size == 1
+
+        fun withMinutes(day: DayOfWeek?, value: Int) = copy(minutes = setDay(minutes, day, value))
+        fun withOpens(day: DayOfWeek?, value: Int) = copy(opens = setDay(opens, day, value))
+
+        companion object {
+            /** The same limits every day */
+            fun every(minutes: Int = 0, opens: Int = 0, gentle: Boolean = false) = Rule(List(7) { minutes }, List(7) { opens }, gentle)
+
+            /** [days] with [day]'s value (every day's, when null) set to [value] */
+            private fun setDay(days: List<Int>, day: DayOfWeek?, value: Int) = days.mapIndexed { i, old -> if (day == null || i == day.value - 1) value else old }
+        }
     }
+
+    val ZEROS = List(7) { 0 }
 
     val MINUTE_CHOICES = listOf(0, 5, 15, 30, 60, 120, 180)
     val OPEN_CHOICES = listOf(0, 1, 3, 5, 10, 20)
@@ -29,20 +59,43 @@ object Limits {
     /** When the time left gets this low, it's said once */
     const val WARN_MS = 5 * 60_000L
 
-    // --- Rules, written as "package:minutes:opens" separated by ";" ---
+    private fun today() = LocalDate.now().dayOfWeek
+
+    // --- Rules, separated by ";" ---
+    // "package:minutes:opens" with the same limits every day (how they were always written), or
+    // "package:m1,…,m7:o1,…,o7" day by day from Monday; either with ":g" on the end when gentle.
 
     /** Anything unreadable, and rules with no limits, are skipped */
     fun parseRules(text: String): Map<String, Rule> = text.split(';').mapNotNull { part ->
         val bits = part.trim().split(':')
-        if (bits.size != 3 || bits[0].isBlank()) return@mapNotNull null
-        val minutes = bits[1].toIntOrNull() ?: return@mapNotNull null
-        val opens = bits[2].toIntOrNull() ?: return@mapNotNull null
-        val rule = Rule(minutes.coerceAtLeast(0), opens.coerceAtLeast(0))
+        if (bits.size !in 3..4 || bits[0].isBlank()) return@mapNotNull null
+        val minutes = days(bits[1]) ?: return@mapNotNull null
+        val opens = days(bits[2]) ?: return@mapNotNull null
+        val gentle = when (bits.getOrNull(3)) {
+            null, "s" -> false
+            "g" -> true
+            else -> return@mapNotNull null
+        }
+        val rule = Rule(minutes, opens, gentle)
         if (rule.isEmpty) null else bits[0] to rule
     }.toMap()
 
+    /** One number for every day, or seven */
+    private fun days(text: String): List<Int>? {
+        val values = text.split(',').map { it.trim().toIntOrNull()?.coerceAtLeast(0) ?: return null }
+        return when (values.size) {
+            1 -> List(7) { values[0] }
+            7 -> values
+            else -> null
+        }
+    }
+
     fun formatRules(rules: Map<String, Rule>): String =
-        rules.filterValues { !it.isEmpty }.entries.joinToString(";") { (pkg, rule) -> "$pkg:${rule.minutes}:${rule.opens}" }
+        rules.filterValues { !it.isEmpty }.entries.joinToString(";") { (pkg, rule) ->
+            val days = if (rule.sameEveryDay) "${rule.minutes[0]}:${rule.opens[0]}"
+                else rule.minutes.joinToString(",") + ":" + rule.opens.joinToString(",")
+            "$pkg:$days" + if (rule.gentle) ":g" else ""
+        }
 
     fun rules(prefs: Prefs) = parseRules(prefs.appLimits)
 
@@ -61,57 +114,56 @@ object Limits {
     /** Whether going from [old] to [new] loosens a limit: raised, or taken off */
     fun loosens(old: Int, new: Int) = old > 0 && (new <= 0 || new > old)
 
+    /** Whether going from [old] to [new] loosens an app's limits: any day's raised or taken off, or strict made gentle */
+    fun loosens(old: Rule, new: Rule) = (0 until 7).any { loosens(old.minutes[it], new.minutes[it]) || loosens(old.opens[it], new.opens[it]) } ||
+        (new.gentle && !old.gentle && !old.isEmpty)
+
     // --- Why an app is over its limit ---
 
     enum class Over { TIME, OPENS }
 
-    /** Which limit [rule] stops, after [usedMs] of use and [opens] opens today; a new open is about to count when [opening] */
-    fun over(rule: Rule, usedMs: Long, opens: Int, opening: Boolean): Over? = when {
-        rule.minutes > 0 && usedMs >= rule.minutes * 60_000L -> Over.TIME
-        rule.opens > 0 && (if (opening) opens >= rule.opens else opens > rule.opens) -> Over.OPENS
-        else -> null
-    }
-
-    /** Whether to say only a little time is left: under [WARN_MS], not yet out, and not said today */
-    fun shouldWarn(rule: Rule, usedMs: Long, warned: Boolean): Boolean {
-        if (rule.minutes <= 0 || warned) return false
-        val left = rule.minutes * 60_000L - usedMs
-        return left in 1..WARN_MS
-    }
-
-    // --- Screen time stages ---
-
-    /** 0 for none, else the stage today's [usedMs] has reached, with [stages] in minutes (0 is off) */
-    fun stage(stages: List<Int>, usedMs: Long): Int {
-        var reached = 0
-        stages.forEachIndexed { i, minutes -> if (minutes > 0 && usedMs >= minutes * 60_000L) reached = i + 1 }
-        return reached
-    }
-
-    /** The next stage's number and minutes after [usedMs], or null */
-    fun nextStage(stages: List<Int>, usedMs: Long): Pair<Int, Int>? = stages.withIndex()
-        .firstOrNull { (_, minutes) -> minutes > 0 && usedMs < minutes * 60_000L }?.let { it.index + 1 to it.value }
-
-    /** Whether [minutes] can be stage [index]'s time: after every earlier stage that's set and before every later one */
-    fun fitsStage(stages: List<Int>, index: Int, minutes: Int): Boolean {
-        if (minutes <= 0) return true
-        return stages.withIndex().all { (i, other) ->
-            other <= 0 || i == index || (i < index && other < minutes) || (i > index && other > minutes)
+    /**
+     * Which limit [rule] stops on [day], after [usedMs] of use and [opens] opens today; a new open is
+     * about to count when [opening]
+     */
+    fun over(rule: Rule, usedMs: Long, opens: Int, opening: Boolean, day: DayOfWeek = today()): Over? {
+        val minutes = rule.minutesOn(day)
+        val maxOpens = rule.opensOn(day)
+        return when {
+            minutes > 0 && usedMs >= minutes * 60_000L -> Over.TIME
+            maxOpens > 0 && (if (opening) opens >= maxOpens else opens > maxOpens) -> Over.OPENS
+            else -> null
         }
     }
 
-    fun parseStages(text: String): List<Int> = text.split(',').map { it.trim().toIntOrNull()?.coerceAtLeast(0) ?: 0 }
-        .let { (it + List(STAGES) { 0 }).take(STAGES) }
+    /** Whether to say only a little time is left on [day]: under [WARN_MS], not yet out, and not said today */
+    fun shouldWarn(rule: Rule, usedMs: Long, warned: Boolean, day: DayOfWeek = today()): Boolean {
+        val minutes = rule.minutesOn(day)
+        if (minutes <= 0 || warned) return false
+        val left = minutes * 60_000L - usedMs
+        return left in 1..WARN_MS
+    }
 
-    fun formatStages(stages: List<Int>) = stages.joinToString(",")
+    // --- Gentle limits ---
 
-    const val STAGES = 3
-    val STAGE_DEFAULTS = listOf(120, 180, 240)
-    val STAGE_CHOICES = listOf(0, 30, 60, 90, 120, 150, 180, 240, 300, 360, 480)
+    /** How long "One more minute" lets a gentle limit's app be used */
+    const val ONE_MORE_MS = 60_000L
 
-    fun stages(prefs: Prefs) = parseStages(prefs.lockdownStages)
+    /** Whether a gentle limit that's been reached lets its app be used at [now]: ignored for the day, or in a minute more until [moreUntil] */
+    fun gentleAllows(ignored: Boolean, moreUntil: Long, now: Long) = ignored || moreUntil > now
 
-    fun stageToday(context: Context, prefs: Prefs = Prefs(context)) = stage(stages(prefs), totalToday(context))
+    /** Whether [pkg]'s gentle limit lets it be used now */
+    fun gentleAllowed(context: Context, pkg: String): Boolean {
+        val today = today(context)
+        return gentleAllows(today.getBoolean("ignored:$pkg", false), today.getLong("more:$pkg", 0L), System.currentTimeMillis())
+    }
+
+    /** "One more minute": [pkg] can be used for a minute before the notice comes back */
+    fun oneMoreMinute(context: Context, pkg: String) =
+        today(context).edit().putLong("more:$pkg", System.currentTimeMillis() + ONE_MORE_MS).apply()
+
+    /** "Ignore for today": [pkg]'s gentle limit says nothing more until midnight */
+    fun ignoreToday(context: Context, pkg: String) = today(context).edit().putBoolean("ignored:$pkg", true).apply()
 
     // --- Websites ---
 
@@ -196,6 +248,14 @@ object Limits {
     fun warnedToday(context: Context, pkg: String) = today(context).getBoolean("warned:$pkg", false)
 
     fun setWarned(context: Context, pkg: String) = today(context).edit().putBoolean("warned:$pkg", true).apply()
+
+    /** How many times [pkg]'s pause has been shown today */
+    fun pausesToday(context: Context, pkg: String) = today(context).getInt("pauses:$pkg", 0)
+
+    fun countPause(context: Context, pkg: String) {
+        val prefs = today(context)
+        prefs.edit().putInt("pauses:$pkg", prefs.getInt("pauses:$pkg", 0) + 1).apply()
+    }
 
     // --- Today's usage ---
 

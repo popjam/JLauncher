@@ -452,7 +452,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             setOnClickListener { onLockdownWidgetTap() }
             // Held without dragging: a break, when breaks are on and lockdown is; otherwise the Lockdown page
             setOnLongClickListener {
-                if (Lockdown.breaks(prefs).on && Lockdown.isOn(requireContext(), prefs) && !Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) {
+                if (Lockdown.breaks(prefs).on && Lockdown.isOn(requireContext(), prefs) && !Lockdown.onBreak(prefs)) {
                     buzz(requireContext())
                     lockdownGate.takeBreak { populateLockdownWidget() }
                 } else runCatching { findNavController().navigate(R.id.lockdownFragment) }
@@ -486,10 +486,10 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         lockdownWidget.isVisible = prefs.lockdownHomeWidget
         if (!prefs.lockdownHomeWidget) return
         val on = Lockdown.isOn(context, prefs)
-        val onBreak = on && Lockdown.onBreak(prefs, Lockdown.Device.PHONE)
+        val onBreak = on && Lockdown.onBreak(prefs)
         lockdownWidgetIcon.background = StatIcons.drawable(if (onBreak) StatIcons.UNLOCK else StatIcons.LOCK, LOCKDOWN_BLUE, 24.dpToPx())
         lockdownWidgetText.text = when {
-            onBreak -> LockdownGate.clockText(Lockdown.breakUntil(prefs, Lockdown.Device.PHONE) - System.currentTimeMillis())
+            onBreak -> LockdownGate.clockText(Lockdown.breakUntil(prefs) - System.currentTimeMillis())
             !on -> "+" + widgetDuration(prefs.lockdownWidgetMinutes * 60_000L)
             else -> Lockdown.activeUntil(context, prefs)?.let { widgetDuration(it - System.currentTimeMillis()) }
                 ?: getString(R.string.on)
@@ -505,7 +505,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     /** A tap: during a break, the break ends at once; otherwise the set amount more of timed lockdown, straight away */
     private fun onLockdownWidgetTap() {
         val context = requireContext()
-        if (Lockdown.isOn(context, prefs) && Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) {
+        if (Lockdown.isOn(context, prefs) && Lockdown.onBreak(prefs)) {
             buzz(context)
             lockdownGate.endBreak()
             return populateLockdownWidget()
@@ -516,7 +516,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     /** The set amount more of timed lockdown, on the devices Start uses */
     private fun addLockdownTime() {
         val context = requireContext()
-        Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs, Lockdown.startDevices(context, prefs))
+        Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs)
         buzz(context)
         Lockdown.timedEnd(context, prefs)?.let { context.showToast(getString(R.string.lockdown_locked_until, LockdownGate.time(context, it))) }
         app.olauncher.helper.LockdownSystem.sync(context)
@@ -1061,9 +1061,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         isShortcut: Boolean,
         shortcutId: String?,
     ): Boolean {
-        // An app that can't be opened now (lockdown, a limit or a stage) is faded with a lock by its name;
+        // An app that can't be opened now (lockdown or a strict limit) is faded with a lock by its name;
         // tapping it still shows why
-        val locked = packageName.isNotEmpty() && !isShortcut && Lockdown.blockFor(requireContext(), packageName, opening = false, prefs) != null
+        val locked = packageName.isNotEmpty() && !isShortcut && Lockdown.blockFor(requireContext(), packageName, opening = false, prefs)?.gentle == false
         textView.alpha = if (locked) 0.4f else 1f
         if (locked) {
             val size = (textView.textSize * 0.8f).toInt()

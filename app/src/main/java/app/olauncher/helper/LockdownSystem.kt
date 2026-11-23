@@ -36,6 +36,7 @@ object LockdownSystem {
     fun sync(context: Context) {
         val prefs = Prefs(context)
         runCatching { Lockdown.checkTriggers(context, prefs) }
+        runCatching { Lockdown.trackRun(context, prefs) }
         runCatching { LockdownLog.tick(context, prefs) }
         runCatching { syncGrayscale(context, prefs) }
         runCatching { syncNotification(context, prefs) }
@@ -50,10 +51,10 @@ object LockdownSystem {
 
     fun grantCommand(context: Context) = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
 
-    /** Grey while lockdown is on (when chosen) and from screen time stage 2; only turns off what it turned on */
+    /** Grey while lockdown is on (when chosen); only turns off what it turned on */
     private fun syncGrayscale(context: Context, prefs: Prefs) {
         if (!canGrayscale(context)) return
-        val want = (prefs.lockdownGrayscale && Lockdown.isActive(context, prefs)) || Limits.stageToday(context, prefs) >= 2
+        val want = prefs.lockdownGrayscale && Lockdown.isActive(context, prefs)
         val resolver = context.contentResolver
         val enabled = Settings.Secure.getInt(resolver, DALTONIZER_ENABLED, 0) == 1
         val on = enabled && Settings.Secure.getInt(resolver, DALTONIZER, -1) == MONOCHROME
@@ -103,10 +104,6 @@ object LockdownSystem {
             .setContentIntent(open)
             .addAction(0, context.getString(R.string.lockdown_add_hour), addHour)
             .addAction(0, context.getString(R.string.lockdown_open), open)
-        LockdownGate.screenTimeLine(context)?.let { (text, progress) ->
-            builder.setContentText(text)
-            if (progress != null) builder.setProgress(100, progress, false)
-        }
         manager.notify(NOTIFICATION_ID, builder.build())
     }
 
@@ -124,7 +121,7 @@ class LockdownReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != LockdownSystem.ACTION_ADD_HOUR) return
         val prefs = Prefs(context)
-        Lockdown.addTime(context, 60 * 60_000L, prefs, Lockdown.startDevices(context, prefs))
+        Lockdown.addTime(context, 60 * 60_000L, prefs)
         LockdownSystem.sync(context)
     }
 }

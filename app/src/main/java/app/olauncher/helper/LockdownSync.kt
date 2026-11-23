@@ -13,7 +13,9 @@ import java.time.ZoneId
 import kotlin.concurrent.thread
 
 /**
- * Lockdown shared with the Mac, when it's turned on. Off by default.
+ * Lockdown shared with the Mac and the TV, each switched on or off on its own; the connection stays
+ * while either is on. Off by default. Every switched-on device takes the one lockdown; a switched-off
+ * one is sent a lockdown that's off.
  *
  * Both sides use a Firebase Realtime Database through its plain web API, under a long random key
  * that only this phone and the paired Mac know:
@@ -39,23 +41,60 @@ object LockdownSync {
 
     private fun store(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun isOn(context: Context) = store(context).getBoolean("on", false) && url(context).isNotEmpty() && key(context).isNotEmpty()
+    /** Whether the connection is on: the database is set and the Mac or the TV is switched on */
+    fun isOn(context: Context) = deviceOn(context, Lockdown.Device.MAC) || deviceOn(context, Lockdown.Device.TV)
+
+    /** Whether the database and pairing key are set */
+    fun linked(context: Context) = url(context).isNotEmpty() && key(context).isNotEmpty()
 
     fun url(context: Context) = store(context).getString("url", "").orEmpty()
 
     fun key(context: Context) = store(context).getString("key", "").orEmpty()
 
-    /** Turns sharing on with the database at [url], making a new pairing key the first time */
-    fun turnOn(context: Context, url: String) {
-        val clean = url.trim().trimEnd('/')
-        val key = key(context).ifEmpty { newKey() }
-        store(context).edit().putBoolean("on", true).putString("url", clean).putString("key", key).remove("sent").remove("sentApps").apply()
-        push(context)
-        pull(context, force = true)
+    private fun deviceKey(device: Lockdown.Device) = if (device == Lockdown.Device.TV) "tvOn" else "macOn"
+
+    /**
+     * Whether [device] (the Mac or the TV; the phone always is) is switched on. Before each had its own
+     * switch, one switch was the whole connection: the Mac followed it, and the TV did once its PC had
+     * sent its apps.
+     */
+    fun deviceOn(context: Context, device: Lockdown.Device): Boolean {
+        if (device == Lockdown.Device.PHONE) return true
+        if (!linked(context)) return false
+        val s = store(context)
+        val old = s.getBoolean("on", false)
+        return s.getBoolean(deviceKey(device), if (device == Lockdown.Device.TV) old && tvInstalled(context).isNotEmpty() else old)
     }
 
+    /**
+     * Switches [device] on or off. The connection stays while either is on; a device switched off is
+     * sent a lockdown that's off. Switching off loosens, so callers go through the unlock first.
+     */
+    fun setDeviceOn(context: Context, device: Lockdown.Device, on: Boolean) {
+        if (device == Lockdown.Device.PHONE) return
+        val s = store(context)
+        // Both written, so the other device keeps what it had before each had its own switch
+        val mac = deviceOn(context, Lockdown.Device.MAC)
+        val tv = deviceOn(context, Lockdown.Device.TV)
+        s.edit().putBoolean("macOn", mac).putBoolean("tvOn", tv).putBoolean(deviceKey(device), on)
+            .putBoolean("on", if (device == Lockdown.Device.MAC) on || tv else on || mac).remove("sent").apply()
+        // The last send says the switched-off device is off, even when that ends the connection
+        push(context, final = true)
+        if (on) pull(context, force = true)
+    }
+
+    /** Sets the database at [url], making a new pairing key the first time, and switches [device] on */
+    fun turnOn(context: Context, url: String, device: Lockdown.Device = Lockdown.Device.MAC) {
+        val clean = url.trim().trimEnd('/')
+        val key = key(context).ifEmpty { newKey() }
+        store(context).edit().putString("url", clean).putString("key", key).remove("sent").remove("sentApps").apply()
+        setDeviceOn(context, device, true)
+    }
+
+    /** Switches the Mac and the TV off */
     fun turnOff(context: Context) {
-        store(context).edit().putBoolean("on", false).remove("sent").apply()
+        setDeviceOn(context, Lockdown.Device.MAC, false)
+        setDeviceOn(context, Lockdown.Device.TV, false)
     }
 
     private fun newKey(): String {
@@ -79,6 +118,19 @@ object LockdownSync {
     /** When the Mac was last heard from (its commands or apps), or 0 */
     fun macSeen(context: Context) = store(context).getLong("macSeen", 0L)
 
+    /** When the TV's PC last sent its apps, or 0 */
+    fun tvSeen(context: Context) = store(context).getLong("tvSeen", 0L)
+
+    /**
+     * When [device] last checked in (wall clock): through the database, or its screen time file, the
+     * later; null when neither has been seen
+     */
+    fun lastSeen(context: Context, device: Lockdown.Device): Long? = when (device) {
+        Lockdown.Device.PHONE -> System.currentTimeMillis()
+        Lockdown.Device.MAC -> maxOf(macSeen(context), DeviceTime.updated(context, DeviceTime.Device.MAC))
+        Lockdown.Device.TV -> maxOf(tvSeen(context), DeviceTime.updated(context, DeviceTime.Device.TV))
+    }.takeIf { it > 0L }
+
     // --- What it costs ---
 
     /** Requests made today, and when the last one was (wall clock), for the Mac row */
@@ -98,68 +150,80 @@ object LockdownSync {
 
     // --- Phone to Mac ---
 
-    /** A device's windows of lockdown from today to a week on, as [[start, end]] on the wall clock */
-    private fun macWindows(plan: Lockdown.Plan, zone: ZoneId): JSONArray {
-        val today = LocalDate.now()
+    /** A plan's windows of lockdown from [today] to a week on, as [[start, end]] on the wall clock, the ones ended over a day before [now] left out */
+    fun windowsJson(plan: Lockdown.Plan, zone: ZoneId, today: LocalDate, now: Long): JSONArray {
         val windows = plan.schedules.flatMap { it.windows(today, today.plusDays(7)) } + plan.windows
         return JSONArray().apply {
             windows.map { Lockdown.epoch(it.start, zone) to Lockdown.epoch(it.end, zone) }.distinct().sortedBy { it.first }
-                .filter { it.second > System.currentTimeMillis() - 24 * 60 * 60_000L }
+                .filter { it.second > now - 24 * 60 * 60_000L }
                 .forEach { (s, e) -> put(JSONArray().put(s).put(e)) }
         }
     }
 
+    /**
+     * The lockdown a device ([plan], [breakUntil]) is sent, in the form the Mac app and the TV's PC read:
+     * on until turned off, a timer, its windows and its break. A switched-off device's plan is empty, so
+     * this says it's off.
+     */
+    fun deviceJson(plan: Lockdown.Plan, breakUntil: Long, zone: ZoneId, today: LocalDate, now: Long): JSONObject = JSONObject()
+        .put("manual", plan.manual)
+        .put("timedUntil", plan.timedEnd?.let { Lockdown.epoch(it, zone) } ?: 0L)
+        .put("windows", windowsJson(plan, zone, today, now))
+        .put("breakUntil", breakUntil)
+
     /** What this phone says now. The send is skipped when it's the same as last time. */
     fun phoneState(context: Context, prefs: Prefs = Prefs(context)): JSONObject {
         val zone = ZoneId.systemDefault()
-        val items = prefs.lockdownItems.let { if (prefs.lockdownMatchDevices) BlockItems.matched(it) else it }
-        val macPlan = Lockdown.plan(context, prefs, Lockdown.Device.MAC)
+        val now = System.currentTimeMillis()
+        val today = LocalDate.now()
+        val time = java.time.LocalDateTime.now()
+        val macOn = deviceOn(context, Lockdown.Device.MAC)
+        val tvOn = deviceOn(context, Lockdown.Device.TV)
+        // One list: each device blocks what it can
+        val items = BlockItems.effective(prefs.lockdownItems, macInstalled(context), tvInstalled(context))
+        val shared = Lockdown.sharedPlan(context, prefs)
+        val macPlan = Lockdown.planFor(shared, macOn)
+        val tvPlan = Lockdown.planFor(shared, tvOn)
         // Phone apps blocked here take their sites to the Mac too
         val phoneAppSites = if (prefs.lockdownAppMode == Lockdown.BLOCK) Lockdown.sitesOf(BlockItems.phoneApps(items)) else emptySet()
-        val sites = (BlockItems.macSites(items) + if (prefs.lockdownMatchDevices) phoneAppSites else emptySet()).sorted()
-        val phoneOn = Lockdown.isOn(context, prefs, Lockdown.Device.PHONE)
+        val sites = (BlockItems.macSites(items) + phoneAppSites).sorted()
+        val phoneOn = shared.on(time)
         val challenge = Lockdown.challenge(prefs)
-        val macOn = macPlan.on(java.time.LocalDateTime.now())
-        val macUntil = Lockdown.activeUntil(context, prefs, Lockdown.Device.MAC)
-        val tvPlan = Lockdown.plan(context, prefs, Lockdown.Device.TV)
-        val tvOn = tvPlan.on(java.time.LocalDateTime.now())
+        val breakUntil = Lockdown.breakUntil(prefs)
+        val macActive = macPlan.on(time)
+        val macUntil = macPlan.until(time)?.let { Lockdown.epoch(it, zone) }
+        val tvActive = tvPlan.on(time)
         return JSONObject()
             .put("v", 2)
-            // The Mac's lockdown, worked out here
-            .put("mac", JSONObject()
-                .put("manual", macPlan.manual)
-                .put("timedUntil", macPlan.timedEnd?.let { Lockdown.epoch(it, zone) } ?: 0L)
-                .put("windows", macWindows(macPlan, zone))
-                .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.MAC)))
+            // The Mac's lockdown, worked out here: the one lockdown, or off while it's switched off
+            .put("mac", deviceJson(macPlan, if (macOn) breakUntil else 0L, zone, today, now))
             // The phone's, to show on the Mac
             .put("phone", JSONObject()
                 .put("on", phoneOn)
                 .put("until", if (phoneOn) Lockdown.activeUntil(context, prefs) ?: 0L else 0L)
-                // When the phone's timed lockdown ends, or 0: while any device's timer runs, nothing is unblocked one at a time
+                // When the timed lockdown ends, or 0: while it runs, nothing is unblocked one at a time
                 .put("timedUntil", Lockdown.timedEnd(context, prefs) ?: 0L)
-                .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.PHONE)))
-            .put("matched", prefs.lockdownMatchDevices)
-            // The TV's own lockdown, worked out here like the Mac's; "blocking" is now, for a TV tool from before
-            .put("tv", JSONObject()
-                .put("blocking", tvOn && !Lockdown.onBreak(prefs, Lockdown.Device.TV))
-                .put("manual", tvPlan.manual)
-                .put("timedUntil", tvPlan.timedEnd?.let { Lockdown.epoch(it, zone) } ?: 0L)
-                .put("windows", macWindows(tvPlan, zone))
-                .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.TV))
-                .put("until", if (tvOn) Lockdown.activeUntil(context, prefs, Lockdown.Device.TV) ?: 0L else 0L)
-                .put("apps", JSONArray(BlockItems.tvApps(items).sorted())))
+                .put("breakUntil", breakUntil))
+            // Always: every device blocks everything on the list it can
+            .put("matched", true)
+            // The TV's lockdown, worked out here like the Mac's; "blocking" is now, for a TV tool from before
+            .put("tv", deviceJson(tvPlan, if (tvOn) breakUntil else 0L, zone, today, now)
+                .put("blocking", tvActive && breakUntil <= now)
+                .put("until", if (tvActive) tvPlan.until(time)?.let { Lockdown.epoch(it, zone) } ?: 0L else 0L)
+                .put("apps", JSONArray(if (tvOn) BlockItems.tvApps(items).sorted() else emptyList())))
             .put("sites", JSONArray(sites))
             .put("macApps", JSONArray(BlockItems.macApps(items).sorted()))
             .put("challenge", challenge.encode())
             .put("phrase", prefs.lockdownPhrase)
             .put("passwordHash", prefs.lockdownPasswordHash)
-            .put("breaks", prefs.lockdownBreaks)
-            .put("breakLog", Breaks.encodeLog(Breaks.trim(Lockdown.breakLog(prefs), System.currentTimeMillis())))
+            // Written again, so breaks always say they're shared
+            .put("breaks", Lockdown.breaks(prefs).encode())
+            .put("breakLog", Breaks.encodeLog(Breaks.trim(Lockdown.breakLog(prefs), now)))
             // The Mac requests done here, so the Mac knows when to stop acting on its own
             .put("applied", JSONArray(applied(context)))
             // For a Mac app from before: its own lockdown as one on-or-timed state
             .put("manualOn", macPlan.manual)
-            .put("timedUntil", if (macOn && !macPlan.manual) macUntil ?: 0L else 0L)
+            .put("timedUntil", if (macActive && !macPlan.manual) macUntil ?: 0L else 0L)
             .put("schedules", "")
             .put("phoneOnly", false)
             .put("unlock", when (challenge.type) {
@@ -182,9 +246,12 @@ object LockdownSync {
         return JSONArray().apply { apps.forEach { (p, n) -> put(JSONObject().put("p", p).put("n", n)) } }
     }
 
-    /** Sends this phone's state if it's changed since the last send, and any changes to the shared list */
-    fun push(context: Context) {
-        if (!isOn(context)) return
+    /**
+     * Sends this phone's state if it's changed since the last send, and any changes to the shared list.
+     * [final]: sent even when the connection has just been switched off, so the devices hear it's off.
+     */
+    fun push(context: Context, final: Boolean = false) {
+        if (!isOn(context) && !(final && linked(context))) return
         val prefs = Prefs(context)
         val state = runCatching { phoneState(context, prefs) }.getOrNull() ?: return
         val text = state.toString()
@@ -270,8 +337,11 @@ object LockdownSync {
             for (i in 0 until list.length()) list.optJSONObject(i)?.let { o.put(it.optString("b"), it.optString("n")) }
             s.edit().putString("macInstalled", o.toString()).apply()
         }
-        // The TV's apps
-        root.optJSONObject("tv")?.optJSONArray("installed")?.let { s.edit().putString("tvInstalled", it.toString()).apply() }
+        // The TV's apps, and when its PC sent them
+        root.optJSONObject("tv")?.let { tv ->
+            tv.optJSONArray("installed")?.let { s.edit().putString("tvInstalled", it.toString()).apply() }
+            tv.optLong("seen").takeIf { it > 0L }?.let { s.edit().putLong("tvSeen", it).apply() }
+        }
         // The shared list: taken together with this phone's copy
         val remote = root.optJSONObject("items")?.let { BlockItems.decode(it.toString()) }.orEmpty()
         var local = prefs.lockdownItems
@@ -280,13 +350,14 @@ object LockdownSync {
             val names = macInstalled(context)
             for (i in 0 until apps.length()) {
                 val bundle = apps.optString(i).ifEmpty { null } ?: continue
-                if (local.values.none { it.bundle == bundle }) local = BlockItems.set(local, BlockItems.Kind.APP, names[bundle] ?: bundle, phone = null, mac = true, now = 1, bundle = bundle)
+                if (local.values.none { it.bundle == bundle }) local = BlockItems.block(local, BlockItems.Kind.APP, names[bundle] ?: bundle, true, now = 1, bundle = bundle)
             }
         }
         val merged = BlockItems.mergeAll(local, remote)
         if (merged != prefs.lockdownItems) prefs.lockdownItems = merged
         s.edit().putString("remoteItems", BlockItems.encode(remote)).apply()
-        // Its requests, in order, each once
+        // Its requests, in order, each once; a switched-off Mac's are dropped
+        val macOn = deviceOn(context, Lockdown.Device.MAC)
         val commands = mac?.optJSONObject("commands")
         val done = applied(context).toMutableList()
         val toRemove = JSONObject()
@@ -294,7 +365,7 @@ object LockdownSync {
             val command = commands.optJSONObject(pushId) ?: return@forEach
             val id = command.optString("id").ifEmpty { pushId }
             if (id !in done) {
-                runCommand(context, prefs, command)
+                if (macOn) runCommand(context, prefs, command)
                 done += id
             }
             toRemove.put(pushId, JSONObject.NULL)
@@ -304,7 +375,7 @@ object LockdownSync {
             val id = command.optString("id")
             if (id.isNotEmpty() && id != s.getString("command", null)) {
                 s.edit().putString("command", id).apply()
-                runCommand(context, prefs, command.put("devices", Lockdown.BOTH))
+                if (macOn) runCommand(context, prefs, command)
             }
         }
         s.edit().putString("applied", JSONArray(done.takeLast(50)).toString()).apply()
@@ -315,26 +386,28 @@ object LockdownSync {
         LockdownSystem.sync(context)
     }
 
-    /** Does one thing the Mac asked; old requests (the phone was away a day) aren't acted on */
+    /**
+     * Does one thing the Mac asked, on the one lockdown: whatever devices it names, it acts on every
+     * switched-on device. Old requests (the phone was away a day) aren't acted on.
+     */
     private fun runCommand(context: Context, prefs: Prefs, command: JSONObject) {
         val at = command.optLong("at")
         if (System.currentTimeMillis() - at > 24 * 60 * 60_000L) return
-        val devices = command.optInt("devices", Lockdown.Device.MAC.bit).coerceIn(1, Lockdown.ALL)
         when (command.optString("type")) {
             "start" -> {
                 val until = command.optLong("until")
-                if (until <= 0L) Lockdown.turnOn(prefs, devices)
-                else Lockdown.lockForTotal(context, until - System.currentTimeMillis(), prefs, devices)
+                if (until <= 0L) Lockdown.turnOn(prefs)
+                else Lockdown.lockForTotal(context, until - System.currentTimeMillis(), prefs)
             }
-            "add" -> Lockdown.addTime(context, command.optLong("ms"), prefs, devices)
+            "add" -> Lockdown.addTime(context, command.optLong("ms"), prefs)
             // The Mac checked what ending early needs before asking
             "end" -> {
-                Lockdown.turnOff(prefs, devices)
-                Lockdown.endTimed(prefs, devices)
+                Lockdown.turnOff(prefs)
+                Lockdown.endTimed(prefs)
             }
             "break" -> if (Lockdown.breakLog(prefs).none { it.id == command.optString("id") })
                 Lockdown.startBreak(context, prefs, Lockdown.Device.MAC, command.optString("id"), at)
-            "endBreak" -> Lockdown.endBreak(prefs, Lockdown.Device.MAC)
+            "endBreak" -> Lockdown.endBreak(prefs)
         }
     }
 

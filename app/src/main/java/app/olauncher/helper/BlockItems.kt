@@ -3,14 +3,15 @@ package app.olauncher.helper
 import org.json.JSONObject
 
 /**
- * What lockdown blocks on each device: apps and websites, each blocked on the phone, the Mac, both or
- * neither, and apps on the TV too. The list is shared with the Mac and either side can change it; the
- * TV (through the PC) only reads it.
+ * What lockdown blocks: one list of apps and websites for every device, each device blocking what it
+ * can (the TV has apps only). The list is shared with the Mac and either side can change it; the TV
+ * (through the PC) only reads it.
  *
  * An app is known by its name, so the same app on both (Discord on the phone and on the Mac) is one
- * item with the phone's package and the Mac's bundle id. Each device's switch keeps the time it was
- * last changed, and when two copies of the list meet, each switch takes the later change. Items are
- * never deleted; one off on both doesn't show.
+ * item with the phone's package and the Mac's bundle id. The stored item still has a switch for each
+ * device (the Mac app's format): an item on for any of them is blocked on all ([matched]). Each switch
+ * keeps the time it was last changed, and when two copies of the list meet, each switch takes the later
+ * change. Items are never deleted; one off everywhere doesn't show.
  */
 object BlockItems {
 
@@ -126,12 +127,36 @@ object BlockItems {
     fun tvApps(items: Map<String, Item>) = items.values.filter { it.kind == Kind.APP && it.tv && it.tvName != null }.mapNotNull { it.tvName }.toSet()
 
     /**
-     * With devices matched, whatever is blocked on one is blocked on the other where it can be: sites
-     * on both, and apps on both that are on both.
+     * [items] with [name] blocked or not ([on]) everywhere at [now]: one list for every device, each
+     * blocking it where it can. An app can be given its package, bundle id or TV name at the same time.
+     */
+    fun block(items: Map<String, Item>, kind: Kind, name: String, on: Boolean, now: Long,
+              pkg: String? = null, bundle: String? = null, tvName: String? = null): Map<String, Item> =
+        set(items, kind, name, phone = on, mac = on, now = now, pkg = pkg, bundle = bundle, tv = on, tvName = tvName)
+
+    /** Whether [item] is blocked: switched on for any device (the Mac app still keeps a switch for each) */
+    fun blocked(item: Item) = item.phone || item.mac || item.tv
+
+    /**
+     * What each device blocks: anything blocked anywhere is blocked on every device where it can be:
+     * sites on the phone and the Mac, and apps on each device they're on (the TV has apps only).
      */
     fun matched(items: Map<String, Item>): Map<String, Item> = items.mapValues { (_, it) ->
-        val on = it.phone || it.mac || it.tv
+        val on = blocked(it)
         it.copy(phone = on && it.onPhone, mac = on && it.onMac, tv = on && it.onTv)
+    }
+
+    /**
+     * [items] with apps given their Mac bundle id and TV name when the Mac ([macApps], bundle id to name)
+     * or the TV ([tvApps], names) has an app by the same name, then [matched]: what each device blocks.
+     */
+    fun effective(items: Map<String, Item>, macApps: Map<String, String>, tvApps: Collection<String>): Map<String, Item> {
+        val bundles = macApps.entries.associate { (bundle, name) -> key(name) to bundle }
+        val tv = tvApps.associateBy { key(it) }
+        return matched(items.mapValues { (_, it) ->
+            if (it.kind != Kind.APP) it
+            else it.copy(bundle = it.bundle ?: bundles[key(it.name)], tvName = it.tvName ?: tv[key(it.name)])
+        })
     }
 
     /** The items whose copy in [remote] isn't the same as in [local], to send */

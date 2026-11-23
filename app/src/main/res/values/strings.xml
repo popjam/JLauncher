@@ -1245,15 +1245,10 @@
     <string name="lockdown_apps">Apps</string>
     <string name="lockdown_unlock">Unlock</string>
     <string name="lockdown_today">Today</string>
-    <string name="lockdown_stage_now">Stage %1$d · %2$s</string>
     <string name="lockdown_why_manual">Turned on</string>
     <string name="lockdown_why_timer">Timer</string>
     <string name="lockdown_why_schedule">Schedule · %1$s</string>
     <string name="lockdown_why_place">At %1$s</string>
-    <string name="lockdown_why_stage">Screen time stage 3</string>
-    <string name="lockdown_screen_time">Screen time %1$s</string>
-    <string name="lockdown_screen_time_next">Screen time %1$s · %2$s at %3$s</string>
-    <string name="lockdown_screen_time_used">%1$s of screen time</string>
     <string name="lockdown_keep_on">Keep lockdown on?</string>
     <string name="lockdown_keep_on_after">Keep lockdown on after %1$s?</string>
     <string name="lockdown_keep_on_message">It stays on until you turn it off.</string>
@@ -1268,14 +1263,6 @@
     <string name="lockdown_only_allow">Only allow these</string>
     <string name="lockdown_allowed_apps">Allowed apps</string>
     <string name="lockdown_essentials">Essentials</string>
-    <string name="lockdown_stages">Screen time stages</string>
-    <string name="lockdown_stage_row">%1$d · %2$s</string>
-    <string name="lockdown_stage_slow">Slow down</string>
-    <string name="lockdown_stage_block">Block + grey</string>
-    <string name="lockdown_stage_lockdown">Lockdown</string>
-    <string name="lockdown_stage_slow_short">Slow</string>
-    <string name="lockdown_stage_block_short">Block</string>
-    <string name="lockdown_stage_lockdown_short">Lockdown</string>
     <string name="lockdown_lock_system">System settings</string>
     <string name="lockdown_grayscale">Grayscale</string>
     <string name="lockdown_needs_setup">Needs setup</string>
@@ -1287,12 +1274,11 @@
     <string name="lockdown_not_a_site">Not a website</string>
     <string name="lockdown_setup">Set up</string>
     <string name="lockdown_mac">Mac</string>
-    <string name="lockdown_mac_value">On · %1$d today</string>
     <string name="lockdown_mac_url">Database address</string>
     <string name="lockdown_mac_code">Pairing code</string>
     <string name="lockdown_mac_bad_url">Starts with https://</string>
     <string name="copy">Copy</string>
-    <string name="info_lockdown_mac">Shares lockdown with the paired Mac: each device\'s lockdown, what each blocks, breaks and what ending early needs. The phone sends only when something changes and reads the Mac\'s side only when it\'s unlocked or the home screen shows, at most once a minute. The number is today\'s requests.</string>
+    <string name="info_lockdown_mac">Puts the paired Mac in the same lockdown as the phone: it blocks the apps and sites on the list that it has, and shares breaks and what ending early needs. The phone sends only when something changes and reads the Mac\'s side only when it\'s in use, at most once a minute. Switching it off counts as loosening.</string>
     <string name="lockdown_start">Start</string>
     <string name="lockdown_start_title">Start lockdown</string>
     <string name="lockdown_until_off">Until I turn it off</string>
@@ -1325,7 +1311,7 @@
     <string name="lockdown_all_on">All on</string>
     <string name="lockdown_n_off">%1$d off</string>
     <string name="lockdown_manual_only">Only when turned on</string>
-    <string name="info_usage_access">Lets limits and screen time stages see how long apps are used.</string>
+    <string name="info_usage_access">Lets limits and Lock after see how long apps are used.</string>
     <string name="lockdown_blocked_count_title">Blocked · %1$d</string>
     <string name="lockdown_allowed_count_title">Allowed · %1$d</string>
     <string name="lockdown_essentials_count_title">Essentials · %1$d</string>
@@ -1364,8 +1350,7 @@
     <string name="info_lockdown_during">Block a list of apps during lockdown, or allow only a list and block the rest.</string>
     <string name="info_allowed_apps">With \"Only allow these\", the only apps that work during lockdown, besides essentials.</string>
     <string name="info_app_limits">Each app\'s daily time, opens per day, pause and use for a set time. Limits apply every day.</string>
-    <string name="info_lockdown_stages">Lockdown gets stricter as today\'s screen time grows: blocked apps pause, then are blocked, then everything but essentials.</string>
-    <string name="info_lockdown_essentials">Apps that still work at stage 3 and with the allowlist. The phone app always does.</string>
+    <string name="info_lockdown_essentials">Apps that still work with the allowlist. The phone app always does.</string>
     <string name="info_lock_app_list">Hides the app list while lockdown is on.</string>
     <string name="info_lock_app_changes">Locks App info and Uninstall when holding a home app, and holding apps in the app list. Swapping a home app still works; a locked app stays locked.</string>
     <string name="info_lock_hidden">Stops showing hidden apps.</string>
@@ -1374,9 +1359,6 @@
     <string name="info_lock_system">Leaves Date &amp; time, Default home app, Device admin apps, Usage access, battery optimisation, Developer options and JLauncher\'s own app pages. Needs accessibility.</string>
     <string name="info_lockdown_grayscale">Turns the screen grey while lockdown is on. Needs a one-time permission from a computer.</string>
     <string name="info_lockdown_notification">Shows lockdown\'s state while it\'s on.</string>
-    <string name="info_stage_slow">Blocked apps get the pause before opening.</string>
-    <string name="info_stage_block">Blocked apps are blocked until midnight, and the screen turns grey.</string>
-    <string name="info_stage_lockdown">Lockdown until midnight, with everything but essentials blocked.</string>
     <plurals name="lockdown_opens">
         <item quantity="one">%1$d open</item>
         <item quantity="other">%1$d opens</item>
@@ -1384,10 +1366,6 @@
     <plurals name="lockdown_apps_count">
         <item quantity="one">%1$d app</item>
         <item quantity="other">%1$d apps</item>
-    </plurals>
-    <plurals name="lockdown_days">
-        <item quantity="one">%1$d day</item>
-        <item quantity="other">%1$d days</item>
     </plurals>
 
     <!-- Supplements -->

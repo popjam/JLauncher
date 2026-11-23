@@ -318,57 +318,11 @@ abstract class LockdownBaseFragment : CardPageFragment() {
             .show()
     }
 
-    // --- Devices ---
+    // --- Breaks ---
 
-    /**
-     * A switch for one device: its icon and name, filled while [on]. Faded and untappable when the thing
-     * can't be blocked there ([enabled] false).
-     */
-    internal fun devicePill(device: Lockdown.Device, on: Boolean, enabled: Boolean, onTap: () -> Unit): TextView {
-        val context = requireContext()
-        val fill = Style.lockdown(darkPage)
-        val text = when {
-            on -> if (darkPage) Style.LOCKDOWN_INK_ON_DARK else android.graphics.Color.WHITE
-            else -> faint(if (enabled) 200 else 70)
-        }
-        return TextView(context, null, 0, R.style.TextSmall).apply {
-            this.text = LockdownGate.deviceName(context, device.bit)
-            textSize = Style.TEXT_SMALL
-            setTextColor(text)
-            val icon = StatIcons.drawable(when (device) {
-                Lockdown.Device.PHONE -> StatIcons.PHONE_SMALL
-                Lockdown.Device.MAC -> StatIcons.LAPTOP
-                Lockdown.Device.TV -> StatIcons.TV
-            }, text, 13.dpToPx())
-            icon.setBounds(0, 0, 13.dpToPx(), 13.dpToPx())
-            setCompoundDrawablesRelative(icon, null, null, null)
-            compoundDrawablePadding = 5.dpToPx()
-            gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = Style.radiusSmall
-                if (on) setColor(fill) else setStroke(1.dpToPx(), faint(if (enabled) 90 else 30))
-            }
-            setPadding(10.dpToPx(), 5.dpToPx(), 11.dpToPx(), 5.dpToPx())
-            isEnabled = enabled
-            if (enabled) setOnClickListener { onTap() }
-            contentDescription = this.text.toString() + ", " + getString(if (on) R.string.on else R.string.off)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 6.dpToPx() }
-        }
-    }
-
-    /**
-     * Picks devices: all of them, each one, and each two when there are three; straight to [onPicked]
-     * with the phone when it's the only one
-     */
-    internal fun pickDevices(title: String, current: Int, onPicked: (Int) -> Unit) {
-        val present = Lockdown.deviceList(requireContext())
-        if (present.size < 2) return onPicked(Lockdown.Device.PHONE.bit)
-        val all = present.sumOf { it.bit }
-        val pairs = if (present.size > 2) present.flatMapIndexed { i, a -> present.drop(i + 1).map { b -> a.bit or b.bit } } else emptyList()
-        val options = listOf(all) + present.map { it.bit } + pairs
-        val shown = (current and all).takeIf { it != 0 } ?: all
-        choose(title, options.map { LockdownGate.deviceName(requireContext(), it) }, options.indexOf(shown).coerceAtLeast(0), suggested = true) { onPicked(options[it]) }
-    }
+    /** Automatic breaks in a few words: "5m every 50m", or Off */
+    internal fun autoBreakName(config: app.olauncher.helper.Breaks.Config) = if (!config.autoOn) getString(R.string.off)
+        else getString(R.string.lockdown_auto_break_value, Formats.duration(config.autoMinutes * 60_000L), Formats.duration(config.autoEvery * 60_000L))
 
     /** Grayscale needs a permission only a computer can give */
     internal fun grayscaleSetup() {

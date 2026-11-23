@@ -88,7 +88,7 @@ object LockdownLog {
         val store = context.getSharedPreferences("lockdown_log", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         val state = State(Lockdown.isOn(context, prefs, Lockdown.Device.PHONE),
-            Lockdown.macPaired(context) && Lockdown.isOn(context, prefs, Lockdown.Device.MAC), Lockdown.onBreak(prefs, Lockdown.Device.PHONE),
+            Lockdown.macPaired(context) && Lockdown.isOn(context, prefs, Lockdown.Device.MAC), Lockdown.onBreak(prefs),
             Lockdown.tvPaired(context) && Lockdown.isOn(context, prefs, Lockdown.Device.TV))
         val code = (if (state.phone) 1 else 0) + (if (state.mac) 2 else 0) + (if (state.onBreak) 4 else 0) + (if (state.tv) 8 else 0)
         val lastAt = store.getLong("at", 0L)

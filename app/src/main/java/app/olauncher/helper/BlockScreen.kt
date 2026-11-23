@@ -26,7 +26,8 @@ object BlockScreen {
      * The whole overlay: [shade] over the screen and the card at the bottom. [mood] picks the face
      * (the sad red one for blocks).
      */
-    fun view(context: Context, title: String, lines: List<String>, mood: Int, shade: Int, onClose: () -> Unit): View {
+    fun view(context: Context, title: String, lines: List<String>, mood: Int, shade: Int, actions: List<Pair<String, () -> Unit>> = emptyList(),
+             onClose: () -> Unit): View {
         val ink = Color.WHITE
         fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
         val card = LinearLayout(context).apply {
@@ -62,8 +63,8 @@ object BlockScreen {
                     setPadding(0, if (i == 0) 12.dpToPx() else 4.dpToPx(), 0, 0)
                 })
             }
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = context.getString(R.string.close)
+            fun button(label: String, first: Boolean, onTap: () -> Unit) = addView(TextView(context, null, 0, R.style.TextSmall).apply {
+                text = label
                 textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setShadowLayer(0f, 0f, 0f, 0)
@@ -73,10 +74,12 @@ object BlockScreen {
                     setStroke(1.dpToPx(), faint(128))
                 }
                 setPadding(0, 12.dpToPx(), 0, 12.dpToPx())
-                setOnClickListener { onClose() }
+                setOnClickListener { onTap() }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 18.dpToPx()
+                topMargin = if (first) 18.dpToPx() else 8.dpToPx()
             })
+            actions.forEachIndexed { i, (label, onTap) -> button(label, i == 0, onTap) }
+            button(context.getString(R.string.close), actions.isEmpty(), onClose)
         }
         return FrameLayout(context).apply {
             setBackgroundColor(shade)

@@ -56,7 +56,7 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Lockdown can start by itself (a schedule, a stage) and limits run out while an app is open, and
+     * Lockdown can start by itself (a schedule, screen time) and limits run out while an app is open, and
      * that app may not open another window for a long time, so the app on screen is checked again now
      * and then. Grayscale and the notification are kept up to date at the same time.
      */
@@ -150,7 +150,7 @@ class MyAccessibilityService : AccessibilityService() {
             showBlock(appLabel(pkg), block, pkg)
             return
         }
-        if (opening && Limits.rule(prefs, pkg).opens > 0) Limits.countOpen(this, pkg)
+        if (opening && Limits.rule(prefs, pkg).hasOpens) Limits.countOpen(this, pkg)
         warnIfLow(pkg, prefs)
         // Left for another app (or recents) without choosing
         if (gatePackage != null && gatePackage != pkg) removeGate()
@@ -166,7 +166,7 @@ class MyAccessibilityService : AccessibilityService() {
         val rule = Limits.rule(prefs, pkg)
         if (!Limits.shouldWarn(rule, Limits.usedToday(this, pkg), Limits.warnedToday(this, pkg))) return
         Limits.setWarned(this, pkg)
-        val left = rule.minutes * 60_000L - Limits.usedToday(this, pkg)
+        val left = rule.minutesOn(java.time.LocalDate.now().dayOfWeek) * 60_000L - Limits.usedToday(this, pkg)
         // Over the app, which carries on once it's closed
         showSheet(appLabel(pkg), listOf(getString(R.string.lockdown_left_today_line, Formats.duration(left))),
             BlockScreen.WARNING, BlockScreen.SHADE_DIM, pkg, toHome = false, sticky = false, quiet = false)
@@ -211,16 +211,25 @@ class MyAccessibilityService : AccessibilityService() {
         if (key != lastCounted || now - lastCountedAt > 5_000) Lockdown.countBlocked(this)
         lastCounted = key
         lastCountedAt = now
+        // A gentle limit offers a minute more, or leaving it for the day, instead of only Close
+        val limited = block.pkg
+        val actions = if (block.gentle && limited != null) listOf(
+            getString(R.string.limit_one_more_minute) to { Limits.oneMoreMinute(this, limited); removeBlock() },
+            getString(R.string.limit_ignore_today) to { Limits.ignoreToday(this, limited); removeBlock() },
+        ) else emptyList()
         showSheet(name, listOf(LockdownGate.reasonText(this, block), LockdownGate.detailText(this, block, pkg)),
-            BlockScreen.BLOCKED, BlockScreen.SHADE_BLOCK, pkg, toHome = true, sticky = false, quiet = true)
+            if (block.gentle) BlockScreen.WARNING else BlockScreen.BLOCKED, BlockScreen.SHADE_BLOCK, pkg, toHome = true, sticky = false, quiet = true,
+            actions = actions)
     }
 
     /**
      * Shows lockdown's sheet over the screen until it's closed. [toHome]: closing goes home, as the
      * app under it is blocked. [sticky]: it stays when home or a system screen comes up underneath,
      * for sheets put up as the page under them is closed. [quiet]: playback underneath is stopped.
+     * [actions]: buttons above Close, each with what it does.
      */
-    private fun showSheet(title: String, lines: List<String>, mood: Int, shade: Int, pkg: String?, toHome: Boolean, sticky: Boolean, quiet: Boolean) {
+    private fun showSheet(title: String, lines: List<String>, mood: Int, shade: Int, pkg: String?, toHome: Boolean, sticky: Boolean, quiet: Boolean,
+                          actions: List<Pair<String, () -> Unit>> = emptyList()) {
         removeBlock()
         try {
             val context = themedContext()
@@ -231,7 +240,7 @@ class MyAccessibilityService : AccessibilityService() {
                     return true
                 }
             }
-            root.addView(BlockScreen.view(context, title, lines, mood, shade) { closeBlock() },
+            root.addView(BlockScreen.view(context, title, lines, mood, shade, actions) { closeBlock() },
                 FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -568,7 +577,7 @@ class MyAccessibilityService : AccessibilityService() {
                 binding,
                 pkg,
                 appLabel(pkg),
-                pauseSeconds = if (AppPause.pauses(this, prefs, pkg)) prefs.pauseSeconds else null,
+                pauseSeconds = AppPause.startPause(this, prefs, pkg),
                 askUseFor = AppPause.asksUseFor(prefs, pkg),
                 onOpen = { minutes ->
                     AppPause.grantPass(pkg, minutes)

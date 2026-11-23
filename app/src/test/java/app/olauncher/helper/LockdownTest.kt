@@ -117,14 +117,14 @@ class LockdownTest {
     }
 
     @Test
-    fun theTvIsADeviceInSchedulesAndTriggers() {
-        val tv = Lockdown.Device.TV.bit
-        val schedules = Lockdown.parseSchedules("31:1080:1320:$tv;127:0:0:${Lockdown.ALL};31:60:120:8;31:60:120")
-        assertEquals(listOf(tv, Lockdown.ALL, Lockdown.BOTH), schedules.map { it.devices })
+    fun schedulesForSomeDevicesBecomeSchedulesForAll() {
+        // Before there was one lockdown: TV only, every device, a bad device mask, phone and Mac
+        val schedules = Lockdown.parseSchedules("31:1080:1320:4;127:0:0:7;31:60:120:8;31:60:120;31:60:120:1")
+        assertEquals(listOf(Schedule(31, 1080, 1320), Schedule(127, 0, 0), Schedule(31, 60, 120)), schedules)
+        // Written without devices
+        assertEquals("31:1080:1320;127:0:0;31:60:120", Lockdown.formatSchedules(schedules))
         assertEquals(schedules, Lockdown.parseSchedules(Lockdown.formatSchedules(schedules)))
-        val triggers = Lockdown.parseTriggers("TV:120:420:$tv;TOTAL:180:420:${Lockdown.ALL};PHONE:60:420:9")
-        assertEquals(listOf(tv, Lockdown.ALL), triggers.map { it.devices })
         assertTrue(Lockdown.covers(Lockdown.ALL, Lockdown.Device.TV))
-        assertFalse(Lockdown.covers(Lockdown.BOTH, Lockdown.Device.TV))
+        assertFalse(Lockdown.covers(Lockdown.Device.PHONE.bit, Lockdown.Device.TV))
     }
 }

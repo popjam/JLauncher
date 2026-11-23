@@ -20,8 +20,8 @@ class BreaksTest {
 
     private val five = Config(minutes = 5)
 
-    private fun check(config: Config, log: List<Entry>, now: Long, device: String = Breaks.PHONE, locked: Boolean = true, breakUntil: Long = 0) =
-        Breaks.check(config, log, now, device, locked, breakUntil, zone)
+    private fun check(config: Config, log: List<Entry>, now: Long, locked: Boolean = true, breakUntil: Long = 0) =
+        Breaks.check(config, log, now, locked, breakUntil, zone)
 
     private fun took(day: Int, hour: Int, min: Int = 0, device: String = Breaks.PHONE, length: Int = 5) =
         Entry("$day-$hour-$min-$device", at(day, hour, min), at(day, hour, min) + length * minute, device)
@@ -74,12 +74,50 @@ class BreaksTest {
     }
 
     @Test
-    fun sharedBreaksCountBothDevices() {
+    fun breaksAreAlwaysSharedSoOneOnTheMacCountsForAll() {
         val log = listOf(took(18, 9, device = Breaks.MAC))
         val shared = five.copy(perDay = 1)
         assertTrue(check(shared, log, at(18, 12)) is Can.Limit)
-        assertEquals(Can.Yes, check(shared.copy(shared = false), log, at(18, 12)))
-        assertTrue(check(shared.copy(shared = false), log, at(18, 12), device = Breaks.MAC) is Can.Limit)
+        assertEquals(1, Breaks.countSince(log, at(18, 0)))
+        // A setting from when breaks could be kept apart is read as shared, and written as shared for the Mac
+        val old = Config.decode("""{"minutes":5,"shared":false}""")
+        assertEquals(Config(minutes = 5), old)
+        assertTrue(org.json.JSONObject(old.encode()).getBoolean("shared"))
+    }
+
+    @Test
+    fun automaticBreaksStartEveryGapAfterLockdownStarts() {
+        val auto = Config(autoMinutes = 5, autoEvery = 50)
+        val start = at(18, 9)
+        // None in the first 50 minutes, then 9:50–9:55, 10:40–10:45…
+        assertEquals(null, Breaks.autoWindow(auto, start, at(18, 9, 49)))
+        assertEquals(at(18, 9, 50) to at(18, 9, 55), Breaks.autoWindow(auto, start, at(18, 9, 50)))
+        assertEquals(at(18, 9, 50) to at(18, 9, 55), Breaks.autoWindow(auto, start, at(18, 9, 54)))
+        assertEquals(null, Breaks.autoWindow(auto, start, at(18, 9, 55)))
+        assertEquals(at(18, 10, 40) to at(18, 10, 45), Breaks.autoWindow(auto, start, at(18, 10, 41)))
+        assertEquals(at(18, 10, 40), Breaks.nextAuto(auto, start, at(18, 9, 56)))
+        // Off, with no lockdown, or a break as long as the gap
+        assertEquals(null, Breaks.autoWindow(Config(), start, at(18, 9, 50)))
+        assertEquals(null, Breaks.autoWindow(auto, 0L, at(18, 9, 50)))
+        assertEquals(null, Breaks.autoWindow(Config(autoMinutes = 50, autoEvery = 50), start, at(18, 9, 50)))
+        assertEquals(null, Breaks.nextAuto(auto, 0L, at(18, 9)))
+    }
+
+    @Test
+    fun automaticBreaksDontUseUpManualOnes() {
+        // Not in the log, so a manual break can still be taken after one, up to the limit
+        val config = Config(minutes = 5, perDay = 1, autoMinutes = 5, autoEvery = 50)
+        assertEquals(Can.Yes, check(config, emptyList(), at(18, 11)))
+        // Automatic breaks work with manual ones off
+        assertFalse(Config(autoMinutes = 5, autoEvery = 50).on)
+        assertTrue(Config(autoMinutes = 5, autoEvery = 50).autoOn)
+    }
+
+    @Test
+    fun lockdownsRunCountsFromWhenItStarted() {
+        assertEquals(0L, Lockdown.runStart(on = false, since = 500L, now = 900L))
+        assertEquals(500L, Lockdown.runStart(on = true, since = 500L, now = 900L))
+        assertEquals(900L, Lockdown.runStart(on = true, since = 0L, now = 900L))
     }
 
     @Test
@@ -91,7 +129,7 @@ class BreaksTest {
 
     @Test
     fun configSurvivesBeingWrittenAndReadBack() {
-        val config = Config(5, 30, true, true, 2, 4, 10, listOf(Lockdown.Schedule(31, 60, 120)), false, Challenge(Challenge.Type.TAPS, 100))
+        val config = Config(5, 30, true, true, 2, 4, 10, listOf(Lockdown.Schedule(31, 60, 120)), Challenge(Challenge.Type.TAPS, 100), 5, 50)
         assertEquals(config, Config.decode(config.encode()))
         assertEquals(Config(), Config.decode("not json"))
         val log = listOf(took(18, 9), took(18, 10, device = Breaks.MAC))
@@ -109,6 +147,13 @@ class BreaksTest {
         assertFalse(config.loosensTo(config.copy(minutes = 2)))
         assertFalse(config.loosensTo(config.copy(perDay = 1, perHour = 1)))
         assertFalse(config.loosensTo(config.copy(challenge = Challenge(Challenge.Type.TAPS, 1000))))
+        // Automatic breaks turned on, longer or more often loosen; shorter, rarer or off don't
+        val auto = config.copy(autoMinutes = 5, autoEvery = 50)
+        assertTrue(config.loosensTo(auto))
+        assertTrue(auto.loosensTo(auto.copy(autoMinutes = 10)))
+        assertTrue(auto.loosensTo(auto.copy(autoEvery = 25)))
+        assertFalse(auto.loosensTo(auto.copy(autoEvery = 90)))
+        assertFalse(auto.loosensTo(config))
     }
 
     @Test

@@ -54,8 +54,9 @@ class LockdownPlanTest {
         assertTrue(Plan(manual = true).on(at(16, 12)))
     }
 
+
     @Test
-    fun matchedDevicesTakeTheGreater() {
+    fun twoPlansTogetherTakeTheGreater() {
         val phone = Plan(timedEnd = at(16, 13))
         val mac = Plan(timedEnd = at(16, 15), schedules = listOf(nights))
         val both = phone + mac
@@ -66,13 +67,28 @@ class LockdownPlanTest {
     }
 
     @Test
-    fun schedulesKeepTheirDevices() {
-        val list = listOf(Schedule(31, 600, 1020), Schedule(31, 600, 1020, Lockdown.Device.MAC.bit), Schedule(96, 0, 0, Lockdown.Device.PHONE.bit))
-        val text = Lockdown.formatSchedules(list)
-        // Both devices is written the way it always was
-        assertEquals("31:600:1020;31:600:1020:2;96:0:0:1", text)
-        assertEquals(list, Lockdown.parseSchedules(text))
-        assertEquals(emptyList<Schedule>(), Lockdown.parseSchedules("31:600:1020:0;31:600:1020:8"))
+    fun aSwitchedOffDeviceIsSentALockdownThatsOff() {
+        val shared = Plan(manual = true, timedEnd = at(16, 13), schedules = listOf(nights), windows = listOf(Window(at(16, 20), at(16, 21))))
+        // Switched on, a device takes the one lockdown
+        assertEquals(shared, Lockdown.planFor(shared, deviceOn = true))
+        // Switched off, nothing at all
+        val off = Lockdown.planFor(shared, deviceOn = false)
+        assertEquals(Plan(), off)
+        assertFalse(off.on(at(16, 23)))
+        // What it's sent says off in the form the Mac app and the TV's PC read
+        val zone = ZoneOffset.UTC
+        val now = Lockdown.epoch(at(16, 12), zone)
+        val json = LockdownSync.deviceJson(off, 0L, zone, at(16, 0).toLocalDate(), now)
+        assertFalse(json.getBoolean("manual"))
+        assertEquals(0L, json.getLong("timedUntil"))
+        assertEquals(0, json.getJSONArray("windows").length())
+        assertEquals(0L, json.getLong("breakUntil"))
+        // Switched on, its timer and windows are there
+        val on = LockdownSync.deviceJson(shared, 5L, zone, at(16, 0).toLocalDate(), now)
+        assertTrue(on.getBoolean("manual"))
+        assertEquals(Lockdown.epoch(at(16, 13), zone), on.getLong("timedUntil"))
+        assertTrue(on.getJSONArray("windows").length() > 0)
+        assertEquals(5L, on.getLong("breakUntil"))
     }
 
     @Test
@@ -83,33 +99,48 @@ class LockdownPlanTest {
     }
 
     @Test
-    fun triggersGoOffOnceTheirScreenTimeIsReached() {
-        val total = Trigger(Lockdown.Source.TOTAL, 240, 7 * 60)
-        val phone = Trigger(Lockdown.Source.PHONE, 120, 0, Lockdown.Device.PHONE.bit)
+    fun triggersGoOffOnceTheTotalScreenTimeIsReached() {
+        val four = Trigger(240, 7 * 60)
+        val two = Trigger(120, 0)
         val hour = 3_600_000L
-        val used = mapOf(Lockdown.Source.TOTAL to 4 * hour + 1, Lockdown.Source.PHONE to hour)
-        assertEquals(listOf(total), Lockdown.dueTriggers(listOf(total, phone), used, emptySet()))
+        assertEquals(listOf(two), Lockdown.dueTriggers(listOf(four, two), 3 * hour, emptySet()))
+        assertEquals(listOf(four, two), Lockdown.dueTriggers(listOf(four, two), 4 * hour + 1, emptySet()))
         // Once a day
-        assertEquals(emptyList<Trigger>(), Lockdown.dueTriggers(listOf(total, phone), used, setOf(total.key)))
+        assertEquals(listOf(four), Lockdown.dueTriggers(listOf(four, two), 5 * hour, setOf(two.key)))
+        // Went off today under the key written before there was one lockdown
+        assertEquals(emptyList<Trigger>(), Lockdown.dueTriggers(listOf(four), 5 * hour, setOf("TOTAL:240:420:3")))
+        assertEquals(emptyList<Trigger>(), Lockdown.dueTriggers(listOf(four), 5 * hour, setOf("PHONE:240:420:1")))
+    }
+
+    @Test
+    fun oldTriggersAllCountTheTotalOnEveryDevice() {
+        // Whose screen time and which devices, from before: the phone's on the phone, the TV's on the TV, the total on both
+        val old = Lockdown.parseTriggers("PHONE:120:0:1;TV:90:420:4;TOTAL:240:420:3;MAC:120:0:2;NOPE:1:2:3")
+        assertEquals(listOf(Trigger(120, 0), Trigger(90, 420), Trigger(240, 420)), old)
+        // Written with the total and every device, as the Mac app's older readers expect four parts
+        assertEquals("TOTAL:120:0:7;TOTAL:90:420:7;TOTAL:240:420:7", Lockdown.formatTriggers(old))
     }
 
     @Test
     fun aTriggerLocksUntilTheNextTimeItsSetTo() {
-        val trigger = Trigger(Lockdown.Source.TOTAL, 240, 7 * 60)
+        val trigger = Trigger(240, 7 * 60)
         assertEquals(Window(at(16, 21), at(17, 7)), trigger.windowFrom(at(16, 21)))
         // After midnight, the same morning
         assertEquals(Window(at(17, 1), at(17, 7)), trigger.windowFrom(at(17, 1)))
         // Until midnight
-        assertEquals(at(17, 0), Trigger(Lockdown.Source.PHONE, 60, 0).windowFrom(at(16, 15)).end)
+        assertEquals(at(17, 0), Trigger(60, 0).windowFrom(at(16, 15)).end)
     }
 
     @Test
     fun triggersAndWindowsSurviveBeingWrittenAndReadBack() {
-        val triggers = listOf(Trigger(Lockdown.Source.TOTAL, 240, 420), Trigger(Lockdown.Source.MAC, 90, 0, 2))
+        val triggers = listOf(Trigger(240, 420), Trigger(90, 0))
         assertEquals(triggers, Lockdown.parseTriggers(Lockdown.formatTriggers(triggers)))
         assertEquals(emptyList<Trigger>(), Lockdown.parseTriggers("NOPE:1:2:3;TOTAL:0:420:3;TOTAL:60:1440:3"))
         val zone = ZoneOffset.UTC
-        val windows = listOf(Window(at(16, 21), at(17, 7), 3))
+        val windows = listOf(Window(at(16, 21), at(17, 7)))
         assertEquals(windows, Lockdown.parseWindows(Lockdown.formatWindows(windows, zone), zone))
+        // Windows written with their devices before still read
+        val old = "${Lockdown.epoch(at(16, 21), zone)}:${Lockdown.epoch(at(17, 7), zone)}:3"
+        assertEquals(windows, Lockdown.parseWindows(old, zone))
     }
 }

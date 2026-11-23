@@ -101,7 +101,6 @@ class Prefs(context: Context) {
     private val LOCKDOWN_GRAYSCALE_APPLIED = "LOCKDOWN_GRAYSCALE_APPLIED"
     private val LOCKDOWN_NOTIFICATION = "LOCKDOWN_NOTIFICATION"
     private val LOCKDOWN_SYSTEM_SETTINGS = "LOCKDOWN_SYSTEM_SETTINGS"
-    private val LOCKDOWN_STAGES = "LOCKDOWN_STAGES"
     private val LOCKDOWN_HOME_WIDGET = "LOCKDOWN_HOME_WIDGET"
     private val LOCKDOWN_SETUP_OFFERED = "LOCKDOWN_SETUP_OFFERED"
     private val LOCKDOWN_WIDGET_MINUTES = "LOCKDOWN_WIDGET_MINUTES"
@@ -406,19 +405,19 @@ class Prefs(context: Context) {
 
     /** Apps that can't be opened while lockdown is on. Copies, since the set SharedPreferences returns mustn't be changed. */
     var lockdownBlockedApps: Set<String>
-        get() = BlockItems.phoneApps(lockdownItems)
+        get() = BlockItems.phoneApps(BlockItems.matched(lockdownItems))
         set(value) {
             val now = System.currentTimeMillis()
             var items = lockdownItems
-            val old = BlockItems.phoneApps(items)
+            val old = BlockItems.phoneApps(BlockItems.matched(items))
             (value - old).forEach { pkg ->
                 // An item already known by this package keeps its name
                 val known = items.values.firstOrNull { it.kind == BlockItems.Kind.APP && it.pkg == pkg }
-                items = BlockItems.set(items, BlockItems.Kind.APP, known?.name ?: appName(pkg), phone = true, mac = null, now = now, pkg = pkg)
+                items = BlockItems.block(items, BlockItems.Kind.APP, known?.name ?: appName(pkg), true, now, pkg = pkg)
             }
             (old - value).forEach { pkg ->
                 items.values.filter { it.kind == BlockItems.Kind.APP && it.pkg == pkg }.forEach {
-                    items = BlockItems.set(items, it.kind, it.name, phone = false, mac = null, now = now)
+                    items = BlockItems.block(items, it.kind, it.name, false, now)
                 }
             }
             lockdownItems = items
@@ -433,8 +432,8 @@ class Prefs(context: Context) {
     }.getOrDefault(pkg)
 
     /**
-     * Apps and sites lockdown blocks on each device ([BlockItems]). The first time, it's made from the
-     * lists kept before: blocked apps on the phone, sites on both.
+     * Apps and sites lockdown blocks ([BlockItems]): each on every switched-on device that can block it.
+     * The first time, it's made from the lists kept before.
      */
     var lockdownItems: Map<String, BlockItems.Item>
         get() {
@@ -504,20 +503,20 @@ class Prefs(context: Context) {
         get() = prefs.getStringSet(LOCKDOWN_ALLOWED_APPS, emptySet())!!.toSet()
         set(value) = prefs.edit { putStringSet(LOCKDOWN_ALLOWED_APPS, value.toSet()) }
 
-    /** Apps that still work at screen time stage 3 and with the allowlist */
+    /** Apps always allowed with the allowlist */
     var lockdownEssentials: Set<String>
         get() = prefs.getStringSet(LOCKDOWN_ESSENTIALS, emptySet())!!.toSet()
         set(value) = prefs.edit { putStringSet(LOCKDOWN_ESSENTIALS, value.toSet()) }
 
     /** Websites blocked during lockdown, as hosts ("reddit.com") */
     var lockdownSites: Set<String>
-        get() = BlockItems.phoneSites(lockdownItems)
+        get() = BlockItems.phoneSites(BlockItems.matched(lockdownItems))
         set(value) {
             val now = System.currentTimeMillis()
             var items = lockdownItems
-            val old = BlockItems.phoneSites(items)
-            (value - old).forEach { items = BlockItems.set(items, BlockItems.Kind.SITE, it, phone = true, mac = null, now = now) }
-            (old - value).forEach { items = BlockItems.set(items, BlockItems.Kind.SITE, it, phone = false, mac = null, now = now) }
+            val old = BlockItems.phoneSites(BlockItems.matched(items))
+            (value - old).forEach { items = BlockItems.block(items, BlockItems.Kind.SITE, it, true, now) }
+            (old - value).forEach { items = BlockItems.block(items, BlockItems.Kind.SITE, it, false, now) }
             lockdownItems = items
         }
 
@@ -544,15 +543,15 @@ class Prefs(context: Context) {
         get() = prefs.getLong("LOCKDOWN_TV_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_TV_UNTIL", value) }
 
-    /** All devices take whichever lockdown is greatest, and block the same things */
-    var lockdownMatchDevices: Boolean
-        get() = prefs.getBoolean("LOCKDOWN_MATCH_DEVICES", false)
-        set(value) = prefs.edit { putBoolean("LOCKDOWN_MATCH_DEVICES", value) }
+    /** When the lockdown on now started (wall clock), or 0 while it's off: automatic breaks count from here */
+    var lockdownOnSince: Long
+        get() = prefs.getLong("LOCKDOWN_ON_SINCE", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_ON_SINCE", value) }
 
-    /** Which devices Start, Add time and the home lock act on, as [app.olauncher.helper.Lockdown.Device] bits */
-    var lockdownStartDevices: Int
-        get() = prefs.getInt("LOCKDOWN_START_DEVICES", 7)
-        set(value) = prefs.edit { putInt("LOCKDOWN_START_DEVICES", value) }
+    /** The end of an automatic break that was ended early, so it isn't taken again */
+    var lockdownAutoBreakSkip: Long
+        get() = prefs.getLong("LOCKDOWN_AUTO_BREAK_SKIP", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_AUTO_BREAK_SKIP", value) }
 
     /** Screen time that turns lockdown on, as written by [app.olauncher.helper.Lockdown.formatTriggers] */
     var lockdownTriggers: String
@@ -635,12 +634,6 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(LOCKDOWN_SYSTEM_SETTINGS, false)
         set(value) = prefs.edit { putBoolean(LOCKDOWN_SYSTEM_SETTINGS, value) }
 
-    /** Screen time stages' minutes, as written by [app.olauncher.helper.Limits.formatStages] */
-    var lockdownStages: String
-        get() = prefs.getString(LOCKDOWN_STAGES, "").orEmpty()
-        set(value) = prefs.edit { putString(LOCKDOWN_STAGES, value) }
-
-    /** The lock on the home screen that adds time to a timed lockdown */
     /** Whether the setup has been shown once, on first opening Lockdown */
     var lockdownSetupOffered: Boolean
         get() = prefs.getBoolean(LOCKDOWN_SETUP_OFFERED, false)
@@ -697,6 +690,11 @@ class Prefs(context: Context) {
     var pauseSeconds: Int
         get() = prefs.getInt(PAUSE_SECONDS, 10)
         set(value) = prefs.edit { putInt(PAUSE_SECONDS, value) }
+
+    /** Each open in a day adds the pause's length again, up to a minute ([app.olauncher.helper.AppPause.grownSeconds]) */
+    var pauseGrows: Boolean
+        get() = prefs.getBoolean("PAUSE_GROWS", false)
+        set(value) = prefs.edit { putBoolean("PAUSE_GROWS", value) }
 
     /** "Use for a set time"'s old on/off for every chosen app, read once to carry it over (see AppPause.migrate) */
     var useForOn: Boolean

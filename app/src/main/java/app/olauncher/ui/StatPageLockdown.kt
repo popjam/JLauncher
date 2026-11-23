@@ -48,7 +48,7 @@ private fun StatPageFragment.lockdownNowCard() {
     body.addView(LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = android.view.Gravity.CENTER_VERTICAL
-        val open = Lockdown.onBreak(prefs, Lockdown.Device.PHONE) || !on
+        val open = Lockdown.onBreak(prefs) || !on
         addView(View(context).apply { background = StatIcons.drawable(if (open) StatIcons.UNLOCK else StatIcons.LOCK, colour, 34.dpToPx()) },
             LinearLayout.LayoutParams(34.dpToPx(), 34.dpToPx()).apply { marginEnd = 14.dpToPx() })
         addView(LinearLayout(context).apply {
@@ -76,7 +76,7 @@ private fun StatPageFragment.lockdownNowCard() {
         })
     }
     // What it blocks, on each device
-    val items = prefs.lockdownItems.let { if (prefs.lockdownMatchDevices) BlockItems.matched(it) else it }
+    val items = BlockItems.effective(prefs.lockdownItems, app.olauncher.helper.LockdownSync.macInstalled(context), app.olauncher.helper.LockdownSync.tvInstalled(context))
     fun counts(apps: Int, sites: Int) = listOfNotNull(
         resources.getQuantityString(R.plurals.lockdown_apps_count, apps, apps).takeIf { apps > 0 },
         resources.getQuantityString(R.plurals.lockdown_sites_count, sites, sites).takeIf { sites > 0 },
@@ -150,7 +150,7 @@ private fun StatPageFragment.lockdownWeekCard() {
     val thisWeek = days.filterKeys { !it.isBefore(monday) && !it.isAfter(today) }
     val card = Card(getString(R.string.lockdown_this_week))
     val mondayMs = Lockdown.epoch(monday.atStartOfDay())
-    val breaks = Lockdown.breakLog(prefs).filter { it.start >= mondayMs && (it.device == "phone" || Lockdown.breaks(prefs).shared) }
+    val breaks = Lockdown.breakLog(prefs).filter { it.start >= mondayMs }
     val tiles = mutableListOf(
         Formats.duration(thisWeek.values.sumOf { it.phoneMs }) to getString(R.string.lockdown_device_phone),
     )
@@ -163,7 +163,6 @@ private fun StatPageFragment.lockdownWeekCard() {
     val lines = listOfNotNull(
         longest?.let { getString(R.string.lockdown_longest_day, Formats.duration(it.value.phoneMs), dateText(it.key)) },
         getString(R.string.lockdown_break_time, Formats.duration(breakTime)).takeIf { breakTime > 0 },
-        Lockdown.streak(context, prefs)?.let { getString(R.string.lockdown_streak_line, resources.getQuantityString(R.plurals.lockdown_days, it, it)) },
         usualHours(days)?.let { getString(R.string.lockdown_usually, it) },
     )
     if (lines.isNotEmpty()) card.root.addView(card.textView(Style.TEXT_BODY, 190).apply {

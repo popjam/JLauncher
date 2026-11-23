@@ -127,13 +127,6 @@ class LockdownSetupFragment : LockdownBaseFragment() {
         }))
         // Schedules made on the Lockdown page are listed too
         schedules.filter { it !in PRESETS }.forEach { card.add(row(card, LockdownGate.scheduleName(context, it), null, R.string.info_lockdown_schedules, onTap = null)) }
-        val stages = Limits.stages(prefs)
-        val on = stages.any { it > 0 }
-        card.add(row(card, getString(R.string.lockdown_stages), if (on) stages.joinToString(" · ") { minutesName(it) } else getString(R.string.off),
-            R.string.info_lockdown_stages) {
-            if (on) open(LockdownPageFragment.STAGES)
-            else { prefs.lockdownStages = Limits.formatStages(Limits.STAGE_DEFAULTS); render() }
-        })
     }
 
     private fun startsNow(save: () -> Unit) {
@@ -200,9 +193,7 @@ class LockdownSetupFragment : LockdownBaseFragment() {
         val card = stepCard(R.string.lockdown_ready)
         val allow = prefs.lockdownAppMode == Lockdown.ALLOW
         val chosen = (if (allow) prefs.lockdownAllowedApps else prefs.lockdownBlockedApps).count { pkg -> apps?.any { it.appPackage == pkg } ?: true }
-        val stages = Limits.stages(prefs)
-        val times = Lockdown.schedules(prefs).map { LockdownGate.scheduleName(context, it) } +
-            listOfNotNull(stages.takeIf { s -> s.any { it > 0 } }?.let { getString(R.string.lockdown_stages) })
+        val times = Lockdown.schedules(prefs).map { LockdownGate.scheduleName(context, it) }
         val off = permissionsOff()
         card.add(
             row(card, getString(R.string.lockdown_apps), getString(if (allow) R.string.lockdown_only_allow else R.string.lockdown_block_these) + " · " + chosen, null) { go(0) },
@@ -262,6 +253,6 @@ class LockdownSetupFragment : LockdownBaseFragment() {
 
         /** Whether nothing's been set up yet, so the setup is offered */
         fun isFresh(prefs: app.olauncher.data.Prefs) = prefs.lockdownBlockedApps.isEmpty() && prefs.lockdownAllowedApps.isEmpty() &&
-            Lockdown.schedules(prefs).isEmpty() && Limits.stages(prefs).none { it > 0 } && Limits.rules(prefs).isEmpty() && !prefs.lockdownModeOn
+            Lockdown.schedules(prefs).isEmpty() && Limits.rules(prefs).isEmpty() && !prefs.lockdownModeOn
     }
 }

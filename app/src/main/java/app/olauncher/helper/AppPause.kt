@@ -9,7 +9,7 @@ import app.olauncher.data.Prefs
 /**
  * Wellness: chosen apps go through a screen before they open, with a breathing pause, a choice of
  * how long to use the app for, or both. Each app has its own choice (in its rules on the Lockdown
- * page); at screen time stage 1, lockdown's blocked apps get the pause too.
+ * page). The pause can grow with each open in a day.
  *
  * Getting through the screen gives the app a pass: until the home screen next shows, or until the
  * chosen time runs out, when the app is closed. Passes are only touched on the main thread.
@@ -47,8 +47,25 @@ object AppPause {
 
     fun pauses(context: Context, prefs: Prefs, packageName: String): Boolean {
         migrateIfNeeded(prefs)
-        return packageName in prefs.pausedApps ||
-            (packageName in prefs.lockdownBlockedApps && Lockdown.stagePauses(Limits.stageToday(context, prefs), packageName, prefs.lockdownBlockedApps))
+        return packageName in prefs.pausedApps
+    }
+
+    /** The longest a growing pause gets, in seconds */
+    const val MAX_GROWN_SECONDS = 60
+
+    /**
+     * How long the pause is after it's been shown [shownToday] times today: [base] seconds, or, when it
+     * [grows], the base again for each time already shown (5s, 10s, 15s…) up to a minute
+     */
+    fun grownSeconds(base: Int, shownToday: Int, grows: Boolean): Int =
+        if (!grows) base else (base.toLong() * (shownToday + 1)).coerceAtMost(maxOf(base, MAX_GROWN_SECONDS).toLong()).toInt()
+
+    /** The pause's length for opening [packageName] now, counted as shown; null when it doesn't pause */
+    fun startPause(context: Context, prefs: Prefs, packageName: String): Int? {
+        if (!pauses(context, prefs, packageName)) return null
+        val seconds = grownSeconds(prefs.pauseSeconds, Limits.pausesToday(context, packageName), prefs.pauseGrows)
+        Limits.countPause(context, packageName)
+        return seconds
     }
 
     /** "Use for" needs the accessibility service to close the app when the time is up. */

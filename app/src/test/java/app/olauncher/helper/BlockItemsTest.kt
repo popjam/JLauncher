@@ -59,6 +59,47 @@ class BlockItemsTest {
     }
 
     @Test
+    fun oneListBlocksEachItemOnEveryDeviceThatCanBlockIt() {
+        // Blocked on one device only, from before there was one list
+        var old = BlockItems.set(emptyMap(), Kind.SITE, "reddit.com", phone = false, mac = true, now = 1)
+        old = BlockItems.set(old, Kind.APP, "YouTube", phone = true, mac = null, now = 1, pkg = "com.google.android.youtube", tvName = "YouTube")
+        old = BlockItems.set(old, Kind.APP, "Slack", phone = null, mac = true, now = 1, bundle = "com.tinyspeck.slackmacgap")
+        val each = BlockItems.matched(old)
+        // Sites on the phone and the Mac; apps wherever they are; the TV has apps only
+        assertEquals(setOf("reddit.com"), BlockItems.phoneSites(each))
+        assertEquals(setOf("reddit.com"), BlockItems.macSites(each))
+        assertEquals(setOf("com.google.android.youtube"), BlockItems.phoneApps(each))
+        assertEquals(setOf("YouTube"), BlockItems.tvApps(each))
+        assertEquals(setOf("com.tinyspeck.slackmacgap"), BlockItems.macApps(each))
+        assertFalse(each.getValue(BlockItems.idFor(Kind.SITE, "reddit.com")).tv)
+        // Nothing stored is lost or changed
+        assertEquals(old, BlockItems.decode(BlockItems.encode(old)))
+    }
+
+    @Test
+    fun blockingSwitchesEveryDeviceTogether() {
+        val on = BlockItems.block(emptyMap(), Kind.APP, "Discord", true, now = 5, pkg = "com.discord")
+        val item = on.values.single()
+        assertTrue(item.phone && item.mac && item.tv)
+        // Unblocking takes it off everywhere, even where the Mac had switched it on
+        val macOn = BlockItems.set(on, Kind.APP, "Discord", phone = null, mac = true, now = 6)
+        val off = BlockItems.block(macOn, Kind.APP, "Discord", false, now = 7)
+        assertFalse(BlockItems.blocked(off.values.single()))
+        assertTrue(BlockItems.matched(off).values.none { it.shown })
+    }
+
+    @Test
+    fun appsAreFoundOnTheMacAndTheTvByName() {
+        val items = BlockItems.block(emptyMap(), Kind.APP, "Netflix", true, now = 1, pkg = "com.netflix.mediaclient")
+        val effective = BlockItems.effective(items, mapOf("com.netflix.Netflix" to "Netflix"), listOf("netflix", "Plex"))
+        assertEquals(setOf("com.netflix.Netflix"), BlockItems.macApps(effective))
+        assertEquals(setOf("netflix"), BlockItems.tvApps(effective))
+        // Without them, only the phone
+        val alone = BlockItems.effective(items, emptyMap(), emptyList())
+        assertEquals(emptySet<String>(), BlockItems.macApps(alone) + BlockItems.tvApps(alone))
+    }
+
+    @Test
     fun idsAreSafeForTheDatabase() {
         assertEquals("s_reddit,com", BlockItems.idFor(Kind.SITE, "reddit.com"))
         assertEquals("a_googlechrome", BlockItems.idFor(Kind.APP, "Google Chrome"))

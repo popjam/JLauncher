@@ -96,7 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectedApp(appModel: AppModel, flag: Int) {
         if (appModel is AppModel.PrivateSpaceHeader) return
         val launching = flag == Constants.FLAG_LAUNCH_APP || flag == Constants.FLAG_HIDDEN_APPS
-        if (launching) Lockdown.blockFor(appContext, appModel.appPackage, opening = true, prefs)?.let { block ->
+        if (launching) Lockdown.blockFor(appContext, appModel.appPackage, opening = true, prefs)?.takeUnless { it.gentle }?.let { block ->
             // The block screen, over the launcher; without the service, a line saying why
             if (!MyAccessibilityService.showBlock(appModel.appLabel, block, appModel.appPackage))
                 appContext.showToast(appModel.appLabel + ": " + app.olauncher.ui.LockdownGate.reasonText(appContext, block))

@@ -38,7 +38,7 @@ class PauseFragment : Fragment() {
             binding,
             app.appPackage,
             app.appLabel,
-            pauseSeconds = if (AppPause.pauses(requireContext(), prefs, app.appPackage)) prefs.pauseSeconds else null,
+            pauseSeconds = AppPause.startPause(requireContext(), prefs, app.appPackage),
             askUseFor = AppPause.asksUseFor(prefs, app.appPackage),
             onOpen = { minutes ->
                 viewModel.openPausedApp(minutes)
