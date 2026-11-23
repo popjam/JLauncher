@@ -39,6 +39,7 @@ import app.olauncher.data.BackupManager
 import app.olauncher.data.Constants
 import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
+import app.olauncher.helper.AppUpdate
 import app.olauncher.helper.AppPause
 import app.olauncher.helper.Arrangement
 import app.olauncher.helper.Lockdown
@@ -229,6 +230,7 @@ class SettingsFragment : CardPageFragment() {
 
     override fun onResume() {
         super.onResume()
+        checkUpdate()
         // Permissions and services may have changed in the system's settings
         viewModel.isOlauncherDefault()
         if (prefs.lockModePending && isAccessServiceEnabled(requireContext())) {
@@ -1189,8 +1191,43 @@ class SettingsFragment : CardPageFragment() {
                 openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
             },
             row(card, getString(R.string.version), BuildConfig.VERSION_NAME, R.string.info_version, onTap = null),
+            updateRow(card),
         )
         showRestoreSummary()
+    }
+
+    // --- Updating from the build on Drive ---
+
+    /** What the build on Drive is, once looked at; null while looking */
+    private var update: AppUpdate.State? = null
+
+    private fun checkUpdate() {
+        val context = requireContext().applicationContext
+        Thread {
+            val state = AppUpdate.check(context)
+            view?.post {
+                update = state
+                if (isAdded) render()
+            }
+        }.start()
+    }
+
+    /** Tappable only when the build on Drive is newer than this one */
+    private fun updateRow(card: Card): View? {
+        val context = requireContext()
+        val state = update
+        val value = when (state) {
+            null -> getString(R.string.app_update_checking)
+            AppUpdate.State.NoFolder, AppUpdate.State.NotFound -> getString(R.string.app_update_not_found)
+            AppUpdate.State.Latest -> getString(R.string.app_update_latest)
+            is AppUpdate.State.Newer -> getString(R.string.app_update_newer, LockdownGate.time(context, state.modified))
+        }
+        val onTap: (() -> Unit)? = (state as? AppUpdate.State.Newer)?.let { newer ->
+            { runCatching { AppUpdate.install(context, newer.uri) } }
+        }
+        return row(card, getString(R.string.app_update), value, R.string.info_app_update, onTap = onTap).apply {
+            if (onTap == null) alpha = 0.5f
+        }
     }
 
     /** Back from a page opened here, the page goes back to where it was, once it's laid out again */
