@@ -148,7 +148,8 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         }
         rows.addView(row(getString(R.string.stats_settings), StatIcons.GEAR, context.getColorFromAttr(R.attr.primaryColor),
             problems.size.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.tracking_problems, it, it) }, faded = true) {
-            findNavController().navigate(R.id.action_global_settingsFragment)
+            findNavController().navigate(R.id.action_global_settingsFragment,
+                bundleOf(SettingsFragment.OPEN to if (problems.isNotEmpty()) SettingsFragment.TRACKING else SettingsFragment.STATS))
         })
         rows.addView(row(getString(R.string.new_stat), ADD, context.getColorFromAttr(R.attr.primaryColor), null, faded = true) {
             NewMedicine.pick(context, store) { if (view != null) build() }

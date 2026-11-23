@@ -32,7 +32,11 @@ class StatFragment : Fragment(R.layout.fragment_stat) {
         pager.adapter = object : FragmentStateAdapter(this) {
             override fun getItemCount() = ids.size
             override fun createFragment(position: Int): Fragment =
-                if (ids[position] == MoodStore.SUPPLEMENTS) SupplementsFragment().apply { arguments = bundleOf(SupplementsFragment.IN_PAGER to true) }
+                if (ids[position] == MoodStore.SUPPLEMENTS) SupplementsFragment().apply {
+                    // A supplement to show first, when opened from one
+                    arguments = bundleOf(SupplementsFragment.IN_PAGER to true,
+                        SupplementsFragment.SELECTED to this@StatFragment.arguments?.getString(SupplementsFragment.SELECTED))
+                }
                 else StatPageFragment().apply { arguments = bundleOf(STAT_ID to ids[position]) }
         }
         // The pages own their scrolling; the pager's own overscroll glow only gets in the way

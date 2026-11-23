@@ -159,7 +159,7 @@ abstract class CardPageFragment : Fragment() {
         val list = ListDrag(cards, pageScroll()) { cardKeys[it] != null }
         list.start(root)
         return DragSession(root, x, y, zones = listOf(DragSession.Zone(HIDE_CARD, getString(R.string.hide), Gravity.TOP or Gravity.CENTER_HORIZONTAL)),
-            onMove = { _, fingerY -> list.move(fingerY) }, onEnd = { list.stop() }) { drop ->
+            onMove = { _, fingerY -> list.move(fingerY) }, onEnd = { list.stop() }, onCancel = { list.restore() }) { drop ->
             if (!isAdded) return@DragSession
             if (drop == HIDE_CARD) hideCard(key, root)
             else Arrangement.save(requireContext(), name, savedOrder(name), Arrangement.hidden(requireContext(), name))
@@ -261,9 +261,13 @@ abstract class CardPageFragment : Fragment() {
 
     /**
      * A row inside a section that opens and closes: [title], [value] and an arrow, with [rows]
-     * (usually indented a level, [settingRow]'s `level = 1`) under it while it's open. It shares
-     * [sections] with the page's other collapsible sections and rows, so one is open at a time.
-     * Put [Collapsible.view] among the section's rows; [Collapsible.rows] is the list holding [rows].
+     * (usually indented a level, [settingRow]'s `level = 1`) under it while it's open; one of
+     * [sections] is open at a time. Put [Collapsible.view] among the section's rows; [Collapsible.rows]
+     * is the list holding [rows].
+     *
+     * In a section that always shows, it can share [sections] with the page's collapsible sections. In a
+     * collapsible section it needs a [OneOpen] of its own: opening it would otherwise close the section
+     * it's in (Settings keeps `groups` apart from `sections` for this).
      */
     internal fun collapsibleGroup(sections: OneOpen, key: String, title: String, value: String?, about: String?, rows: List<View?>): Collapsible {
         val header = settingRow(title, value, about) { sections.toggle(key) }
@@ -693,7 +697,8 @@ internal const val TOP_SHOWN = 5
  * Which of a page's collapsible sections ([CardPageFragment.collapsibleSection]) and rows
  * ([CardPageFragment.collapsibleGroup]) is open: at most one at a time, by key. Keep one per page in
  * a field, so the open one stays open while the page rebuilds and after coming back to it; register
- * the sections again each time the page is built (making them does that).
+ * the sections again each time the page is built (making them does that). Rows inside a collapsible
+ * section need a separate one, or opening a row closes its own section.
  *
  * - [toggle] opens a section (closing the one open) or closes it, as tapping its header does.
  * - [show] opens one from code, such as the section a search match is in; null closes them all.

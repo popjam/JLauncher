@@ -3,8 +3,12 @@ package app.olauncher.helper
 import android.content.Context
 import android.text.format.DateFormat
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * How times and durations are written everywhere (except the Home screen's lockdown widget, which
@@ -43,6 +47,13 @@ object Formats {
     fun time(context: Context, epochMs: Long) = time(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalTime(), is24(context))
     fun timeRange(context: Context, start: LocalTime, end: LocalTime) = timeRange(start, end, is24(context))
     fun hour(context: Context, hour: Int) = hour(hour, is24(context))
+
+    /** When something happened: its time if that was [today], otherwise its date, "3 Nov" */
+    fun timeOrDate(at: LocalDateTime, today: LocalDate, is24: Boolean, locale: Locale = Locale.getDefault()): String =
+        if (at.toLocalDate() == today) time(at.toLocalTime(), is24) else at.format(DateTimeFormatter.ofPattern("d MMM", locale))
+
+    fun timeOrDate(context: Context, epochMs: Long): String =
+        timeOrDate(LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault()), LocalDate.now(), is24(context))
 
     // --- Durations ---
 

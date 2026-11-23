@@ -1068,7 +1068,7 @@ class SettingsFragment : CardPageFragment() {
         card.body(BACKUP, when {
                 folder.isEmpty() -> getString(R.string.off)
                 BackupManager.isFolderFailing(context) -> getString(R.string.backup_not_saving)
-                saved > 0 -> getString(R.string.backup_saved_at, LockdownGate.time(context, saved))
+                saved > 0 -> getString(R.string.backup_saved_at, Formats.timeOrDate(context, saved))
                 else -> getString(R.string.on)
             },
             row(card, getString(R.string.backup_folder), when {

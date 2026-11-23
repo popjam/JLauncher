@@ -788,7 +788,8 @@ class StatsHomeFragment : CardPageFragment() {
     }
 
     private fun openSupplement(id: String) {
-        runCatching { findNavController().navigate(R.id.supplementsFragment, androidx.core.os.bundleOf(SupplementsFragment.SELECTED to id)) }
+        runCatching { findNavController().navigate(R.id.action_global_statFragment,
+            androidx.core.os.bundleOf(StatFragment.STAT_ID to MoodStore.SUPPLEMENTS, SupplementsFragment.SELECTED to id)) }
     }
 
     /** How [m] reads in a sentence, by what it is: the days in its groups, and what a difference in it means */

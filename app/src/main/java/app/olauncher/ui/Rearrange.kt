@@ -114,7 +114,8 @@ class HoldToDrag(
  * - [onMove]: the finger's every move, for a list that makes room as it goes ([ListDrag]).
  *
  * [onDrop] gets the key of the zone or slot it was dropped on, or null for neither; [onEnd] runs
- * first, however it ends.
+ * first, however it ends. [onCancel] runs instead of [onDrop] when the drag is cancelled (the system
+ * took the touch away), so whatever moved to make room can go back.
  */
 class DragSession(
     private val source: View,
@@ -124,6 +125,7 @@ class DragSession(
     private val slots: List<Slot> = emptyList(),
     private val onMove: ((x: Float, y: Float) -> Unit)? = null,
     private val onEnd: () -> Unit = {},
+    private val onCancel: () -> Unit = {},
     private val onDrop: (key: Any?) -> Unit,
 ) {
     /** A labelled place by an edge of the screen, at [gravity] */
@@ -219,6 +221,7 @@ class DragSession(
     fun cancel() {
         if (ended) return
         finish()
+        onCancel()
     }
 
     private fun finish() {
@@ -267,16 +270,32 @@ class DragSession(
 /**
  * Makes room in a vertical [list] as a child is dragged over it: the others move up or down around it
  * (it stays put in the list, so its touches keep coming), and [scroll] scrolls near its edges. Only
- * children [movable] says yes to change places.
+ * children [movable] says yes to change places. A drag that doesn't end in a drop puts them back
+ * ([restore]).
  */
 class ListDrag(private val list: LinearLayout, private val scroll: ScrollView?, private val movable: (View) -> Boolean) {
 
     private var dragged: View? = null
     private var lastY = 0f
     private var speed = 0
+    private var original = emptyList<View>()
 
     fun start(view: View) {
         dragged = view
+        original = (0 until list.childCount).map { list.getChildAt(it) }
+    }
+
+    /** Puts the children back in the order they had when the drag started */
+    fun restore() {
+        stop()
+        if (original.isEmpty() || original.size != list.childCount) return
+        if (original.indices.all { list.getChildAt(it) === original[it] }) return
+        original.forEachIndexed { i, child ->
+            if (list.getChildAt(i) !== child) {
+                list.removeView(child)
+                list.addView(child, i)
+            }
+        }
     }
 
     fun move(y: Float) {

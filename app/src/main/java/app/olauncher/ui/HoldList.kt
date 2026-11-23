@@ -107,8 +107,13 @@ class HoldList<K : Any>(
     /** Keys of rows that can't be selected */
     private val unselectable = mutableSetOf<Any>()
 
-    /** Leaves select mode */
+    /** The drag going on, if any */
+    private var dragging: DragSession? = null
+
+    /** Leaves select mode, and cancels a drag going on (its rows go back) */
     fun end() {
+        dragging?.cancel()
+        dragging = null
         if (!selecting) return
         selecting = false
         selected.clear()
@@ -234,8 +239,8 @@ class HoldList<K : Any>(
         val list = list!!
         val drag = ListDrag(list, scroll) { keys[it] != null }
         drag.start(row)
-        return DragSession(row, x, y, onMove = { _, fingerY -> drag.move(fingerY) }, onEnd = { drag.stop() }) {
+        return DragSession(row, x, y, onMove = { _, fingerY -> drag.move(fingerY) }, onEnd = { drag.stop(); dragging = null }, onCancel = { drag.restore() }) {
             onReorder?.invoke(rows().mapNotNull { keyOf(it) })
-        }
+        }.also { dragging = it }
     }
 }

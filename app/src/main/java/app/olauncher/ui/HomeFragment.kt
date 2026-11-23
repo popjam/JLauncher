@@ -606,7 +606,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         }
         val slot = view.tag.toString().toIntOrNull() ?: return null
         return DragSession(view, x, y, zones = zones,
-            onMove = { _, y -> list.move(y) }, onEnd = { list.stop() }) { key ->
+            onMove = { _, y -> list.move(y) }, onEnd = { list.stop() }, onCancel = { list.restore() }) { key ->
             val context = requireContext()
             when (key) {
                 HIDE -> prefs.removeHomeSlot(page, slot)

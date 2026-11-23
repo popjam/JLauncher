@@ -272,13 +272,13 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
 /**
  * Places you go, found from where the phone's been: ones to name (tap to see where on the map), and the
  * ones named, with their time this month. Tapping one shows it on the map; holding one opens its menu
- * (name or rename, recolour, open in map, not a place or remove, select several).
+ * (name or rename, recolour, open in map, not a place or remove, select several). Nothing without
+ * location: [socialHomesCard] asks for it.
  */
 internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) {
     val context = requireContext()
-    if (!Social.hasLocation(context)) return Card(getString(R.string.places_title_short)).needs(getString(R.string.social_need_location)) {
-        askLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
+    // Without location the homes card above already asks for it
+    if (!Social.hasLocation(context)) return
     // Finding places turned off in Settings: no card
     if (!Places.enabled(context)) return
     val suggestions = Places.suggestions(context)

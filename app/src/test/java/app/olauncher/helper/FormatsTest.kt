@@ -63,4 +63,11 @@ class FormatsTest {
         assertEquals("1%", Formats.percent(1f))
         assertEquals("25%", Formats.percent(24.6f))
     }
+
+    @Test fun timeOrDateShowsTheDateWhenItWasntToday() {
+        val today = java.time.LocalDate.of(2026, 11, 24)
+        assertEquals("9:30 pm", Formats.timeOrDate(today.atTime(21, 30), today, false, java.util.Locale.UK))
+        assertEquals("21:30", Formats.timeOrDate(today.atTime(21, 30), today, true, java.util.Locale.UK))
+        assertEquals("3 Nov", Formats.timeOrDate(java.time.LocalDate.of(2026, 11, 3).atTime(9, 0), today, false, java.util.Locale.UK))
+    }
 }

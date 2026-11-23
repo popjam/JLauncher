@@ -90,8 +90,15 @@ class NewsletterSettingsFragment : CardPageFragment() {
     private var scroll: ScrollView? = null
 
     /** The subreddits: held to move, rename or remove them, or to pick several to remove */
-    private val subList = HoldList<Int>(
-        onReorder = { order -> settings?.let { s -> NewsletterSync.subreddits(s).let { subs -> changed(NewsletterSync.withSubreddits(s, order.map { subs[it] })) } } },
+    private val subList = HoldList<String>(
+        onReorder = { order ->
+            settings?.let { s ->
+                val subs = NewsletterSync.subreddits(s)
+                val moved = order.mapNotNull { name -> subs.firstOrNull { it.name == name } }
+                // Only when the rows still match the subreddits, so nothing is lost or doubled
+                if (moved.size == subs.size && moved.toSet() == subs.toSet()) changed(NewsletterSync.withSubreddits(s, moved))
+            }
+        },
         onRemove = { picked -> settings?.let { s -> removeSubreddits(s, NewsletterSync.subreddits(s), picked) } },
     )
 
@@ -120,7 +127,12 @@ class NewsletterSettingsFragment : CardPageFragment() {
                 if (!isAdded) return@post
                 if (fetched == null) context.showToast(R.string.newsletter_cant_reach)
                 // A change made here lately wins over what the PC has, until it's caught up
-                if (fetched != null && !savePending) settings = recentSettings() ?: fetched
+                if (fetched != null && !savePending) {
+                    val next = recentSettings() ?: fetched
+                    // Picking or moving rows of what's been replaced would act on the wrong ones
+                    if (next.toString() != settings?.toString()) subList.end()
+                    settings = next
+                }
                 render()
             }
         }
@@ -206,19 +218,20 @@ class NewsletterSettingsFragment : CardPageFragment() {
         val list = card.rowsSection(subRows + row(getString(R.string.newsletter_add_subreddit), null, faded = true) { askAdd(s, subs) })
         subList.attach(list, scroll)
         subRows.forEachIndexed { i, row ->
-            subList.item(row, i, label = subs[i].name, onTap = {
+            subList.item(row, subs[i].name, label = subs[i].name, onTap = {
                 findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(PROFILE to profile, SUBREDDIT to i))
             }, actions = listOf(
                 HoldList.Action(getString(R.string.rename)) { askRename(s, subs, i) },
-                HoldList.Action(getString(R.string.remove)) { removeSubreddits(s, subs, setOf(i)) },
+                HoldList.Action(getString(R.string.remove)) { removeSubreddits(s, subs, setOf(subs[i].name)) },
             ))
         }
     }
 
-    /** Takes the subreddits at [picked] off, keeping at least one */
-    private fun removeSubreddits(s: JSONObject, subs: List<NewsletterSync.Subreddit>, picked: Set<Int>) {
-        if (picked.size >= subs.size) return requireContext().showToast(R.string.newsletter_keep_one)
-        changed(NewsletterSync.withSubreddits(s, subs.filterIndexed { i, _ -> i !in picked }))
+    /** Takes the subreddits named in [picked] off, keeping at least one */
+    private fun removeSubreddits(s: JSONObject, subs: List<NewsletterSync.Subreddit>, picked: Set<String>) {
+        val left = subs.filter { it.name !in picked }
+        if (left.isEmpty()) return requireContext().showToast(R.string.newsletter_keep_one)
+        if (left.size != subs.size) changed(NewsletterSync.withSubreddits(s, left))
     }
 
     /** Another subreddit in the place of the one at [index], keeping its own settings */
