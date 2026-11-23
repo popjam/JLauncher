@@ -175,12 +175,12 @@ fun TextView.setStatDot(color: Int?) {
  * band its face stands for; null when it hasn't one, so the face's name is shown instead.
  */
 fun Context.statAmount(stat: StatInfo, date: LocalDate, day: MoodStore.Day?): String? = when (stat.kind) {
-    StatKind.SCREEN -> day?.totalUsageMs?.let { formattedTimeSpent(it) }
-    StatKind.SLEEP -> Sleep.nights(this)[date]?.let { formattedTimeSpent(it.asleepMs) }
-    StatKind.VIBECODING -> Vibecoding.days(this)[date]?.let { formattedTimeSpent(it.minutes * 60_000L) }
-    StatKind.MUSIC -> Music.days(this)[date]?.let { formattedTimeSpent(it.ms) }
-    StatKind.SOCIAL -> Social.days(this)[date]?.let { formattedTimeSpent(it.outMs) }
-    StatKind.WORK -> Social.days(this)[date]?.workMs?.takeIf { it > 0 }?.let { formattedTimeSpent(it) }
+    StatKind.SCREEN -> day?.totalUsageMs?.let { Formats.duration(it) }
+    StatKind.SLEEP -> Sleep.nights(this)[date]?.let { Formats.duration(it.asleepMs) }
+    StatKind.VIBECODING -> Vibecoding.days(this)[date]?.let { Formats.duration(it.minutes * 60_000L) }
+    StatKind.MUSIC -> Music.days(this)[date]?.let { Formats.duration(it.ms) }
+    StatKind.SOCIAL -> Social.days(this)[date]?.let { Formats.duration(it.outMs) }
+    StatKind.WORK -> Social.days(this)[date]?.workMs?.takeIf { it > 0 }?.let { Formats.duration(it) }
     StatKind.WEATHER -> WeatherHistory.days(this)[date]?.let { String.format(Locale.getDefault(), "%.1fh sun", it.sunHours) }
     StatKind.PEOPLE -> People.days(this)[date]?.let { resources.getQuantityString(R.plurals.messages_count, it.messages, it.messages) }
     StatKind.LOCKDOWN -> Lockdown.blockedDays(app.olauncher.data.Prefs(this))[date]?.let { getString(R.string.lockdown_blocked_count, it) }

@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.updatePadding
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.Prefs
 import app.olauncher.helper.BlockItems
@@ -59,7 +60,7 @@ private fun StatPageFragment.lockdownNowCard() {
             })
             val left = Lockdown.activeUntil(context, prefs)?.takeIf { on }?.let { it - System.currentTimeMillis() }
             val why = LockdownGate.whyText(context)?.takeIf { on }
-            listOfNotNull(left?.let { getString(R.string.lockdown_left, LockdownGate.duration(context, it)) }, why).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
+            listOfNotNull(left?.let { getString(R.string.lockdown_left, Formats.duration(it)) }, why).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
                 addView(card.textView(Style.TEXT_BODY, 165).apply { text = it })
             }
         })
@@ -132,10 +133,10 @@ private fun StatPageFragment.lockdownTimeCard() {
     val today = LocalDate.now()
     val card = Card(getString(R.string.lockdown_time_locked))
     val week = (1..7L).map { days[today.minusDays(it)]?.phoneMs ?: 0L }
-    card.headline(LockdownGate.durationOrNone(context, days[today]?.phoneMs ?: 0L),
-        getString(R.string.lockdown_time_caption, LockdownGate.durationOrNone(context, week.average().roundToLong())))
+    card.headline(Formats.duration(days[today]?.phoneMs ?: 0L),
+        getString(R.string.lockdown_time_caption, Formats.duration(week.average().roundToLong())))
     dayBars(card, days.mapValues { it.value.phoneMs / 3_600_000f }, stat.color) { date, _ ->
-        LockdownGate.durationOrNone(context, days[date]?.phoneMs ?: 0L)
+        Formats.duration(days[date]?.phoneMs ?: 0L)
     }
 }
 
@@ -151,17 +152,17 @@ private fun StatPageFragment.lockdownWeekCard() {
     val mondayMs = Lockdown.epoch(monday.atStartOfDay())
     val breaks = Lockdown.breakLog(prefs).filter { it.start >= mondayMs && (it.device == "phone" || Lockdown.breaks(prefs).shared) }
     val tiles = mutableListOf(
-        LockdownGate.durationOrNone(context, thisWeek.values.sumOf { it.phoneMs }) to getString(R.string.lockdown_device_phone),
+        Formats.duration(thisWeek.values.sumOf { it.phoneMs }) to getString(R.string.lockdown_device_phone),
     )
-    if (Lockdown.macPaired(context)) tiles += LockdownGate.durationOrNone(context, thisWeek.values.sumOf { it.macMs }) to getString(R.string.lockdown_device_mac)
-    if (Lockdown.tvPaired(context)) tiles += LockdownGate.durationOrNone(context, thisWeek.values.sumOf { it.tvMs }) to getString(R.string.lockdown_device_tv)
+    if (Lockdown.macPaired(context)) tiles += Formats.duration(thisWeek.values.sumOf { it.macMs }) to getString(R.string.lockdown_device_mac)
+    if (Lockdown.tvPaired(context)) tiles += Formats.duration(thisWeek.values.sumOf { it.tvMs }) to getString(R.string.lockdown_device_tv)
     tiles += breaks.size.toString() to getString(R.string.lockdown_breaks_taken)
     tiles(card, null, tiles)
     val longest = days.maxByOrNull { it.value.phoneMs }?.takeIf { it.value.phoneMs > 0 }
     val breakTime = thisWeek.values.sumOf { it.breakMs }
     val lines = listOfNotNull(
-        longest?.let { getString(R.string.lockdown_longest_day, LockdownGate.durationOrNone(context, it.value.phoneMs), dateText(it.key)) },
-        getString(R.string.lockdown_break_time, LockdownGate.durationOrNone(context, breakTime)).takeIf { breakTime > 0 },
+        longest?.let { getString(R.string.lockdown_longest_day, Formats.duration(it.value.phoneMs), dateText(it.key)) },
+        getString(R.string.lockdown_break_time, Formats.duration(breakTime)).takeIf { breakTime > 0 },
         Lockdown.streak(context, prefs)?.let { getString(R.string.lockdown_streak_line, resources.getQuantityString(R.plurals.lockdown_days, it, it)) },
         usualHours(days)?.let { getString(R.string.lockdown_usually, it) },
     )

@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.updatePadding
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.helper.Spending
 import app.olauncher.helper.StatKind
@@ -120,13 +121,11 @@ internal fun StatPageFragment.spendingCard() {
         card.showNote(getString(R.string.spending_none))
         return
     }
-    val timeFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     val subscriptions = Subscriptions.all(context)
     fun isSubscription(p: Spending.Purchase) = subscriptions.any { it.merchant == p.merchant && abs(it.cents - p.cents) <= maxOf(50L, it.cents / 4) }
     purchases.take(SPENDING_SHOWN).forEach { purchase ->
-        val time = java.time.Instant.ofEpochMilli(purchase.time).atZone(java.time.ZoneId.systemDefault())
-        val `when` = if (purchase.date == today) time.format(timeFormat).lowercase(Locale.getDefault()) else dateText(purchase.date)
+        val `when` = if (purchase.date == today) Formats.time(context, purchase.time) else dateText(purchase.date)
         list.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL

@@ -19,6 +19,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.Prefs
 import app.olauncher.helper.Challenge
@@ -320,12 +321,12 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         return when (challenge.type) {
             Challenge.Type.NONE -> getString(R.string.lockdown_unlock_nothing)
             Challenge.Type.HOLD -> getString(R.string.challenge_hold_n, if (challenge.amount < 60) getString(R.string.seconds_value, challenge.amount)
-                else LockdownGate.duration(context, challenge.amount * 1000L))
+                else Formats.duration(challenge.amount * 1000L))
             Challenge.Type.TAPS -> getString(R.string.challenge_taps_n, challenge.amount)
             Challenge.Type.PHRASE -> if (challenge.amount <= 1) getString(R.string.challenge_phrase) else getString(R.string.challenge_phrase_n, challenge.amount)
             Challenge.Type.RANDOM -> getString(R.string.challenge_random_n, challenge.amount)
             Challenge.Type.PASSWORD -> getString(R.string.lockdown_password)
-            Challenge.Type.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, challenge.amount * 60_000L))
+            Challenge.Type.WAIT -> getString(R.string.lockdown_unlock_wait, Formats.duration(challenge.amount * 60_000L))
             Challenge.Type.NEVER -> getString(R.string.challenge_never)
         }
     }
@@ -480,5 +481,5 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     }
 
     /** Minutes as "30m", "1h", "1h 30m", or Off for 0 */
-    internal fun minutesName(minutes: Int) = if (minutes <= 0) getString(R.string.off) else LockdownGate.duration(requireContext(), minutes * 60_000L)
+    internal fun minutesName(minutes: Int) = if (minutes <= 0) getString(R.string.off) else Formats.duration(minutes * 60_000L)
 }

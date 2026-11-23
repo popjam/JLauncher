@@ -35,7 +35,7 @@ object Tracking {
         fun ago(time: Long): String {
             val hours = (now - time) / 3_600_000L
             return if (hours >= 24) context.resources.getQuantityString(R.plurals.tracking_days, (hours / 24).toInt(), (hours / 24).toInt())
-            else context.formattedTimeSpent(now - time)
+            else Formats.duration(now - time)
         }
         fun open(intent: Intent) = { c: Context -> runCatching { c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }; Unit }
         val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.packageName))

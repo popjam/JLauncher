@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.AppModel
 import app.olauncher.helper.AppPause
@@ -352,7 +353,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val context = requireContext()
         val stages = Limits.stages(prefs)
         val used = Limits.totalToday(context)
-        val today = section(getString(R.string.lockdown_today), LockdownGate.duration(context, used))
+        val today = section(getString(R.string.lockdown_today), Formats.duration(used))
         today.root.addView(StageBar(context, stages, used, ink, labels = true), today.root.indexOfChild(today.scene),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64.dpToPx()))
         val card = section("")
@@ -401,7 +402,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val used = Lockdown.screenTimeToday(context)
         val sources = sourcesShown()
         val today = section(getString(R.string.lockdown_today))
-        today.add(line(today, sources.joinToString(" · ") { sourceName(it) + " " + LockdownGate.durationOrNone(context, used[it] ?: 0L) }))
+        today.add(line(today, sources.joinToString(" · ") { sourceName(it) + " " + Formats.duration(used[it] ?: 0L) }))
         val triggers = Lockdown.triggers(prefs)
         val card = section(getString(R.string.lockdown_lock_after))
         if (triggers.isEmpty()) card.add(line(card, getString(R.string.lockdown_triggers_none)))
@@ -582,7 +583,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             !rule.isEmpty && Limits.over(rule, Limits.usedToday(context, app.appPackage), Limits.opensToday(context, app.appPackage), false) != null
         }
         now.add(android.widget.TextView(context, null, 0, R.style.TextLarge).apply {
-            text = getString(R.string.lockdown_used_today, LockdownGate.duration(context, Limits.totalToday(context)))
+            text = getString(R.string.lockdown_used_today, Formats.duration(Limits.totalToday(context)))
             textSize = Style.TEXT_LARGE
             setTextColor(ink)
         }, now.textView(Style.TEXT_BODY, 165).apply {
@@ -642,7 +643,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
                 addView(card.textView(Style.TEXT_BODY, 200).apply { text = summary(pkg) })
             })
             addView(card.textView(Style.TEXT_SMALL, 150).apply {
-                text = listOfNotNull(getString(R.string.lockdown_used_today, LockdownGate.durationOrNone(context, used)),
+                text = listOfNotNull(getString(R.string.lockdown_used_today, Formats.duration(used)),
                     resources.getQuantityString(R.plurals.lockdown_opens, Limits.opensToday(context, pkg), Limits.opensToday(context, pkg)).takeIf { rule.opens > 0 }
                 ).joinToString(" · ")
                 updatePadding(top = 2.dpToPx())
@@ -680,7 +681,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         )
         val again = { if (isAdded) { render(); appSheet(pkg) } }
         AppDialog(context)
-            .setTitle(appLabel(pkg) + " · " + LockdownGate.durationOrNone(context, Limits.usedToday(context, pkg)))
+            .setTitle(appLabel(pkg) + " · " + Formats.duration(Limits.usedToday(context, pkg)))
             .setItems(options.toTypedArray()) { _, which ->
                 when (which) {
                     0 -> choose(getString(R.string.lockdown_daily_time), Limits.MINUTE_CHOICES.map { minutesName(it) }, Limits.MINUTE_CHOICES.indexOf(rule.minutes)) {

@@ -21,6 +21,7 @@ import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.DeviceTime
@@ -1177,7 +1178,7 @@ class StatsHomeFragment : CardPageFragment() {
             val by = (usual + 15) / 30 * 30
             val clock = LocalTime.of(BEDTIME_FROM, 0).plusMinutes(by.toLong())
             val time = if (clock == LocalTime.MIDNIGHT) getString(R.string.ins_midnight)
-            else clock.format(DateTimeFormatter.ofPattern(if (clock.minute == 0) "h a" else "h:mm a", Locale.getDefault())).lowercase(Locale.getDefault())
+            else Formats.time(requireContext(), clock)
             night("bed", nights.mapValues { if (minutes(it.value) <= by) 1f else 0f }) { early ->
                 getString(if (early) R.string.ins_asleep_by else R.string.ins_asleep_after, time)
             }

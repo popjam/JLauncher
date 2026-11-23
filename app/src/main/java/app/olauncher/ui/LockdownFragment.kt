@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.updatePadding
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.helper.BlockItems
 import app.olauncher.helper.Breaks
@@ -273,7 +274,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val card = section(getString(R.string.lockdown_breaks))
         val config = Lockdown.breaks(prefs)
         val value = if (!config.on) getString(R.string.off) else listOfNotNull(
-            LockdownGate.duration(context, config.minutes * 60_000L),
+            Formats.duration(config.minutes * 60_000L),
             config.perDay.takeIf { it > 0 }?.let { getString(R.string.lockdown_n_a_day, it) },
         ).joinToString(" · ")
         card.add(row(card, getString(R.string.lockdown_breaks), value, R.string.info_lockdown_breaks) { open(LockdownPageFragment.BREAKS) })
@@ -305,7 +306,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val context = requireContext()
         val card = section(getString(R.string.lockdown_extras))
         val canGrey = LockdownSystem.canGrayscale(context)
-        fun tap(minutes: Int) = getString(R.string.lockdown_a_tap, LockdownGate.duration(context, minutes * 60_000L))
+        fun tap(minutes: Int) = getString(R.string.lockdown_a_tap, Formats.duration(minutes * 60_000L))
         card.add(
             row(card, getString(R.string.lockdown_home_widget), if (prefs.lockdownHomeWidget) tap(prefs.lockdownWidgetMinutes) else getString(R.string.off),
                 R.string.info_lockdown_home_widget) {
@@ -412,7 +413,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val context = requireContext()
         val running = Lockdown.Device.values().filter { Lockdown.covers(devices, it) }.any { Lockdown.isOn(context, prefs, it) }
         val minutes = listOf(15, 30, 60, 120, 240, 480, 1440)
-        val names = minutes.map { (if (running) "+" else "") + LockdownGate.duration(context, it * 60_000L) } + getString(R.string.lockdown_until_a_time) +
+        val names = minutes.map { (if (running) "+" else "") + Formats.duration(it * 60_000L) } + getString(R.string.lockdown_until_a_time) +
             listOfNotNull(getString(R.string.lockdown_until_off).takeIf { !running })
         val dialog = AppDialog(context)
             .setTitle(if (running) getString(R.string.lockdown_add_time) else getString(R.string.lockdown_start_title))
@@ -533,9 +534,8 @@ fun triggerName(context: Context, trigger: Lockdown.Trigger): String {
         Lockdown.Source.MAC -> R.string.lockdown_device_mac
         Lockdown.Source.TV -> R.string.device_tv
     })
-    val until = java.time.LocalTime.of(trigger.until / 60, trigger.until % 60)
-        .format(java.time.format.DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm a", Locale.getDefault()))
-    return context.getString(R.string.lockdown_trigger_name, source, LockdownGate.duration(context, trigger.minutes * 60_000L), until)
+    val until = Formats.time(context, Formats.minutesOfDay(trigger.until))
+    return context.getString(R.string.lockdown_trigger_name, source, Formats.duration(trigger.minutes * 60_000L), until)
 }
 
 /**
@@ -570,7 +570,7 @@ class StageBar(context: Context, private val stages: List<Int>, private val used
             canvas.drawRect(mx - d, y - 10 * d, mx + d, y + 10 * d, paint)
             if (labels) {
                 text.color = ink
-                canvas.drawText(LockdownGate.duration(context, minutes * 60_000L), mx, y - 14 * d, text)
+                canvas.drawText(Formats.duration(minutes * 60_000L), mx, y - 14 * d, text)
                 text.color = androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 150)
                 canvas.drawText(LockdownGate.stageShort(context, i + 1), mx, y + 24 * d, text)
             }

@@ -64,7 +64,7 @@
     <string name="spending_turn_on">Turn on</string>
     <string name="sleep_last_night">Last night</string>
     <string name="sleep_none">Sleep fills in by itself from when your screen was on. It shows here after your first night.</string>
-    <string name="sleep_span">%1$s – %2$s</string>
+    <string name="sleep_span">%1$s–%2$s</string>
     <string name="sleep_asleep">%1$s asleep</string>
     <plurals name="sleep_checks">
         <item quantity="one">checked phone once</item>

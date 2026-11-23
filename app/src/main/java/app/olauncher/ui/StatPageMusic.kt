@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.Music
@@ -169,7 +170,7 @@ internal fun StatPageFragment.musicHoursCard() {
             val y = cy + sin * mid
             s.target(h, RectF(x - s.dp(12f), y - s.dp(12f), x + s.dp(12f), y + s.dp(12f)))
         }
-        listOf(0 to "12am", 6 to "6am", 12 to "12pm", 18 to "6pm").forEach { (h, label) ->
+        listOf(0, 6, 12, 18).map { it to hourText(it) }.forEach { (h, label) ->
             val angle = Math.toRadians(h * 15.0 - 90)
             val r = outer + s.dp(11f)
             s.text(label, cx + Math.cos(angle).toFloat() * r, cy + Math.sin(angle).toFloat() * r + s.sp(4f), faint(140), s.sp(11f))
@@ -179,12 +180,7 @@ internal fun StatPageFragment.musicHoursCard() {
     }
 }
 
-internal fun StatPageFragment.hourText(hour: Int) = when {
-    hour == 0 -> "12am"
-    hour < 12 -> "${hour}am"
-    hour == 12 -> "12pm"
-    else -> "${hour - 12}pm"
-}
+internal fun StatPageFragment.hourText(hour: Int) = Formats.hour(requireContext(), hour)
 
 /** The artists listened to most over the last [MUSIC_DAYS] days, with the mood on the days they played */
 internal fun StatPageFragment.musicArtistsCard() {

@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.navigation.fragment.findNavController
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.databinding.FragmentStatPageBinding
@@ -31,7 +32,6 @@ import app.olauncher.helper.StatInfo
 import app.olauncher.helper.StatKind
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
-import app.olauncher.helper.formattedTimeSpent
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.Month
@@ -443,12 +443,12 @@ class StatPageFragment : CardPageFragment() {
     internal fun dayText(s: StatInfo, date: LocalDate): String? {
         if (s.id == stat.id && unit != null && !usage) real?.get(date)?.let { return valueText(it) }
         val day = dayOf(date) ?: return null
-        if (s.id == MoodStore.USAGE) return day.totalUsageMs?.let { requireContext().formattedTimeSpent(it) }
+        if (s.id == MoodStore.USAGE) return day.totalUsageMs?.let { Formats.duration(it) }
         return day.face(s.id)?.let { faceName(s, it) }
     }
 
     internal fun averageText(s: StatInfo, average: Float): String = when {
-        s.id == MoodStore.USAGE -> getString(R.string.a_day, requireContext().formattedTimeSpent((average * HOUR_MS).toLong()))
+        s.id == MoodStore.USAGE -> getString(R.string.a_day, Formats.duration((average * HOUR_MS).toLong()))
         s.id == stat.id && unit != null -> getString(R.string.a_day, valueText(average))
         else -> String.format(Locale.getDefault(), "%.1f", average)
     }

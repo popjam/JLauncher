@@ -168,7 +168,7 @@ class MyAccessibilityService : AccessibilityService() {
         Limits.setWarned(this, pkg)
         val left = rule.minutes * 60_000L - Limits.usedToday(this, pkg)
         // Over the app, which carries on once it's closed
-        showSheet(appLabel(pkg), listOf(getString(R.string.lockdown_left_today_line, LockdownGate.duration(this, left))),
+        showSheet(appLabel(pkg), listOf(getString(R.string.lockdown_left_today_line, Formats.duration(left))),
             BlockScreen.WARNING, BlockScreen.SHADE_DIM, pkg, toHome = false, sticky = false, quiet = false)
     }
 

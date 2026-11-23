@@ -17,6 +17,7 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.os.bundleOf
 import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.DeviceTime
@@ -340,7 +341,7 @@ class DayPageFragment : CardPageFragment() {
         val stretches = day.stretches
         card.describe = { key ->
             val s = stretches[key as Int]
-            listOf(name(s.place), clock(s.startTime.toLocalTime()) + " – " + clock(s.endTime.toLocalTime()), duration(s.ms)).joinToString("\n")
+            listOf(name(s.place), Formats.timeRange(context, s.startTime.toLocalTime(), s.endTime.toLocalTime()), duration(s.ms)).joinToString("\n")
         }
         card.draw { sc ->
             val h = sc.dp(22f)
@@ -351,7 +352,7 @@ class DayPageFragment : CardPageFragment() {
                 sc.rect(x1, 0f, maxOf(x2, x1 + sc.dp(2f)), h, color(s.place), sc.dp(4f))
                 sc.target(i, RectF(x1, 0f, maxOf(x2, x1 + sc.dp(8f)), h + sc.dp(6f)))
             }
-            listOf(0, 6, 12, 18).map { h -> h to clock(java.time.LocalTime.of(h, 0)).replace(":00", "") }.forEach { (hour, label) ->
+            listOf(0, 6, 12, 18).map { h -> h to Formats.hour(requireContext(), h) }.forEach { (hour, label) ->
                 sc.text(label, hour / 24f * sc.width + sc.dp(2f), h + sc.dp(16f), faint(140), sc.sp(11f), android.graphics.Paint.Align.LEFT)
             }
             sc.height = h + sc.dp(22f)
@@ -397,7 +398,7 @@ class DayPageFragment : CardPageFragment() {
                 Triple(StatIcons.CODE, getString(R.string.day_vibecoding), duration(v.minutes * 60_000L) + " · " + resources.getQuantityString(R.plurals.day_prompts, v.prompts, v.prompts))
             },
             DeviceTime.days(context, DeviceTime.Device.MAC)[date]?.takeIf { it.first != null }?.let { d ->
-                Triple(StatIcons.LAPTOP, getString(R.string.day_mac_from), listOfNotNull(d.first, d.last).joinToString(" – "))
+                Triple(StatIcons.LAPTOP, getString(R.string.day_mac_from), listOfNotNull(d.first, d.last).joinToString("–") { runCatching { clock(java.time.LocalTime.parse(it)) }.getOrDefault(it) })
             },
         )
         if (rows.isEmpty()) return

@@ -25,6 +25,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.helper.Dictation
 import app.olauncher.helper.VoiceNotes
@@ -325,7 +326,7 @@ internal fun Fragment.fillPending(into: LinearLayout) {
 private fun Fragment.pendingRow(ui: Context, ink: Int, file: File, faint: (Int) -> Int): View {
     val date = VoiceNotes.dateOf(file) ?: LocalDate.now()
     val day = date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.getDefault()))
-    val time = android.text.format.DateFormat.getTimeFormat(ui).format(java.util.Date(VoiceNotes.startedAt(file)))
+    val time = app.olauncher.helper.Formats.time(ui, VoiceNotes.startedAt(file))
     return LinearLayout(ui).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL

@@ -465,6 +465,21 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     /** Asks for and starts breaks from the home screen */
     private val lockdownGate by lazy { LockdownGate(this) { populateLockdownWidget() } }
 
+    /**
+     * The widget's own way of writing a duration, kept as it always was (rounded up to the minute,
+     * never under 1m) rather than [Formats.duration]
+     */
+    private fun widgetDuration(ms: Long): String {
+        val minutes = ((ms + 59_999) / 60_000).coerceAtLeast(1)
+        val hours = minutes / 60
+        val rest = minutes % 60
+        return when {
+            hours == 0L -> getString(R.string.minutes_short, rest.toInt())
+            rest == 0L -> getString(R.string.hours_short, hours.toInt())
+            else -> getString(R.string.hours_short, hours.toInt()) + " " + getString(R.string.minutes_short, rest.toInt())
+        }
+    }
+
     /** Off: a faded lock and what a tap adds. On: how long until it opens. On a break: the lock open, counting down the break. */
     private fun populateLockdownWidget() {
         val context = requireContext()
@@ -475,8 +490,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         lockdownWidgetIcon.background = StatIcons.drawable(if (onBreak) StatIcons.UNLOCK else StatIcons.LOCK, LOCKDOWN_BLUE, 24.dpToPx())
         lockdownWidgetText.text = when {
             onBreak -> LockdownGate.clockText(Lockdown.breakUntil(prefs, Lockdown.Device.PHONE) - System.currentTimeMillis())
-            !on -> "+" + LockdownGate.duration(context, prefs.lockdownWidgetMinutes * 60_000L)
-            else -> Lockdown.activeUntil(context, prefs)?.let { LockdownGate.duration(context, it - System.currentTimeMillis()) }
+            !on -> "+" + widgetDuration(prefs.lockdownWidgetMinutes * 60_000L)
+            else -> Lockdown.activeUntil(context, prefs)?.let { widgetDuration(it - System.currentTimeMillis()) }
                 ?: getString(R.string.on)
         }
         lockdownWidget.alpha = if (on && !onBreak) 1f else if (onBreak) 0.8f else 0.45f

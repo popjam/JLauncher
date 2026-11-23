@@ -26,7 +26,6 @@ import app.olauncher.helper.statAmount
 import app.olauncher.helper.Vibecoding
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
-import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getColorFromAttr
 import java.time.LocalDate
 import java.util.Locale

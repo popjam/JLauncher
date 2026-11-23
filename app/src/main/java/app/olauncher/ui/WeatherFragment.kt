@@ -12,6 +12,7 @@ import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import app.olauncher.helper.Formats
 import app.olauncher.MainViewModel
 import app.olauncher.R
 import app.olauncher.databinding.FragmentWeatherBinding
@@ -126,7 +127,6 @@ class WeatherFragment : Fragment() {
 
     private fun renderHours(forecast: Weather.Forecast) {
         val context = requireContext()
-        val hourFormat = DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(context)) "HH:mm" else "h a", Locale.getDefault())
         binding.hoursRow.removeAllViews()
         // Equal-width columns with every line centred in them, so the hours line up
         fun line(text: String, size: Float, alpha: Float = 1f) = smallText(text, size, alpha).apply {
@@ -138,7 +138,7 @@ class WeatherFragment : Fragment() {
             binding.hoursRow.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                addView(line(if (i == 0) getString(R.string.weather_now) else hour.time.format(hourFormat).lowercase(), 12f, 0.7f))
+                addView(line(if (i == 0) getString(R.string.weather_now) else Formats.time(context, hour.time.toLocalTime()), Style.TEXT_SMALL, 0.7f))
                 addView(PixelWeatherView(context).apply {
                     code = hour.code
                     uv = hour.uv
@@ -193,12 +193,11 @@ class WeatherFragment : Fragment() {
             viewModel.weatherLoading.value == true -> getString(R.string.weather_loading)
             forecast == null && !app.olauncher.helper.Weather.hasLocationPermission(requireContext()) -> getString(R.string.weather_location_denied)
             forecast == null -> getString(R.string.weather_failed)
-            else -> getString(R.string.weather_updated, DateFormat.getTimeFormat(requireContext()).format(Date(forecast.fetchedAt)))
+            else -> getString(R.string.weather_updated, Formats.time(requireContext(), forecast.fetchedAt))
         }
     }
 
-    private fun formatTime(time: LocalTime) =
-        time.format(DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a", Locale.getDefault()))
+    private fun formatTime(time: LocalTime) = Formats.time(requireContext(), time)
 
     private fun smallText(text: String, size: Float, alpha: Float = 1f) =
         TextView(requireContext(), null, 0, R.style.TextSmall).apply {

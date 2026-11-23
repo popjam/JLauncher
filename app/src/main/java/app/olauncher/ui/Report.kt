@@ -11,13 +11,13 @@ import android.net.Uri
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.Sleep
 import app.olauncher.helper.StatInfo
 import app.olauncher.helper.StatKind
 import app.olauncher.helper.allStats
-import app.olauncher.helper.formattedTimeSpent
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -204,9 +204,9 @@ object Report {
             heading(context.getString(R.string.report_daily_life))
             if (nights.isNotEmpty()) {
                 val asleep = nights.values.map { it.asleepMs }.average().toLong()
-                text(context.getString(R.string.report_sleep, context.formattedTimeSpent(asleep), nights.size), 11f)
+                text(context.getString(R.string.report_sleep, Formats.duration(asleep), nights.size), 11f)
             }
-            if (usage.isNotEmpty()) text(context.getString(R.string.report_screen, context.formattedTimeSpent(usage.average().toLong())), 11f)
+            if (usage.isNotEmpty()) text(context.getString(R.string.report_screen, Formats.duration(usage.average().toLong())), 11f)
         }
 
         // The lowest and highest days, with their notes

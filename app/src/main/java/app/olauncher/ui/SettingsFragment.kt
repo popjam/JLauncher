@@ -32,6 +32,7 @@ import androidx.core.os.bundleOf
 import androidx.core.view.updatePadding
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
+import app.olauncher.helper.Formats
 import app.olauncher.BuildConfig
 import app.olauncher.MainViewModel
 import app.olauncher.R
@@ -773,8 +774,7 @@ class SettingsFragment : CardPageFragment() {
     private fun checkInSection() {
         val data = moodStore.load()
         val card = Card(getString(R.string.check_in))
-        val pattern = if (DateFormat.is24HourFormat(requireContext())) "HH:mm" else "h:mm a"
-        fun time(minutes: Int) = LocalTime.of(minutes / 60, minutes % 60).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        fun time(minutes: Int) = Formats.time(requireContext(), Formats.minutesOfDay(minutes))
         card.body(
             row(card, getString(R.string.daily_mood_prompt), onOff(data.promptEnabled), R.string.info_check_in) {
                 val enable = !data.promptEnabled

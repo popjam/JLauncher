@@ -17,6 +17,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import app.olauncher.helper.Formats
 import app.olauncher.data.AppModel
 import app.olauncher.data.Constants
 import app.olauncher.data.Prefs
@@ -32,7 +33,6 @@ import app.olauncher.helper.Vibecoding
 import app.olauncher.helper.Social
 import app.olauncher.helper.SingleLiveEvent
 import app.olauncher.helper.Weather
-import app.olauncher.helper.formattedTimeSpent
 import app.olauncher.helper.getAppsList
 import app.olauncher.helper.getPrivateSpaceApps
 import app.olauncher.helper.getPrivateSpaceUserHandle
@@ -605,7 +605,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun postCombinedScreenTime(phoneMs: Long) {
         val total = runCatching { moodStore.load().days[LocalDate.now().toString()]?.totalUsageMs }.getOrNull() ?: phoneMs
         if (screenTimeMillis.value == total) return
-        screenTimeValue.postValue(appContext.formattedTimeSpent(total))
+        screenTimeValue.postValue(Formats.duration(total))
         screenTimeMillis.postValue(total)
     }
 

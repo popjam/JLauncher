@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.data.Prefs
 import app.olauncher.helper.Breaks
@@ -291,7 +292,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         val waitMs = Lockdown.challenge(prefs).amount * 60_000L
         when (val state = Lockdown.waitState(context, prefs)) {
             is Lockdown.WaitState.Waiting -> AppDialog(context)
-                .setTitle(context.getString(R.string.lockdown_unlocks_in, duration(context, state.msLeft)))
+                .setTitle(context.getString(R.string.lockdown_unlocks_in, Formats.duration(state.msLeft)))
                 .setPositiveButton(R.string.okay, null)
                 .setNegativeButton(R.string.lockdown_stop_waiting) { _, _ ->
                     Lockdown.cancelWait(prefs)
@@ -300,7 +301,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 .show()
             else -> AppDialog(context)
                 .setTitle(R.string.lockdown_wait_title)
-                .setMessage(context.getString(R.string.lockdown_wait_message, duration(context, waitMs), duration(context, Lockdown.READY_MS)))
+                .setMessage(context.getString(R.string.lockdown_wait_message, Formats.duration(waitMs), Formats.duration(Lockdown.READY_MS)))
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.lockdown_start_wait) { _, _ ->
                     Lockdown.startWait(context, prefs)
@@ -468,22 +469,10 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             val at = Lockdown.localTime(epochMs)
             // Tonight's midnight is "midnight", not tomorrow's 00:00
             if (at.toLocalTime() == java.time.LocalTime.MIDNIGHT && at.toLocalDate() == LocalDate.now().plusDays(1)) return context.getString(R.string.lockdown_midnight)
-            val clock = if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm a"
-            val pattern = if (at.toLocalDate() == LocalDate.now()) clock else "EEE $clock"
-            return at.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+            val clock = Formats.time(context, at.toLocalTime())
+            return if (at.toLocalDate() == LocalDate.now()) clock else at.format(DateTimeFormatter.ofPattern("EEE", Locale.getDefault())) + " " + clock
         }
 
-        /** Minutes and hours, rounded up to the minute */
-        fun duration(context: Context, ms: Long): String {
-            val minutes = ((ms + 59_999) / 60_000).coerceAtLeast(1)
-            val hours = minutes / 60
-            val rest = minutes % 60
-            return when {
-                hours == 0L -> context.getString(R.string.minutes_short, rest.toInt())
-                rest == 0L -> context.getString(R.string.hours_short, hours.toInt())
-                else -> context.getString(R.string.hours_short, hours.toInt()) + " " + context.getString(R.string.minutes_short, rest.toInt())
-            }
-        }
 
         /** Why something can't be done right now */
         fun lockedMessage(context: Context): String {
@@ -514,10 +503,10 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 else -> if (block.until == null) context.getString(R.string.lockdown_until_turned_off) else null
             }
             val used = when (block.reason) {
-                Lockdown.Reason.TIME_LIMIT -> pkg?.let { context.getString(R.string.lockdown_used, duration(context, Limits.rule(prefs, it).minutes * 60_000L)) }
+                Lockdown.Reason.TIME_LIMIT -> pkg?.let { context.getString(R.string.lockdown_used, Formats.duration(Limits.rule(prefs, it).minutes * 60_000L)) }
                 Lockdown.Reason.OPENS_LIMIT -> pkg?.let { val n = Limits.rule(prefs, it).opens
                     context.resources.getQuantityString(R.plurals.lockdown_opens, n, n) }
-                Lockdown.Reason.STAGE -> context.getString(R.string.lockdown_screen_time_used, duration(context, Limits.totalToday(context)))
+                Lockdown.Reason.STAGE -> context.getString(R.string.lockdown_screen_time_used, Formats.duration(Limits.totalToday(context)))
                 else -> null
             }
             return listOfNotNull(used, ends).joinToString(" · ")
@@ -539,9 +528,6 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             }
         }
 
-        /** A duration, rounded down to the minute, with 0 for none */
-        fun durationOrNone(context: Context, ms: Long): String =
-            if (ms < 60_000L) context.getString(R.string.minutes_short, 0) else duration(context, ms / 60_000L * 60_000L)
 
         /** "0:42" or "1:05:00", for a countdown */
         fun clockText(ms: Long): String {
@@ -595,9 +581,9 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             val last = stages.lastOrNull { it > 0 } ?: return null
             val used = Limits.totalToday(context)
             val next = Limits.nextStage(stages, used)
-            val text = if (next == null) context.getString(R.string.lockdown_screen_time, duration(context, used))
-                else context.getString(R.string.lockdown_screen_time_next, duration(context, used), stageShort(context, next.first),
-                    duration(context, next.second * 60_000L))
+            val text = if (next == null) context.getString(R.string.lockdown_screen_time, Formats.duration(used))
+                else context.getString(R.string.lockdown_screen_time_next, Formats.duration(used), stageShort(context, next.first),
+                    Formats.duration(next.second * 60_000L))
             return text to (used * 100 / (last * 60_000L)).toInt().coerceIn(0, 100)
         }
 
@@ -641,9 +627,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                     .joinToString(", ") { it.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }
             }
             if (schedule.start == schedule.end) return days + " " + context.getString(R.string.lockdown_all_day).lowercase(Locale.getDefault())
-            val pattern = if (DateFormat.is24HourFormat(context)) "HH:mm" else "h:mm a"
-            fun at(minutes: Int) = java.time.LocalTime.of(minutes / 60, minutes % 60).format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
-            return days + " " + at(schedule.start) + "–" + at(schedule.end)
+            return days + " " + Formats.timeRange(context, Formats.minutesOfDay(schedule.start), Formats.minutesOfDay(schedule.end))
         }
 
         /** Says [message] in lockdown's sheet, or a toast when the accessibility service isn't on */
@@ -673,8 +657,8 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 ?: context.getString(R.string.on)
             if (Lockdown.timedActive(context, prefs) || Lockdown.challenge(prefs).type != Challenge.Type.WAIT) return on
             return when (val wait = Lockdown.waitState(context, prefs)) {
-                is Lockdown.WaitState.Waiting -> on + " · " + context.getString(R.string.lockdown_unlocks_in, duration(context, wait.msLeft))
-                is Lockdown.WaitState.Ready -> on + " · " + context.getString(R.string.lockdown_unlocked_for, duration(context, wait.msLeft))
+                is Lockdown.WaitState.Waiting -> on + " · " + context.getString(R.string.lockdown_unlocks_in, Formats.duration(wait.msLeft))
+                is Lockdown.WaitState.Ready -> on + " · " + context.getString(R.string.lockdown_unlocked_for, Formats.duration(wait.msLeft))
                 else -> on
             }
         }
