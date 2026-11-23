@@ -158,12 +158,12 @@ private fun StatPageFragment.lockdownWeekCard() {
     val longest = days.maxByOrNull { it.value.phoneMs }?.takeIf { it.value.phoneMs > 0 }
     val breakTime = thisWeek.values.sumOf { it.breakMs }
     val lines = listOfNotNull(
-        longest?.let { getString(R.string.lockdown_longest_day, LockdownGate.duration(context, it.value.phoneMs), dateText(it.key)) },
+        longest?.let { getString(R.string.lockdown_longest_day, LockdownGate.durationOrNone(context, it.value.phoneMs), dateText(it.key)) },
         getString(R.string.lockdown_break_time, LockdownGate.durationOrNone(context, breakTime)).takeIf { breakTime > 0 },
         Lockdown.streak(context, prefs)?.let { getString(R.string.lockdown_streak_line, resources.getQuantityString(R.plurals.lockdown_days, it, it)) },
         usualHours(days)?.let { getString(R.string.lockdown_usually, it) },
     )
-    if (lines.isNotEmpty()) card.addBody(card.textView(14f, 190).apply {
+    if (lines.isNotEmpty()) card.root.addView(card.textView(14f, 190).apply {
         text = lines.joinToString("\n")
         setLineSpacing(0f, 1.3f)
         updatePadding(top = 12.dpToPx())

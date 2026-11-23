@@ -8,20 +8,32 @@ public extension Date {
     init(ms: Ms) { self.init(timeIntervalSince1970: Double(ms) / 1000) }
 }
 
+/// The devices, as bits, as on the phone.
+public enum Devices {
+    public static let phone = 1
+    public static let mac = 2
+    public static let both = 3
+}
+
 /// A lockdown schedule, as on the phone: `days` bit 0 Monday … bit 6 Sunday, `start`/`end` minutes
-/// after local midnight. An end before the start runs past midnight; the same start and end is all day.
+/// after local midnight, on `devices`. An end before the start runs past midnight; the same start
+/// and end is all day.
 public struct Schedule: Equatable {
-    public let days: Int, start: Int, end: Int
+    public let days: Int, start: Int, end: Int, devices: Int
 
-    public init(days: Int, start: Int, end: Int) { (self.days, self.start, self.end) = (days, start, end) }
+    public init(days: Int, start: Int, end: Int, devices: Int = Devices.both) {
+        (self.days, self.start, self.end, self.devices) = (days, start, end, devices)
+    }
 
-    /// "days:start:end;…"; anything unreadable is skipped.
+    /// "days:start:end[:devices];…"; anything unreadable is skipped.
     public static func parse(_ text: String) -> [Schedule] {
         text.split(separator: ";").compactMap { part in
             let bits = part.trimmingCharacters(in: .whitespaces).split(separator: ":").compactMap { Int($0) }
-            guard bits.count == 3, (1...0b1111111).contains(bits[0]),
+            guard bits.count == 3 || bits.count == 4, (1...0b1111111).contains(bits[0]),
                   (0..<1440).contains(bits[1]), (0..<1440).contains(bits[2]) else { return nil }
-            return Schedule(days: bits[0], start: bits[1], end: bits[2])
+            let devices = bits.count == 4 ? bits[3] : Devices.both
+            guard (1...3).contains(devices) else { return nil }
+            return Schedule(days: bits[0], start: bits[1], end: bits[2], devices: devices)
         }
     }
 
@@ -50,77 +62,158 @@ public struct Schedule: Equatable {
         if start < end { return at(midnight, end) }
         return minute >= start ? at(tomorrow, end) : at(midnight, end)
     }
+
+    /// Its windows starting from the day before `from` to `days` days after, as [start, end] times.
+    public func windows(from: Date, days count: Int, calendar: Calendar = .current) -> [Window] {
+        let first = calendar.startOfDay(for: from)
+        return (-1...count).compactMap { offset -> Window? in
+            let day = calendar.date(byAdding: .day, value: offset, to: first)!
+            guard on(Self.dayIndex(day, calendar)) else { return nil }
+            func at(_ d: Date, _ m: Int) -> Date { calendar.date(byAdding: .minute, value: m, to: d)! }
+            let next = calendar.date(byAdding: .day, value: 1, to: day)!
+            if start == end { return Window(start: day.ms, end: next.ms) }
+            if start < end { return Window(start: at(day, start).ms, end: at(day, end).ms) }
+            return Window(start: at(day, start).ms, end: at(next, end).ms)
+        }
+    }
 }
 
-/// What the phone says, from /lockdown/<key>/phone.
+/// A stretch of lockdown with a start and an end.
+public struct Window: Equatable {
+    public var start: Ms, end: Ms
+    public init(start: Ms, end: Ms) { (self.start, self.end) = (start, end) }
+    public func covers(_ t: Ms) -> Bool { t >= start && t < end }
+}
+
+/// What the phone says, from /lockdown/<key>/phone: the Mac's lockdown as the phone works it out,
+/// the phone's own for showing, breaks, what ending early needs and what the Mac blocks.
 public struct PhoneState: Equatable {
-    public var manualOn = false
+    /// The Mac's lockdown: on until turned off, a timer, and windows from schedules and screen time
+    public var manual = false
     public var timedUntil: Ms = 0
-    public var schedules = ""
-    public var phoneOnly = false
-    public var phoneOnlyUntil: Ms = 0
+    public var windows: [Window] = []
+    public var breakUntil: Ms = 0
+    /// The phone's, to show
+    public var phoneOn = false
+    public var phoneUntil: Ms = 0
+    public var phoneBreakUntil: Ms = 0
+    public var matched = false
     public var sites: [String] = []
-    public var unlock = "nothing"
+    public var macApps: [String] = []
+    public var challenge = Challenge(type: .nothing)
+    public var phrase = ""
     public var passwordHash = ""
-    public var waitMinutes = 15
+    public var breaks = BreakConfig()
+    public var breakLog: [BreakEntry] = []
     public var updatedAt: Ms = 0
-    /// The id of the last Mac request the phone applied, if the phone sends it.
+    /// The ids of the Mac requests the phone has done lately; nil from a phone from before
+    public var applied: [String]?
+    /// The single request a phone from before says it did
     public var appliedCommand: String?
 
     public init() {}
 
-    /// Reads it leniently: missing fields keep their defaults.
+    /// Reads it leniently: missing fields keep their defaults. A phone from before sends one state
+    /// for both devices, which is taken as the Mac's.
     public init?(json: Any?) {
         guard let o = json as? [String: Any] else { return nil }
-        func ms(_ k: String) -> Ms { (o[k] as? NSNumber)?.int64Value ?? 0 }
-        manualOn = o["manualOn"] as? Bool ?? false
-        timedUntil = ms("timedUntil")
-        schedules = o["schedules"] as? String ?? ""
-        phoneOnly = o["phoneOnly"] as? Bool ?? false
-        phoneOnlyUntil = ms("phoneOnlyUntil")
-        // Firebase may send an array as an object keyed "0", "1", …
-        if let list = o["sites"] as? [Any] {
-            sites = list.compactMap { $0 as? String }
-        } else if let map = o["sites"] as? [String: Any] {
-            sites = map.sorted { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }.compactMap { $0.value as? String }
+        func ms(_ v: Any?) -> Ms { (v as? NSNumber)?.int64Value ?? 0 }
+        func strings(_ v: Any?) -> [String] {
+            if let list = v as? [Any] { return list.compactMap { $0 as? String } }
+            // Firebase may send an array as an object keyed "0", "1", …
+            if let map = v as? [String: Any] { return map.sorted { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }.compactMap { $0.value as? String } }
+            return []
         }
-        unlock = o["unlock"] as? String ?? "nothing"
+        updatedAt = ms(o["updatedAt"])
+        sites = strings(o["sites"])
         passwordHash = o["passwordHash"] as? String ?? ""
-        waitMinutes = (o["waitMinutes"] as? NSNumber)?.intValue ?? 15
-        updatedAt = ms("updatedAt")
         appliedCommand = o["appliedCommand"] as? String
+        if let mac = o["mac"] as? [String: Any] {
+            manual = mac["manual"] as? Bool ?? false
+            timedUntil = ms(mac["timedUntil"])
+            breakUntil = ms(mac["breakUntil"])
+            let list: [Any] = (mac["windows"] as? [Any]) ?? ((mac["windows"] as? [String: Any]).map { m in
+                m.sorted { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }.map { $0.value } } ?? [])
+            windows = list.compactMap { w in
+                let pair = (w as? [Any]) ?? ((w as? [String: Any]).map { [$0["0"] as Any, $0["1"] as Any] } ?? [])
+                guard pair.count == 2 else { return nil }
+                let (s, e) = (ms(pair[0]), ms(pair[1]))
+                return e > s ? Window(start: s, end: e) : nil
+            }
+            if let phone = o["phone"] as? [String: Any] {
+                phoneOn = phone["on"] as? Bool ?? false
+                phoneUntil = ms(phone["until"])
+                phoneBreakUntil = ms(phone["breakUntil"])
+            }
+            matched = o["matched"] as? Bool ?? false
+            macApps = strings(o["macApps"])
+            challenge = Challenge.decode(o["challenge"] as? String) ?? Challenge(type: .nothing)
+            phrase = o["phrase"] as? String ?? ""
+            breaks = BreakConfig.decode(o["breaks"] as? String)
+            breakLog = BreakEntry.decodeLog(o["breakLog"] as? String)
+            applied = strings(o["applied"])
+        } else {
+            // A phone from before
+            manual = o["manualOn"] as? Bool ?? false
+            timedUntil = ms(o["timedUntil"])
+            let now = Date()
+            windows = Schedule.parse(o["schedules"] as? String ?? "").flatMap { $0.windows(from: now, days: 8) }
+            if o["phoneOnly"] as? Bool ?? false {
+                let until = ms(o["phoneOnlyUntil"])
+                if until == 0 { manual = true } else { windows.append(Window(start: 0, end: until)) }
+            }
+            switch o["unlock"] as? String {
+            case "password": challenge = Challenge(type: .password)
+            case "wait": challenge = Challenge(type: .wait, amount: (o["waitMinutes"] as? NSNumber)?.intValue ?? 15)
+            default: challenge = Challenge(type: .nothing)
+            }
+        }
     }
 }
 
-/// A request from the Mac, at /lockdown/<key>/mac/command.
+/// A request from the Mac, queued at /lockdown/<key>/mac/commands, for `devices`.
 public struct Command: Equatable, Codable {
-    public enum Kind: String, Codable { case start, add, end }
+    public enum Kind: String, Codable { case start, add, end, `break`, endBreak }
     public var id: String
     public var type: Kind
+    public var devices: Int
     /// start: the end time, or 0 for on until turned off
     public var until: Ms
-    /// add: how much
+    /// add: how much; break: how long
     public var ms: Ms
     public var at: Ms
 
-    public init(id: String = UUID().uuidString, type: Kind, until: Ms = 0, ms: Ms = 0, at: Ms) {
-        (self.id, self.type, self.until, self.ms, self.at) = (id, type, until, ms, at)
+    public init(id: String = UUID().uuidString, type: Kind, devices: Int = Devices.mac, until: Ms = 0, ms: Ms = 0, at: Ms) {
+        (self.id, self.type, self.devices, self.until, self.ms, self.at) = (id, type, devices, until, ms, at)
     }
 
-    public var json: [String: Any] { ["id": id, "type": type.rawValue, "until": until, "ms": ms, "at": at] }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        type = try c.decode(Kind.self, forKey: .type)
+        devices = try c.decodeIfPresent(Int.self, forKey: .devices) ?? Devices.both
+        until = try c.decodeIfPresent(Ms.self, forKey: .until) ?? 0
+        ms = try c.decodeIfPresent(Ms.self, forKey: .ms) ?? 0
+        at = try c.decode(Ms.self, forKey: .at)
+    }
+
+    public var json: [String: Any] { ["id": id, "type": type.rawValue, "devices": devices, "until": until, "ms": ms, "at": at] }
+
+    public var forMac: Bool { devices & Devices.mac != 0 }
 
     /// The phone ignores requests older than a day.
     public func expired(now: Ms) -> Bool { now - at > 24 * 60 * 60_000 }
 
-    /// Whether the phone has taken this request in, so the Mac can follow the phone again.
+    /// Whether the phone has done this request, so the Mac can follow the phone again.
     public func applied(by phone: PhoneState?) -> Bool {
         guard let phone else { return false }
+        if let applied = phone.applied { return applied.contains(id) }
         if let applied = phone.appliedCommand { return applied == id }
         return phone.updatedAt > at
     }
 }
 
-/// Whether lockdown is on, why, and until when.
+/// Whether lockdown is on on the Mac, why, and until when.
 public struct Status: Equatable {
     public enum Why: Equatable { case manual, timed, schedule, phoneOnly }
     public var why: Why?
@@ -135,46 +228,71 @@ public struct Status: Equatable {
 
 public enum Lockdown {
 
-    /// The phone's state with the Mac's own request applied on top, until the phone has taken it in.
-    public static func effective(phone: PhoneState?, pending: Command?, now: Ms, calendar: Calendar = .current) -> PhoneState {
+    /// The end of the run of lockdown covering `t` (the timer and windows that follow on from each other), or nil if none does.
+    public static func coveredUntil(_ state: PhoneState, at t: Ms) -> Ms? {
+        var end: Ms?
+        var at = t
+        for _ in 0..<64 {
+            var next: Ms?
+            if state.timedUntil > at { next = state.timedUntil }
+            for w in state.windows where w.covers(at) { next = max(next ?? w.end, w.end) }
+            guard let n = next, n > at else { break }
+            end = n
+            at = n
+        }
+        return end
+    }
+
+    /// The phone's state with the Mac's own requests applied on top, in order, until the phone has done them.
+    public static func effective(phone: PhoneState?, pending: [Command], now: Ms) -> PhoneState {
         var state = phone ?? PhoneState()
-        guard let command = pending, !command.applied(by: phone), !command.expired(now: now) else { return state }
-        switch command.type {
-        case .start:
-            if command.until <= 0 { state.manualOn = true }
-            else if command.until > state.timedUntil { state.timedUntil = command.until }
-        case .add:
-            // From the end of whatever keeps it on then (the phone's addTime), else from when it was asked
-            let at = command.at
-            var base = max(at, state.timedUntil)
-            let then = Date(ms: at)
-            for s in Schedule.parse(state.schedules) where s.covers(then, calendar: calendar) {
-                base = max(base, s.endAfter(then, calendar: calendar).ms)
-            }
-            if state.phoneOnly && state.phoneOnlyUntil > at { base = max(base, state.phoneOnlyUntil) }
-            state.timedUntil = base + command.ms
-        case .end:
-            state.manualOn = false
-            state.timedUntil = 0
+        for command in pending.sorted(by: { $0.at < $1.at }) where !command.applied(by: phone) && !command.expired(now: now) {
+            apply(command, to: &state)
         }
         return state
     }
 
-    public static func status(_ state: PhoneState, now: Ms, calendar: Calendar = .current) -> Status {
-        if state.manualOn { return Status(why: .manual, until: nil) }
-        if now < state.timedUntil { return Status(why: .timed, until: state.timedUntil) }
-        let date = Date(ms: now)
-        if let s = Schedule.parse(state.schedules).first(where: { $0.covers(date, calendar: calendar) }) {
-            return Status(why: .schedule, until: s.endAfter(date, calendar: calendar).ms)
+    static func apply(_ command: Command, to state: inout PhoneState) {
+        switch command.type {
+        case .start:
+            guard command.forMac else { return }
+            if command.until <= 0 { state.manual = true }
+            else if command.until > state.timedUntil { state.timedUntil = command.until }
+        case .add:
+            guard command.forMac else { return }
+            // From the end of whatever keeps it on then (the phone's addTime), else from when it was asked
+            let base = max(coveredUntil(state, at: command.at) ?? command.at, state.timedUntil)
+            state.timedUntil = base + command.ms
+        case .end:
+            guard command.forMac else { return }
+            state.manual = false
+            state.timedUntil = 0
+        case .break:
+            state.breakUntil = (state.breaks.stack && state.breakUntil > command.at ? state.breakUntil : command.at) + command.ms
+            if !state.breakLog.contains(where: { $0.id == command.id }) {
+                state.breakLog.append(BreakEntry(id: command.id, start: command.at, end: state.breakUntil, device: BreakEntry.mac))
+            }
+        case .endBreak:
+            state.breakUntil = 0
+            state.breakLog = state.breakLog.map { e in
+                var e = e
+                if e.end > command.at && e.start <= command.at { e.end = command.at }
+                return e
+            }
         }
-        if state.phoneOnly && (state.phoneOnlyUntil == 0 || now < state.phoneOnlyUntil) {
-            return Status(why: .phoneOnly, until: state.phoneOnlyUntil == 0 ? nil : state.phoneOnlyUntil)
-        }
-        return .off
     }
 
+    public static func status(_ state: PhoneState, now: Ms) -> Status {
+        if state.manual { return Status(why: .manual, until: nil) }
+        guard let until = coveredUntil(state, at: now) else { return .off }
+        return Status(why: state.timedUntil > now ? .timed : .schedule, until: until)
+    }
+
+    /// Whether the Mac is on a break now: lockdown on, but lifted for a few minutes.
+    public static func onBreak(_ state: PhoneState, now: Ms) -> Bool { state.breakUntil > now && status(state, now: now).on }
+
     /// What End can end: only "on until turned off" and the timer, as on the phone.
-    public static func endable(_ status: Status) -> Bool { status.why == .manual || status.why == .timed }
+    public static func endable(_ state: PhoneState, now: Ms) -> Bool { state.manual || state.timedUntil > now }
 }
 
 /// The wait unlock, mirrored from the phone: asking starts a wait, then End works for 10 minutes.

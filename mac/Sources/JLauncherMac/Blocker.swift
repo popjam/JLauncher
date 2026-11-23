@@ -43,7 +43,7 @@ final class Blocker {
     }
 
     private func tick() {
-        guard model.status.on else { return }
+        guard model.blocking else { return }
         // Apps already open when lockdown starts
         if !model.macApps.isEmpty {
             for app in NSWorkspace.shared.runningApplications where model.macApps.contains(app.bundleIdentifier ?? "") {
@@ -56,7 +56,7 @@ final class Blocker {
     // --- Apps ---
 
     private func checkApp(_ app: NSRunningApplication?) {
-        guard let app, let id = app.bundleIdentifier, model.status.on, model.macApps.contains(id),
+        guard let app, let id = app.bundleIdentifier, model.blocking, model.macApps.contains(id),
               !Self.protected.contains(id), !app.isTerminated else { return }
         let name = app.localizedName ?? id
         app.terminate()
@@ -160,6 +160,12 @@ enum Format {
         f.dateFormat = Calendar.current.isDateInToday(date) ? "h:mm a" : "EEE h:mm a"
         f.amSymbol = "am"; f.pmSymbol = "pm"
         return f.string(from: date)
+    }
+
+    /// "4:05" or "1:05:00", for a countdown
+    static func clock(_ ms: Ms) -> String {
+        let s = max(0, (ms + 999) / 1000)
+        return s >= 3600 ? String(format: "%lld:%02lld:%02lld", s / 3600, s / 60 % 60, s % 60) : String(format: "%lld:%02lld", s / 60, s % 60)
     }
 
     /// "45m", "2h 5m", "3h"

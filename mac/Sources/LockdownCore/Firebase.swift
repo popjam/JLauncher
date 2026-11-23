@@ -41,6 +41,25 @@ public struct Firebase: Sendable {
         try Self.check(response)
     }
 
+    /// Adds `value` under `path` with a new key in time order (the Mac's requests)
+    public func post(_ path: String, _ value: Any) async throws {
+        try await send("POST", path, value)
+    }
+
+    /// Writes only the children named in `value` ("id/field": value), leaving others as they are
+    public func patch(_ path: String, _ value: [String: Any]) async throws {
+        try await send("PATCH", path, value)
+    }
+
+    private func send(_ method: String, _ path: String, _ value: Any) async throws {
+        var request = URLRequest(url: url(path))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+        let (_, response) = try await URLSession.shared.data(for: request)
+        try Self.check(response)
+    }
+
     public struct HTTPError: Error, CustomStringConvertible {
         public let code: Int
         public var description: String { code == 401 || code == 403 ? "Database refused (check its rules)" : "HTTP \(code)" }

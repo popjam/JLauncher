@@ -55,57 +55,121 @@ let sunday = Schedule(days: 0b1000000, start: 0, end: 0)
 check(sunday.covers(date("2026-11-22 12:00"), calendar: cal), "Sunday all day")
 check(!sunday.covers(date("2026-11-21 12:00"), calendar: cal), "not Saturday")
 check(Schedule(days: monday, start: 540, end: 1020).covers(date("2026-11-16 09:00"), calendar: cal), "day window")
-eq(Schedule.parse("1:1320:420;bad;127:0:0;0:1:2"), [overnight, Schedule(days: 127, start: 0, end: 0)])
+eq(Schedule.parse("1:1320:420;bad;127:0:0;0:1:2;1:60:120:2;1:60:120:4"),
+   [overnight, Schedule(days: 127, start: 0, end: 0), Schedule(days: 1, start: 60, end: 120, devices: 2)])
+eq(overnight.windows(from: date("2026-11-16 12:00"), days: 1, calendar: cal),
+   [Window(start: date("2026-11-16 22:00").ms, end: date("2026-11-17 07:00").ms)])
 
-// --- Status and the Mac's own requests ---
+// --- Status: windows that follow on are one lockdown; overlaps don't add up ---
 let now = date("2026-11-18 12:00").ms
+let hour: Ms = 3_600_000
 var phone = PhoneState()
 phone.updatedAt = now - 60_000
-eq(Lockdown.status(phone, now: now, calendar: cal), .off)
-var p = phone; p.timedUntil = now + 3_600_000
-eq(Lockdown.status(p, now: now, calendar: cal), Status(why: .timed, until: now + 3_600_000))
+phone.applied = []
+eq(Lockdown.status(phone, now: now), .off)
+var p = phone; p.timedUntil = now + hour
+eq(Lockdown.status(p, now: now), Status(why: .timed, until: now + hour))
 p = phone; p.timedUntil = now - 1
-eq(Lockdown.status(p, now: now, calendar: cal), .off)
-p = phone; p.phoneOnly = true
-eq(Lockdown.status(p, now: now, calendar: cal).why, .phoneOnly)
-p.phoneOnlyUntil = now - 1
-eq(Lockdown.status(p, now: now, calendar: cal), .off)
-p = phone; p.schedules = "4:660:780" // Wednesday 11:00-13:00
-eq(Lockdown.status(p, now: now, calendar: cal), Status(why: .schedule, until: date("2026-11-18 13:00").ms))
+eq(Lockdown.status(p, now: now), .off)
+// 22:00–07:00, and 23:00–06:00 inside it: still 07:00
+p = phone; p.windows = [Window(start: date("2026-11-18 22:00").ms, end: date("2026-11-19 07:00").ms),
+                        Window(start: date("2026-11-18 23:00").ms, end: date("2026-11-19 06:00").ms)]
+eq(Lockdown.status(p, now: date("2026-11-18 23:30").ms), Status(why: .schedule, until: date("2026-11-19 07:00").ms))
+// A timer running into a window
+p.timedUntil = date("2026-11-18 22:30").ms
+eq(Lockdown.status(p, now: date("2026-11-18 21:00").ms).until, date("2026-11-19 07:00").ms)
+p = phone; p.manual = true
+eq(Lockdown.status(p, now: now), Status(why: .manual, until: nil))
 
-// Start: on at once on the Mac, until the phone takes it in
+// --- The Mac's own requests ---
 let start = Command(type: .start, until: 0, at: now)
-eq(Lockdown.status(Lockdown.effective(phone: phone, pending: start, now: now), now: now).why, .manual)
-var taken = phone; taken.updatedAt = now + 5_000; taken.manualOn = true
-check(start.applied(by: taken), "phone newer than the request")
-taken.manualOn = false // e.g. ended on the phone afterwards: follow the phone
-eq(Lockdown.status(Lockdown.effective(phone: taken, pending: start, now: now + 10_000), now: now + 10_000), .off)
-// With appliedCommand, only that id counts
-var other = phone; other.updatedAt = now + 5_000; other.appliedCommand = "older"
-check(!start.applied(by: other), "a different applied id")
-other.appliedCommand = start.id
-check(start.applied(by: other), "this id applied")
-// The phone sends "" until it has applied one: still waiting, even if newer
-other.appliedCommand = ""
-check(!start.applied(by: other), "nothing applied yet")
-other.appliedCommand = start.id
-check(start.applied(by: other), "this id applied")
+eq(Lockdown.status(Lockdown.effective(phone: phone, pending: [start], now: now), now: now).why, .manual)
+var taken = phone; taken.applied = [start.id]
+check(start.applied(by: taken), "applied by id")
+// Once done, the phone's state is followed (ended on the phone afterwards)
+eq(Lockdown.status(Lockdown.effective(phone: taken, pending: [start], now: now), now: now), .off)
+// For the phone only: nothing changes here
+eq(Lockdown.status(Lockdown.effective(phone: phone, pending: [Command(type: .start, devices: Devices.phone, until: 0, at: now)], now: now), now: now), .off)
+// A phone from before: its single applied id, or its update time
+var old = PhoneState(); old.updatedAt = now + 5_000
+check(start.applied(by: old), "older phone, newer than the request")
+old.appliedCommand = "other"
+check(!start.applied(by: old), "older phone, another id")
 // Timed start never shortens
-p = phone; p.timedUntil = now + 7_200_000
-eq(Lockdown.effective(phone: p, pending: Command(type: .start, until: now + 3_600_000, at: now), now: now).timedUntil, now + 7_200_000)
-// Add: from the timer's end, or from when asked, or from a schedule's end
-eq(Lockdown.effective(phone: p, pending: Command(type: .add, ms: 3_600_000, at: now), now: now).timedUntil, now + 10_800_000)
-eq(Lockdown.effective(phone: phone, pending: Command(type: .add, ms: 60_000, at: now), now: now + 30_000).timedUntil, now + 60_000)
-p = phone; p.schedules = "4:660:780"
-eq(Lockdown.effective(phone: p, pending: Command(type: .add, ms: 60_000, at: now), now: now, calendar: cal).timedUntil,
-   date("2026-11-18 13:01").ms)
-// End clears manual and timer, not schedules
-p = phone; p.manualOn = true; p.timedUntil = now + 60_000; p.schedules = "4:660:780"
-let ended = Lockdown.effective(phone: p, pending: Command(type: .end, at: now), now: now)
-check(!ended.manualOn && ended.timedUntil == 0, "end clears")
-eq(Lockdown.status(ended, now: now, calendar: cal).why, .schedule)
+p = phone; p.timedUntil = now + 2 * hour
+eq(Lockdown.effective(phone: p, pending: [Command(type: .start, until: now + hour, at: now)], now: now).timedUntil, now + 2 * hour)
+// Add: from the end of the run, in order
+eq(Lockdown.effective(phone: p, pending: [Command(type: .add, ms: hour, at: now)], now: now).timedUntil, now + 3 * hour)
+eq(Lockdown.effective(phone: phone, pending: [Command(type: .add, ms: 60_000, at: now)], now: now + 30_000).timedUntil, now + 60_000)
+eq(Lockdown.effective(phone: p, pending: [Command(type: .add, ms: hour, at: now), Command(type: .add, ms: hour, at: now + 1)], now: now).timedUntil, now + 4 * hour)
+p = phone; p.windows = [Window(start: now - hour, end: now + hour)]
+eq(Lockdown.effective(phone: p, pending: [Command(type: .add, ms: 60_000, at: now)], now: now).timedUntil, now + hour + 60_000)
+// End clears on and the timer, not windows
+p = phone; p.manual = true; p.timedUntil = now + 60_000; p.windows = [Window(start: now - hour, end: now + hour)]
+let ended = Lockdown.effective(phone: p, pending: [Command(type: .end, at: now)], now: now)
+check(!ended.manual && ended.timedUntil == 0, "end clears")
+eq(Lockdown.status(ended, now: now).why, .schedule)
 // Day-old requests are dropped
-eq(Lockdown.effective(phone: phone, pending: Command(type: .start, at: now - 25 * 3_600_000), now: now).manualOn, false)
+eq(Lockdown.effective(phone: phone, pending: [Command(type: .start, at: now - 25 * hour)], now: now).manual, false)
+
+// --- Breaks ---
+p = phone; p.manual = true; p.breaks.minutes = 5
+let brk = Command(type: .break, ms: 5 * 60_000, at: now)
+let onBreak = Lockdown.effective(phone: p, pending: [brk], now: now)
+check(Lockdown.onBreak(onBreak, now: now + 60_000), "on a break")
+check(!Lockdown.onBreak(onBreak, now: now + 6 * 60_000), "break over")
+eq(onBreak.breakLog.count, 1)
+let endedBreak = Lockdown.effective(phone: p, pending: [brk, Command(type: .endBreak, at: now + 60_000)], now: now + 60_000)
+check(!Lockdown.onBreak(endedBreak, now: now + 61_000), "break ended")
+eq(endedBreak.breakLog.first?.end, now + 60_000)
+
+var config = BreakConfig()
+eq(Breaks.check(config, log: [], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .off)
+config.minutes = 5
+eq(Breaks.check(config, log: [], now: now, device: "mac", locked: false, breakUntil: 0, calendar: cal), .notLocked)
+eq(Breaks.check(config, log: [], now: now, device: "mac", locked: true, breakUntil: now + 1, calendar: cal), .onBreak(until: now + 1))
+config.cooldown = 30
+let entry = BreakEntry(id: "a", start: now - 10 * 60_000, end: now - 5 * 60_000, device: "phone")
+eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .cooldown(until: now + 25 * 60_000))
+config.shared = false
+eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .yes)
+config.shared = true; config.cooldown = 0; config.perDay = 1
+eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal),
+   .limit(period: "day", count: 1, until: date("2026-11-19 00:00").ms))
+config.perDay = 0; config.perWeek = 1
+eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal),
+   .limit(period: "week", count: 1, until: date("2026-11-23 00:00").ms))
+config.perWeek = 0; config.off = [Schedule(days: 127, start: 11 * 60, end: 13 * 60)]
+eq(Breaks.check(config, log: [], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .offNow(until: date("2026-11-18 13:00").ms))
+let decoded = BreakConfig.decode("{\"minutes\":5,\"cooldown\":30,\"stack\":true,\"perDay\":3,\"off\":\"31:60:120\",\"shared\":false,\"challenge\":\"TAPS:100\"}")
+check(decoded.minutes == 5 && decoded.cooldown == 30 && decoded.stack && decoded.perDay == 3 && !decoded.shared, "break config")
+eq(decoded.challenge, Challenge(type: .taps, amount: 100))
+eq(decoded.off, [Schedule(days: 31, start: 60, end: 120)])
+
+// --- Challenges ---
+eq(Challenge.decode("RANDOM:200"), Challenge(type: .random, amount: 200))
+eq(Challenge.decode("JUNK"), nil)
+check(Challenge.matches(" I am  choosing ", "i am choosing"), "phrase")
+check(Challenge.matches("abcde fghjk", "abcdefghjk", ignoreSpaces: true), "random")
+check(!Challenge.matches("", ""), "empty")
+eq(Challenge.randomText(12).replacingOccurrences(of: " ", with: "").count, 12)
+
+// --- The shared list ---
+var items = BlockItems.set([:], kind: .site, name: "reddit.com", phone: true, mac: true, now: 10)
+let phoneCopy = BlockItems.set(items, kind: .site, name: "reddit.com", phone: nil, mac: false, now: 20)
+let macCopy = BlockItems.set(items, kind: .site, name: "reddit.com", phone: false, mac: nil, now: 15)
+let merged = BlockItems.mergeAll(phoneCopy, macCopy)
+check(merged["s_reddit,com"].map { !$0.phone && !$0.mac } ?? false, "later change wins")
+items = BlockItems.set([:], kind: .app, name: "Discord", phone: true, mac: nil, now: 5, pkg: "com.discord")
+let macItems = BlockItems.set([:], kind: .app, name: "discord", phone: nil, mac: true, now: 6, bundle: "com.hnc.Discord")
+let both = BlockItems.mergeAll(items, macItems)
+eq(both.count, 1)
+eq(BlockItems.macApps(both), ["com.hnc.Discord"])
+eq(BlockItem.id(.app, "!!"), "a_x" + String(BlockItem.javaHash("!!"), radix: 16))
+let roundTrip = BlockItems.decode(BlockItems.encode(both))
+eq(roundTrip, both)
+let matchedItems = BlockItems.matched(BlockItems.set([:], kind: .site, name: "x.com", phone: true, mac: false, now: 1))
+eq(BlockItems.macSites(matchedItems), ["x.com"])
 
 // --- Wait unlock ---
 eq(Wait.state(requestedAt: 0, waitMinutes: 15, now: now), .none)
@@ -114,17 +178,26 @@ eq(Wait.state(requestedAt: now - 15 * 60_000, waitMinutes: 15, now: now), .ready
 eq(Wait.state(requestedAt: now - 25 * 60_000, waitMinutes: 15, now: now), .none)
 
 // --- Reading the phone's state and the stream ---
-let json: [String: Any] = ["manualOn": true, "timedUntil": 1_763_000_000_000 as Int64, "sites": ["0": "reddit.com", "1": "x.com"], "waitMinutes": 30]
+let json: [String: Any] = ["v": 2, "mac": ["manual": true, "timedUntil": 1_763_000_000_000 as Int64, "windows": [[1, 2], [5, 3]], "breakUntil": 7],
+                           "phone": ["on": true, "until": 9], "sites": ["0": "reddit.com", "1": "x.com"], "challenge": "WAIT:30",
+                           "applied": ["a"], "breaks": "{\"minutes\":2}"]
 let read = PhoneState(json: json)!
-check(read.manualOn && read.timedUntil == 1_763_000_000_000 && read.waitMinutes == 30, "fields")
+check(read.manual && read.timedUntil == 1_763_000_000_000 && read.breakUntil == 7 && read.phoneOn && read.phoneUntil == 9, "fields")
+eq(read.windows, [Window(start: 1, end: 2)])
 eq(read.sites, ["reddit.com", "x.com"])
+eq(read.challenge, Challenge(type: .wait, amount: 30))
+eq(read.applied ?? [], ["a"])
+eq(read.breaks.minutes, 2)
+// A phone from before
+let before = PhoneState(json: ["manualOn": false, "timedUntil": 5 as Int64, "unlock": "password", "schedules": ""])!
+check(before.timedUntil == 5 && before.challenge == Challenge(type: .password) && before.applied == nil, "old phone")
 var tree = EventTree()
-tree.apply("put", at: "/", ["manualOn": false, "sites": ["a.com"]])
-tree.apply("put", at: "/manualOn", true)
-tree.apply("patch", at: "/", ["waitMinutes": 5])
+tree.apply("put", at: "/", ["mac": ["manual": false], "sites": ["a.com"], "v": 2])
+tree.apply("put", at: "/mac/manual", true)
+tree.apply("patch", at: "/", ["challenge": "TAPS:20"])
 tree.apply("put", at: "/sites/1", "b.com")
 let streamed = PhoneState(json: tree.value)!
-check(streamed.manualOn && streamed.waitMinutes == 5, "stream updates")
+check(streamed.manual && streamed.challenge == Challenge(type: .taps, amount: 20), "stream updates")
 eq(streamed.sites, ["a.com", "b.com"])
 tree.apply("put", at: "/", NSNull())
 check(tree.value == nil, "deleted")
@@ -143,7 +216,7 @@ if args.count == 4, args[1] == "live" {
         do {
             let value = try await db.get("phone")
             let phone = PhoneState(json: value)
-            print("GET phone:", phone.map { "manualOn=\($0.manualOn) timedUntil=\($0.timedUntil) schedules=\($0.schedules) sites=\($0.sites) unlock=\($0.unlock) wait=\($0.waitMinutes)" } ?? "nothing")
+            print("GET phone:", phone.map { "manual=\($0.manual) timedUntil=\($0.timedUntil) windows=\($0.windows.count) sites=\($0.sites) challenge=\($0.challenge.encoded)" } ?? "nothing")
             if let phone { print("Status now:", Lockdown.status(phone, now: Date().ms)) }
             let streamed = Task {
                 try await db.stream("phone") { v in print("stream event -> sites:", PhoneState(json: v)?.sites ?? []) }

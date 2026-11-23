@@ -63,7 +63,7 @@ struct PairView: View {
     var body: some View {
         Card {
             Title(text: "Pair with phone")
-            Line(text: "On the phone: Lockdown → Extras → Mac.").padding(.bottom, 12)
+            Line(text: "On the phone: Lockdown → Devices → Mac.").padding(.bottom, 12)
             BoxField(placeholder: "Database URL", text: $url).padding(.bottom, 8)
             BoxField(placeholder: "Pairing key", text: $key, onSubmit: pair)
             if let error { Line(text: error, color: Style.red).padding(.top, 10) }
@@ -88,20 +88,38 @@ struct PairView: View {
 
 // --- Unlocking ---
 
-/// Asks for the phone's unlock, then does `then`: the password, the wait, or a plain confirm.
+/// Asks for what the phone says ending early needs (or `challenge`, for breaks), then does `then`.
 @MainActor
 enum Unlocking {
-    static func run(title: String, action: String, then: @escaping () -> Void) {
+    static func run(title: String, action: String, challenge: Challenge? = nil, then: @escaping () -> Void) {
         let model = Model.shared
-        switch model.unlock {
+        let c = challenge ?? model.challenge
+        switch c.type {
         case .nothing:
             Dialog.show { ConfirmView(title: title, action: action, then: then) }
-        case .password:
+        case .password where !model.state.passwordHash.isEmpty:
             Dialog.show { PasswordView(title: title, action: action, then: then) }
+        case .password:
+            Dialog.show { ConfirmView(title: title, action: action, then: then) }
         case .wait:
             switch model.wait {
             case .ready: then()
             case .none, .waiting: Dialog.show { WaitView(then: then) }
+            }
+        case .hold:
+            Dialog.show { HoldView(title: title, seconds: max(1, c.amount), then: then) }
+        case .taps:
+            Dialog.show { TapsView(title: title, count: max(1, c.amount), then: then) }
+        case .phrase:
+            Dialog.show(width: 440) { TypeView(title: title, texts: Array(repeating: model.phrase, count: max(1, c.amount)), ignoreSpaces: false, then: then) }
+        case .random:
+            Dialog.show(width: 440) { TypeView(title: title, texts: [Challenge.randomText(max(1, c.amount))], ignoreSpaces: true, then: then) }
+        case .never:
+            Dialog.show {
+                Card {
+                    Title(text: "Can't be ended early")
+                    BoxButton(title: "OK") { Dialog.close() }
+                }
             }
         }
     }
@@ -143,6 +161,93 @@ struct PasswordView: View {
     }
 }
 
+/// A countdown that has to stay in front; leaving it starts it again.
+struct HoldView: View {
+    let title: String
+    let seconds: Int
+    let then: () -> Void
+    @State private var left: Int = 0
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Card {
+            Title(text: title)
+            Line(text: "Keep this open. Leaving starts it again.")
+            Text(Format.clock(Ms(left) * 1000)).font(.system(size: 40, weight: .light)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+            BoxButton(title: "Continue", enabled: left <= 0) { Dialog.close(); then() }
+            TextButton(title: "Cancel") { Dialog.close() }
+        }
+        .onAppear { left = seconds }
+        .onReceive(timer) { _ in
+            // Only while this is the window in front
+            if NSApp.isActive && NSApp.keyWindow is KeyWindow { if left > 0 { left -= 1 } } else { left = seconds }
+        }
+    }
+}
+
+/// A button clicked `count` times.
+struct TapsView: View {
+    let title: String
+    let count: Int
+    let then: () -> Void
+    @State private var done = 0
+
+    var body: some View {
+        Card {
+            Title(text: title)
+            Text("\(count - done) left").font(.system(size: 20, weight: .light)).foregroundStyle(.white).frame(maxWidth: .infinity)
+            Button {
+                done += 1
+                if done >= count { Dialog.close(); then() }
+            } label: {
+                Text("Tap").font(.system(size: 20, weight: .light)).foregroundStyle(.white)
+                    .frame(width: 130, height: 130)
+                    .overlay(Circle().strokeBorder(Style.edge, lineWidth: 1.5))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain).frame(maxWidth: .infinity).padding(.vertical, 14)
+            TextButton(title: "Cancel") { Dialog.close() }
+        }
+    }
+}
+
+/// Each of `texts` typed out in turn, exactly; pasting doesn't count.
+struct TypeView: View {
+    let title: String
+    let texts: [String]
+    let ignoreSpaces: Bool
+    let then: () -> Void
+    @State private var index = 0
+    @State private var typed = ""
+    @State private var wrong = false
+
+    var body: some View {
+        Card {
+            Title(text: title)
+            Text(texts[min(index, texts.count - 1)]).font(.system(size: 15)).foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
+            if texts.count > 1 { Line(text: "\(index + 1) of \(texts.count)").padding(.bottom, 8) }
+            BoxField(placeholder: "Type it here", text: $typed, onSubmit: check)
+                .onChange(of: typed) { old, new in
+                    // A jump of many characters at once is a paste
+                    if new.count - old.count > 3 { typed = old }
+                }
+            if wrong { Line(text: "Doesn't match", color: Style.red).padding(.top, 10) }
+            BoxButton(title: "OK", action: check).padding(.top, 18)
+            TextButton(title: "Cancel") { Dialog.close() }
+        }
+    }
+
+    private func check() {
+        guard Challenge.matches(typed, texts[index], ignoreSpaces: ignoreSpaces) else { wrong = true; Dialog.refit(); return }
+        wrong = false
+        typed = ""
+        index += 1
+        if index >= texts.count { Dialog.close(); then() } else { Dialog.refit() }
+    }
+}
+
 struct WaitView: View {
     @ObservedObject private var model = Model.shared
     let then: () -> Void
@@ -152,7 +257,7 @@ struct WaitView: View {
             switch model.wait {
             case .none:
                 Title(text: "Wait to unlock")
-                Line(text: "Lockdown unlocks in \(Format.duration(Ms(model.state.waitMinutes) * 60_000)), for 10m.")
+                Line(text: "Lockdown unlocks in \(Format.duration(Ms(model.challenge.amount) * 60_000)), for 10m.")
                 BoxButton(title: "Start") { model.startWait(); Dialog.close() }.padding(.top, 18)
                 TextButton(title: "Cancel") { Dialog.close() }
             case .waiting(let left):
@@ -168,47 +273,125 @@ struct WaitView: View {
     }
 }
 
-// --- The Mac's blocked apps ---
+// --- What's blocked, on each device ---
 
-struct AppsView: View {
+/// The shared list: each app and site with a switch for the phone and the Mac. Adding is done at
+/// once; taking anything off during lockdown needs what ending early needs.
+struct ItemsView: View {
     @ObservedObject private var model = Model.shared
     @State private var search = ""
-    private let apps = InstalledApps.list()
+    private let macApps = InstalledApps.list()
+
+    private struct Row: Identifiable {
+        let id: String
+        let kind: BlockItem.Kind
+        let name: String
+        let pkg: String?
+        let bundle: String?
+        let phone: Bool
+        let mac: Bool
+        let icon: NSImage?
+    }
+
+    private var rows: [Row] {
+        let items = model.effectiveItems
+        var rows: [String: Row] = [:]
+        for item in items.values where item.shown || matchesSearch(item.name) {
+            if !item.shown && search.isEmpty { continue }
+            rows[item.id] = Row(id: item.id, kind: item.kind, name: item.name, pkg: item.pkg, bundle: item.bundle, phone: item.phone, mac: item.mac,
+                                icon: item.bundle.flatMap { b in macApps.first { $0.id == b }?.icon })
+        }
+        guard !search.isEmpty else { return sorted(rows) }
+        // Apps not on the list yet, from both devices, one per name
+        for app in macApps where matchesSearch(app.name) {
+            let id = BlockItem.id(.app, app.name)
+            if rows[id] == nil { rows[id] = Row(id: id, kind: .app, name: app.name, pkg: nil, bundle: app.id, phone: false, mac: false, icon: app.icon) }
+            else if rows[id]?.bundle == nil, let r = rows[id] {
+                rows[id] = Row(id: id, kind: .app, name: r.name, pkg: r.pkg, bundle: app.id, phone: r.phone, mac: r.mac, icon: app.icon)
+            }
+        }
+        for (pkg, name) in model.phoneApps where matchesSearch(name) {
+            let id = BlockItem.id(.app, name)
+            if let r = rows[id] {
+                if r.pkg == nil { rows[id] = Row(id: id, kind: .app, name: r.name, pkg: pkg, bundle: r.bundle, phone: r.phone, mac: r.mac, icon: r.icon) }
+            } else { rows[id] = Row(id: id, kind: .app, name: name, pkg: pkg, bundle: nil, phone: false, mac: false, icon: nil) }
+        }
+        return sorted(rows)
+    }
+
+    private func sorted(_ rows: [String: Row]) -> [Row] {
+        rows.values.sorted { a, b in
+            let ka = (a.phone || a.mac ? 0 : 1, a.kind == .site ? 0 : 1, a.name.lowercased())
+            let kb = (b.phone || b.mac ? 0 : 1, b.kind == .site ? 0 : 1, b.name.lowercased())
+            return ka < kb
+        }
+    }
+
+    private func matchesSearch(_ name: String) -> Bool { search.isEmpty || name.localizedCaseInsensitiveContains(search) }
 
     var body: some View {
-        let locked = model.status.on
-        let shown = apps.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
-            .sorted { (model.macApps.contains($0.id) ? 0 : 1, $0.name.lowercased()) < (model.macApps.contains($1.id) ? 0 : 1, $1.name.lowercased()) }
         Card {
-            Title(text: "Blocked Mac apps")
-            if locked { Line(text: "Apps can be added, not removed, during lockdown.").padding(.bottom, 10) }
-            BoxField(placeholder: "Search", text: $search).padding(.bottom, 8)
+            Title(text: "Apps and websites")
+            if model.state.matched { Line(text: "Devices are matched: blocked on one is blocked on both where it can be.").padding(.bottom, 10) }
+            BoxField(placeholder: "Search apps, or type a site and press Return", text: $search, onSubmit: addSite).padding(.bottom, 8)
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(shown) { app in
-                        let on = model.macApps.contains(app.id)
-                        Button {
-                            if on { if !locked { model.setMacApps(model.macApps.filter { $0 != app.id }) } }
-                            else { model.setMacApps(model.macApps + [app.id]) }
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(nsImage: app.icon).resizable().frame(width: 22, height: 22)
-                                Text(app.name).font(.system(size: 15)).foregroundStyle(.white)
-                                Spacer()
-                                Image(systemName: on ? "checkmark.square.fill" : "square")
-                                    .foregroundStyle(on ? Style.red : Style.faint)
-                            }
-                            .padding(.vertical, 7).contentShape(Rectangle())
+                    ForEach(rows) { row in
+                        HStack(spacing: 10) {
+                            if let icon = row.icon { Image(nsImage: icon).resizable().frame(width: 20, height: 20) }
+                            else { Image(systemName: row.kind == .site ? "globe" : "iphone").frame(width: 20, height: 20).foregroundStyle(Style.faint) }
+                            Text(row.name).font(.system(size: 15)).foregroundStyle(.white).lineLimit(1)
+                            Spacer()
+                            DevicePill(title: "Phone", on: row.phone, enabled: row.kind == .site || row.pkg != nil) { toggle(row, phone: true) }
+                            DevicePill(title: "Mac", on: row.mac, enabled: row.kind == .site || row.bundle != nil) { toggle(row, phone: false) }
                         }
-                        .buttonStyle(.plain)
-                        .opacity(on && locked ? 0.5 : 1)
+                        .padding(.vertical, 7)
                         Divider().overlay(Color.white.opacity(0.12))
                     }
                 }
             }
-            .frame(height: 360)
+            .frame(height: 380)
             BoxButton(title: "Done") { Dialog.close() }.padding(.top, 14)
         }
+        .onAppear { model.loadPhoneApps() }
+    }
+
+    private func toggle(_ row: Row, phone: Bool) {
+        let on = phone ? row.phone : row.mac
+        let change = {
+            Model.shared.setItem(kind: row.kind, name: row.name, phone: phone ? !on : nil, mac: phone ? nil : !on, pkg: row.pkg, bundle: row.bundle)
+        }
+        // Taking something off during lockdown loosens it
+        if on && (Model.shared.status.on || Model.shared.phone?.phoneOn == true) {
+            Unlocking.run(title: "Unblock \(row.name)?", action: "Unblock") {
+                change()
+                Dialog.show(width: 460) { ItemsView() }
+            }
+        } else { change() }
+    }
+
+    private func addSite() {
+        guard let host = Sites.host(search) else { return }
+        let devices = model.startDevices
+        model.setItem(kind: .site, name: host, phone: devices & Devices.phone != 0 ? true : nil, mac: true)
+        search = ""
+    }
+}
+
+/// A device's switch: filled while on, faded when the app isn't on that device.
+struct DevicePill: View {
+    let title: String
+    let on: Bool
+    let enabled: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 12.5)).foregroundStyle(on ? Color.black : .white.opacity(enabled ? 0.8 : 0.3))
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(Capsule().fill(on ? Color(red: 0x8F / 255, green: 0xB3 / 255, blue: 1) : Color.clear))
+                .overlay(Capsule().strokeBorder(on ? Color.clear : Color.white.opacity(enabled ? 0.4 : 0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain).disabled(!enabled)
     }
 }
 
