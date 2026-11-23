@@ -135,6 +135,8 @@ object LockdownSync {
             .put("phone", JSONObject()
                 .put("on", phoneOn)
                 .put("until", if (phoneOn) Lockdown.activeUntil(context, prefs) ?: 0L else 0L)
+                // When the phone's timed lockdown ends, or 0: while any device's timer runs, nothing is unblocked one at a time
+                .put("timedUntil", Lockdown.timedEnd(context, prefs) ?: 0L)
                 .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.PHONE)))
             .put("matched", prefs.lockdownMatchDevices)
             // The TV's own lockdown, worked out here like the Mac's; "blocking" is now, for a TV tool from before
