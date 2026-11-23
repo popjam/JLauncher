@@ -137,7 +137,6 @@
             app:popUpTo="@+id/appListFragment"
             app:popUpToInclusive="true" />
     </fragment>
-    <!-- The phone's battery -->
     <fragment
         android:id="@+id/supplementsFragment"
         android:name="app.olauncher.ui.SupplementsFragment"
@@ -207,9 +206,9 @@
         android:label="PauseFragment"
         tools:layout="@layout/fragment_pause" />
 
-    <!-- Settings and tracking for the stats -->
+    <!-- Settings, from anywhere (the stat list opens it, and at Tracking) -->
     <action
-        android:id="@+id/action_global_statsSettingsFragment"
+        android:id="@+id/action_global_settingsFragment"
         app:destination="@id/settingsFragment"
         app:enterAnim="@anim/fade_enter"
         app:exitAnim="@anim/fade_exit"

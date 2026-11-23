@@ -558,41 +558,10 @@ class NewsletterReaderFragment : CardPageFragment() {
         setPadding(4.dpToPx(), 12.dpToPx(), 4.dpToPx(), 12.dpToPx())
     }
 
-    private fun row(title: String, value: String?, faded: Boolean = false, color: Int? = null, indent: Boolean = false, onTap: () -> Unit): View {
-        val context = requireContext()
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(if (indent) 20.dpToPx() else 4.dpToPx(), 0, 4.dpToPx(), 0)
-            setBackgroundResource(android.R.drawable.list_selector_background)
-            setOnClickListener { onTap() }
-            alpha = if (faded) 0.4f else 1f
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = title
-                textSize = if (indent) Style.TEXT_BODY else Style.TEXT_BODY
-                setTextColor(color ?: ink)
-                if (!indent) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                maxLines = if (indent) 2 else 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setPadding(0, (if (indent) 10 else 13).dpToPx(), 0, (if (indent) 10 else 13).dpToPx())
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = value
-                textSize = Style.TEXT_BODY
-                setTextColor(color ?: faint(215))
-                updatePadding(left = 12.dpToPx())
-            })
-        }
-    }
+    private fun row(title: String, value: String?, faded: Boolean = false, color: Int? = null, indent: Boolean = false, onTap: () -> Unit): View =
+        settingRow(title, value, level = if (indent) 1 else 0, faded = faded, color = color, titleLines = if (indent) 2 else 1, onTap = onTap)
 
     private fun Card.body(vararg rows: View) {
-        panel()
-        val list = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            dividerDrawable = rowDivider()
-            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-        }
-        rows.forEach { list.addView(it) }
-        root.addView(list, root.indexOfChild(scene))
+        rowsSection(rows.toList())
     }
 }

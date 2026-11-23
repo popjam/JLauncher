@@ -205,6 +205,33 @@ abstract class CardPageFragment : Fragment() {
         }
     }
 
+    /** Makes [this] card a settings section ([panel]) holding [rows] ([settingRow]s) split by thin lines; returns the rows' list */
+    internal fun Card.rowsSection(rows: List<View?>): LinearLayout {
+        panel()
+        val list = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            dividerDrawable = rowDivider()
+            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+        }
+        rows.filterNotNull().forEach { list.addView(it) }
+        root.addView(list, root.indexOfChild(scene))
+        return list
+    }
+
+    /** The card [explainSetting] shows, one at a time */
+    internal var infoPopup: android.widget.PopupWindow? = null
+
+    override fun onPause() {
+        infoPopup?.dismiss()
+        super.onPause()
+    }
+
+    override fun onDestroyView() {
+        infoPopup?.dismiss()
+        infoPopup = null
+        super.onDestroyView()
+    }
+
     /** The thin line between two settings */
     internal fun rowDivider() = GradientDrawable().apply {
         setColor(faint(30))

@@ -11,8 +11,6 @@
     <string name="tag_6" translatable="false">6</string>
     <string name="tag_7" translatable="false">7</string>
     <string name="tag_8" translatable="false">8</string>
-    <string name="time_spent_min" translatable="false"><b>%1$sm</b></string>
-    <string name="time_spent_hour" translatable="false">%1$sh %2$sm</string>
 
     <string name="app">App</string>
     <string name="set_as_default_launcher">Set as default launcher</string>
@@ -248,7 +246,6 @@
     <string name="spent_today_on_app">%1$d%% of today so far on %2$s</string>
     <string name="use_for_question">How long do you want to use %1$s for?</string>
     <string name="minutes_short">%1$dm</string>
-    <string name="time_up">Time\'s up for %1$s</string>
     <string name="seconds_value">%1$d s</string>
     <string name="take_a_breath">Take a breath</string>
     <string name="breathe_in">Breathe in</string>
@@ -772,7 +769,6 @@
     <string name="settings">Settings</string>
     <string name="clock">Clock</string>
     <string name="apps_at_bottom">Apps at the bottom</string>
-    <string name="money_left">Money left</string>
     <string name="nothing">Nothing</string>
     <string name="swipe_left">Swipe left</string>
     <string name="swipe_right">Swipe right</string>
@@ -803,9 +799,7 @@
     <string name="info_home_recents">Pressing home while already on home shows recent apps.</string>
     <string name="info_hidden_apps">Apps you’ve hidden from the app list. Tap to see or unhide them.</string>
     <string name="info_keyboard">Opens the keyboard as soon as the app list opens, so you can type to find an app.</string>
-    <string name="info_pause">Waits a few seconds before opening apps you pick, so you can decide if you really want to.</string>
     <string name="info_pause_length">How long the pause lasts.</string>
-    <string name="info_use_for">Asks how long you want to use an app for, and closes it when time’s up.</string>
     <string name="info_check_in">Asks how your day was once a day, from home.</string>
     <string name="info_check_in_time">When the check-in shows up.</string>
     <string name="info_missed_day">If you missed yesterday, asks about it the next morning.</string>
@@ -837,7 +831,6 @@
     <string name="places_title_short">Places</string>
     <string name="lockdown">Lockdown</string>
     <string name="limits">Limits</string>
-    <string name="lockdown_lock_for">Lock for a set time</string>
     <string name="lockdown_add_time">Add time</string>
     <string name="lockdown_until">Until %1$s</string>
     <string name="lockdown_until_a_time">Until a time</string>
@@ -860,7 +853,6 @@
     <string name="lockdown_lock_hidden_apps">Hidden apps</string>
     <string name="lockdown_lock_launcher">Changing launcher</string>
     <string name="lockdown_lock_protect">Uninstalling JLauncher</string>
-    <string name="blocked_apps">Blocked apps</string>
     <string name="lockdown_unlock_with">Unlock with</string>
     <string name="lockdown_unlock_nothing">Nothing</string>
     <string name="lockdown_unlock_wait">%1$s wait</string>
@@ -1027,8 +1019,6 @@
     <string name="stat_total">%1$s %2$s</string>
     <string name="stat_label">%1$s: %2$s</string>
     <string name="show">Show</string>
-    <string name="first_beside_clock">First beside the clock</string>
-    <string name="info_beside_clock">Which comes first next to the clock: the weather or screen time.</string>
     <string name="check_in_asks">Asks about</string>
     <string name="info_check_in_asks">Which stats the check-in asks about, after mood.</string>
     <string name="stats_home_cards">Stats Home cards</string>
@@ -1251,10 +1241,7 @@
     <string name="lockdown_when">When</string>
     <string name="lockdown_apps">Apps</string>
     <string name="lockdown_unlock">Unlock</string>
-    <string name="lockdown_protection">Protection</string>
     <string name="lockdown_today">Today</string>
-    <string name="lockdown_turn_on">Turn on</string>
-    <string name="lockdown_turn_off">Turn off</string>
     <string name="lockdown_stage_now">Stage %1$d · %2$s</string>
     <string name="lockdown_why_manual">Turned on</string>
     <string name="lockdown_why_timer">Timer</string>
@@ -1271,18 +1258,13 @@
     <string name="lockdown_starts_now">Lockdown starts now</string>
     <string name="lockdown_places">Places</string>
     <string name="lockdown_home_widget">Home widget</string>
-    <string name="lockdown_each_tap">Each tap adds</string>
     <string name="info_lockdown_home_widget">A lock on the home screen showing how long until lockdown opens. Tapping it adds time; holding it takes a break when breaks are on. During a break the lock is open and counts down the break; tapping it ends the break.</string>
-    <string name="info_lockdown_each_tap">How much time a tap on the home widget adds.</string>
     <string name="lockdown_on_at">Lockdown on at</string>
     <string name="lockdown_no_places">No places set up</string>
-    <string name="lockdown_during">During lockdown</string>
     <string name="lockdown_block_these">Block these</string>
     <string name="lockdown_only_allow">Only allow these</string>
     <string name="lockdown_allowed_apps">Allowed apps</string>
     <string name="lockdown_essentials">Essentials</string>
-    <string name="lockdown_websites">Websites</string>
-    <string name="lockdown_app_limits">App limits</string>
     <string name="lockdown_stages">Screen time stages</string>
     <string name="lockdown_stage_row">%1$d · %2$s</string>
     <string name="lockdown_stage_slow">Slow down</string>
@@ -1298,9 +1280,7 @@
     <string name="lockdown_copy">Copy</string>
     <string name="lockdown_notification">Notification</string>
     <string name="lockdown_blocked_attempts">Blocked attempts</string>
-    <string name="lockdown_streak">Streak</string>
     <string name="lockdown_search_apps">Search apps</string>
-    <string name="lockdown_add_site">Add a site</string>
     <string name="lockdown_not_a_site">Not a website</string>
     <string name="lockdown_setup">Set up</string>
     <string name="lockdown_mac">Mac</string>
@@ -1346,23 +1326,16 @@
     <string name="lockdown_blocked_count_title">Blocked · %1$d</string>
     <string name="lockdown_allowed_count_title">Allowed · %1$d</string>
     <string name="lockdown_essentials_count_title">Essentials · %1$d</string>
-    <string name="lockdown_sites_count_title">Blocked in lockdown · %1$d</string>
-    <string name="lockdown_sites_from_apps">From blocked apps</string>
-    <string name="lockdown_no_browser">Chrome and Firefox not installed</string>
     <string name="lockdown_with_limits">With limits</string>
-    <string name="lockdown_other_apps">Other apps</string>
     <string name="lockdown_before_opening">Before opening</string>
-    <string name="lockdown_limits">Limits</string>
     <string name="lockdown_daily_time">Daily time</string>
     <string name="lockdown_opens_per_day">Opens per day</string>
     <string name="lockdown_pause">Pause</string>
     <string name="lockdown_pause_short">pause</string>
     <string name="lockdown_use_for_short">use for</string>
-    <string name="lockdown_blocked_short">blocked</string>
     <string name="lockdown_blocked_in">Blocked in lockdown</string>
     <string name="lockdown_allowed_in">Allowed in lockdown</string>
     <string name="lockdown_used_today">%1$s today</string>
-    <string name="lockdown_limit">limit %1$s</string>
     <!-- Block screen, notification and tile -->
     <string name="lockdown_reason_blocked">Blocked</string>
     <string name="lockdown_reason_not_allowed">Not allowed in lockdown</string>
@@ -1373,7 +1346,6 @@
     <string name="lockdown_resets_midnight">resets at midnight</string>
     <string name="lockdown_until_turned_off">until lockdown is turned off</string>
     <string name="lockdown_used">%1$s used</string>
-    <string name="lockdown_left_today">%1$s: %2$s left today</string>
     <string name="lockdown_left_today_line">%1$s left today</string>
     <string name="time_up_line">Time\'s up</string>
     <string name="lockdown_suspicious">That looked suspicious</string>
@@ -1391,7 +1363,6 @@
     <string name="info_app_limits">Each app\'s daily time, opens per day, pause and use for a set time. Limits apply every day.</string>
     <string name="info_lockdown_stages">Lockdown gets stricter as today\'s screen time grows: blocked apps pause, then are blocked, then everything but essentials.</string>
     <string name="info_lockdown_essentials">Apps that still work at stage 3 and with the allowlist. The phone app always does.</string>
-    <string name="info_lockdown_websites">Sites blocked in Chrome and Firefox during lockdown, as well as blocked apps\' sites.</string>
     <string name="info_lock_app_list">Hides the app list while lockdown is on.</string>
     <string name="info_lock_app_changes">Locks App info and Uninstall when holding a home app, and holding apps in the app list. Swapping a home app still works; a locked app stays locked.</string>
     <string name="info_lock_hidden">Stops showing hidden apps.</string>
@@ -1400,14 +1371,9 @@
     <string name="info_lock_system">Leaves Date &amp; time, Default home app, Device admin apps, Usage access, battery optimisation, Developer options and JLauncher\'s own app pages. Needs accessibility.</string>
     <string name="info_lockdown_grayscale">Turns the screen grey while lockdown is on. Needs a one-time permission from a computer.</string>
     <string name="info_lockdown_notification">Shows lockdown\'s state while it\'s on.</string>
-    <string name="info_blocked_attempts">Apps and sites blocked today.</string>
-    <string name="info_streak">Days in a row that didn\'t reach screen time stage 3.</string>
-    <string name="info_sites_from_apps">Blocked along with its app.</string>
     <string name="info_stage_slow">Blocked apps get the pause before opening.</string>
     <string name="info_stage_block">Blocked apps are blocked until midnight, and the screen turns grey.</string>
     <string name="info_stage_lockdown">Lockdown until midnight, with everything but essentials blocked.</string>
-    <string name="info_daily_time">Blocked for the rest of the day once used this long.</string>
-    <string name="info_opens_per_day">Blocked for the rest of the day once opened this many times.</string>
     <plurals name="lockdown_opens">
         <item quantity="one">%1$d open</item>
         <item quantity="other">%1$d opens</item>

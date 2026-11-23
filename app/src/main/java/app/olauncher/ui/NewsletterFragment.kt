@@ -315,38 +315,10 @@ class NewsletterFragment : CardPageFragment() {
         setPadding(4.dpToPx(), 12.dpToPx(), 4.dpToPx(), 12.dpToPx())
     }
 
-    private fun row(title: String, value: String?, faded: Boolean = false, onTap: () -> Unit): View {
-        val context = requireContext()
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
-            setBackgroundResource(android.R.drawable.list_selector_background)
-            setOnClickListener { onTap() }
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = title
-                textSize = Style.TEXT_BODY
-                setTextColor(faint(if (faded) 170 else 255))
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = value
-                textSize = Style.TEXT_BODY
-                setTextColor(faint(215))
-                updatePadding(left = 12.dpToPx())
-            })
-        }
-    }
+    private fun row(title: String, value: String?, faded: Boolean = false, onTap: () -> Unit): View =
+        settingRow(title, value, faded = faded, onTap = onTap)
 
     private fun Card.body(vararg rows: View?) {
-        panel()
-        val list = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            dividerDrawable = rowDivider()
-            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-        }
-        rows.filterNotNull().forEach { list.addView(it) }
-        root.addView(list, root.indexOfChild(scene))
+        rowsSection(rows.toList())
     }
 }

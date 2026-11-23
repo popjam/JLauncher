@@ -5,7 +5,6 @@
     <string name="lockdown_devices">Devices</string>
     <string name="lockdown_device_phone">Phone</string>
     <string name="lockdown_device_mac">Mac</string>
-    <string name="lockdown_device_both">Phone and Mac</string>
     <string name="lockdown_device_tv">TV</string>
     <string name="lockdown_device_all">All devices</string>
     <string name="lockdown_device_only">%1$s · %2$s</string>
@@ -17,14 +16,12 @@
     <string name="info_lockdown_match">Every device takes whichever lockdown is greatest, and blocks the same apps and sites where it can: sites on the phone and the Mac, and apps that are on more than one.</string>
     <string name="lockdown_start_on">Start on</string>
     <string name="info_lockdown_start_on">Which devices Start, Add time, the home lock and new websites act on.</string>
-    <string name="lockdown_mac_only">Mac · %1$s</string>
     <string name="lockdown_why_matched">Matched to the Mac</string>
     <string name="lockdown_schedule_on">On</string>
 
     <!-- What it blocks -->
     <string name="lockdown_apps_and_sites">Apps and websites</string>
     <string name="info_lockdown_blocks">Apps and websites blocked during lockdown, on the phone, the Mac or both. Tap a device to block or unblock there.</string>
-    <string name="lockdown_blocks_value">Phone %1$s · Mac %2$s</string>
     <string name="lockdown_search_or_add">Search apps or add a site</string>
     <string name="lockdown_websites_count">Websites · %1$d</string>
     <string name="lockdown_apps_count_title">Apps · %1$d</string>

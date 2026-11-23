@@ -93,7 +93,7 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
                 setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(Style.WARNING, 48))
             }
             setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 12.dpToPx())
-            setOnClickListener { findNavController().navigate(R.id.action_global_statsSettingsFragment, bundleOf(SettingsFragment.TO_TRACKING to true)) }
+            setOnClickListener { findNavController().navigate(R.id.action_global_settingsFragment, bundleOf(SettingsFragment.TO_TRACKING to true)) }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(20.dpToPx(), 0, 20.dpToPx(), 12.dpToPx())
         })
@@ -130,7 +130,7 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         }
         rows.addView(row(getString(R.string.stats_settings), StatIcons.GEAR, context.getColorFromAttr(R.attr.primaryColor),
             problems.size.takeIf { it > 0 }?.let { resources.getQuantityString(R.plurals.tracking_problems, it, it) }, faded = true) {
-            findNavController().navigate(R.id.action_global_statsSettingsFragment)
+            findNavController().navigate(R.id.action_global_settingsFragment)
         })
         rows.addView(row(getString(R.string.new_stat), ADD, context.getColorFromAttr(R.attr.primaryColor), null, faded = true) {
             NewMedicine.pick(context, store) { if (view != null) build() }

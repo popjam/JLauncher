@@ -39,7 +39,6 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     private lateinit var cardList: LinearLayout
     override val cards: LinearLayout get() = cardList
     internal val gate by lazy { LockdownGate(this) { render() } }
-    private var info: PopupWindow? = null
     private var scroll: ScrollView? = null
 
     /** Where the page was scrolled to, kept while a page opened from it is on top */
@@ -92,16 +91,9 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         render()
     }
 
-    override fun onPause() {
-        info?.dismiss()
-        super.onPause()
-    }
-
     override fun onDestroyView() {
         scroll?.let { savedScroll = it.scrollY }
         scroll = null
-        info?.dismiss()
-        info = null
         main.removeCallbacksAndMessages(null)
         super.onDestroyView()
     }
@@ -150,84 +142,9 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     /** The views made by [row], to put lines between */
     private val settingRows = java.util.Collections.newSetFromMap(java.util.WeakHashMap<View, Boolean>())
 
-    /**
-     * A setting: its name, its value on the right, indented by [level]; tapping does [onTap],
-     * holding explains it with [about].
-     */
-    internal fun row(card: Card, title: String, value: String?, about: Int?, level: Int = 0, onTap: (() -> Unit)?): View {
-        val context = requireContext()
-        return LinearLayout(context).also { settingRows.add(it) }.apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
-            setBackgroundResource(android.R.drawable.list_selector_background)
-            if (onTap != null) setOnClickListener { onTap() }
-            if (about != null) setOnLongClickListener {
-                explain(this, title, getString(about))
-                true
-            }
-            for (l in 1..level) addView(View(context).apply {
-                background = GradientDrawable().apply {
-                    cornerRadius = 1.dpToPx().toFloat()
-                    setColor(faint(70))
-                }
-            }, LinearLayout.LayoutParams(2.dpToPx(), ViewGroup.LayoutParams.MATCH_PARENT).apply {
-                marginStart = if (l == 1) 6.dpToPx() else 12.dpToPx()
-                if (l == level) marginEnd = 12.dpToPx()
-            })
-            addView(card.textView(if (level == 0) 16f else 15f, if (level == 0) 255 else 230).apply {
-                text = title
-                if (level == 0) typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(card.textView(Style.TEXT_BODY, 215).apply {
-                text = value
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                gravity = Gravity.END
-                maxWidth = (resources.displayMetrics.widthPixels * 0.45f).toInt()
-                updatePadding(left = 12.dpToPx())
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        }
-    }
-
-    /** Colours a [row]'s value */
-    internal fun View.valueColor(color: Int) {
-        ((this as? ViewGroup)?.let { it.getChildAt(it.childCount - 1) } as? TextView)?.setTextColor(color)
-    }
-
-        /** What a setting does, in a small card under it */
-    private fun explain(anchor: View, title: String, text: String) {
-        info?.dismiss()
-        val context = requireContext()
-        val box = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = Style.radiusSmall
-                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryShadeDarkColor), 255))
-                setStroke(1.dpToPx(), faint(60))
-            }
-            setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 14.dpToPx())
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                this.text = title
-                textSize = Style.TEXT_BODY
-                setTextColor(ink)
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            })
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                this.text = text
-                textSize = Style.TEXT_BODY
-                setTextColor(ink)
-                alpha = 0.8f
-                updatePadding(top = 4.dpToPx())
-            })
-        }
-        info = PopupWindow(box, anchor.width.coerceAtLeast(200.dpToPx()), ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
-            isOutsideTouchable = true
-            elevation = 8.dpToPx().toFloat()
-            showAsDropDown(anchor, 0, 4.dpToPx())
-        }
-    }
+    /** A [settingRow] in a card, held to explain it with [about] */
+    internal fun row(card: Card, title: String, value: String?, about: Int?, level: Int = 0, onTap: (() -> Unit)?): View =
+        settingRow(title, value, about?.let { getString(it) }, level, onTap = onTap).also { settingRows.add(it) }
 
     /** A line of small text in a card, like "Pause before blocked apps" */
     internal fun line(card: Card, text: String) = card.textView(Style.TEXT_SMALL, 160).apply {

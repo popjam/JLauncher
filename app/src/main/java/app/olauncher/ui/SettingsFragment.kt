@@ -88,7 +88,6 @@ class SettingsFragment : CardPageFragment() {
     override val cards: LinearLayout get() = cardList
     private val moodStore by lazy { MoodStore(requireContext()) }
     private var recoveryTaps = 0
-    private var info: PopupWindow? = null
 
     // --- Things picked or allowed elsewhere ---
 
@@ -241,11 +240,6 @@ class SettingsFragment : CardPageFragment() {
         render()
     }
 
-    override fun onPause() {
-        info?.dismiss()
-        super.onPause()
-    }
-
     /** Scrolls to the Tracking section once, when opened from a problem on the stat list */
     private var toTracking = false
 
@@ -353,97 +347,13 @@ class SettingsFragment : CardPageFragment() {
 
     private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
 
-    /**
-     * A setting: its name, its value on the right, indented by [level] under the one it belongs to;
-     * tapping does [onTap], holding explains it with [about].
-     */
-    private fun row(card: Card, title: String, value: String?, about: Int, level: Int = 0, onTap: (() -> Unit)?): View {
-        val context = requireContext()
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
-            setBackgroundResource(android.R.drawable.list_selector_background)
-            if (onTap != null) setOnClickListener { onTap() }
-            setOnLongClickListener {
-                explain(this, title, getString(about))
-                true
-            }
-            // A line down the left for each level it's under, joining it to the setting it belongs to
-            for (l in 1..level) addView(View(context).apply {
-                background = GradientDrawable().apply {
-                    cornerRadius = 1.dpToPx().toFloat()
-                    setColor(faint(70))
-                }
-            }, LinearLayout.LayoutParams(2.dpToPx(), ViewGroup.LayoutParams.MATCH_PARENT).apply {
-                marginStart = if (l == 1) 6.dpToPx() else 12.dpToPx()
-                if (l == level) marginEnd = 12.dpToPx()
-            })
-            addView(card.textView(if (level == 0) 16f else 15f, if (level == 0) 255 else 230).apply {
-                text = title
-                if (level == 0) typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(card.textView(Style.TEXT_BODY, 215).apply {
-                text = value
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                gravity = Gravity.END
-                // Never so long it squeezes the setting's name
-                maxWidth = (resources.displayMetrics.widthPixels * 0.4f).toInt()
-                updatePadding(left = 12.dpToPx())
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            searchText[this] = title + "\n" + getString(about)
-        }
-    }
-
-    /** What a setting does, in a small card under it */
-    private fun explain(anchor: View, title: String, text: String) {
-        info?.dismiss()
-        val context = requireContext()
-        val box = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = Style.radiusSmall
-                // Solid, so the rows under it don't show through
-                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryShadeDarkColor), 255))
-                setStroke(1.dpToPx(), faint(60))
-            }
-            setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 14.dpToPx())
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                this.text = title
-                textSize = Style.TEXT_BODY
-                setTextColor(ink)
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            })
-            addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                this.text = text
-                textSize = Style.TEXT_BODY
-                setTextColor(ink)
-                alpha = 0.8f
-                setLineSpacing(0f, 1.15f)
-                updatePadding(top = 4.dpToPx())
-            })
-        }
-        val width = anchor.width.coerceAtLeast(200.dpToPx())
-        info = PopupWindow(box, width, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
-            isOutsideTouchable = true
-            elevation = 8.dpToPx().toFloat()
-            showAsDropDown(anchor, 0, 4.dpToPx())
-        }
-    }
+    /** A [settingRow] that holding explains with [about], found by search by its name and that */
+    private fun row(card: Card, title: String, value: String?, about: Int, level: Int = 0, onTap: (() -> Unit)?): View =
+        settingRow(title, value, getString(about), level, onTap = onTap).also { searchText[it] = title + "\n" + getString(about) }
 
     private fun Card.body(vararg rows: View?) {
-        panel()
-        val list = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            // A thin line between settings
-            dividerDrawable = rowDivider()
-            showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-        }
         val shown = rows.filterNotNull()
-        shown.forEach { list.addView(it) }
-        root.addView(list, root.indexOfChild(scene))
+        rowsSection(shown)
         sections.add(Section(root, titleView.text.toString(), shown.map { it to (searchText[it] ?: rowText(it)) }))
     }
 
@@ -891,7 +801,7 @@ class SettingsFragment : CardPageFragment() {
                 setBackgroundResource(android.R.drawable.list_selector_background)
                 item.fix?.let { fix -> setOnClickListener { fix(context) } }
                 setOnLongClickListener {
-                    explain(this, item.title, item.detail)
+                    explainSetting(this, item.title, item.detail)
                     true
                 }
                 addView(View(context).apply {
@@ -1253,8 +1163,6 @@ class SettingsFragment : CardPageFragment() {
     override fun onDestroyView() {
         scroll?.let { savedScroll = it.scrollY }
         scroll = null
-        info?.dismiss()
-        info = null
         super.onDestroyView()
     }
 }
