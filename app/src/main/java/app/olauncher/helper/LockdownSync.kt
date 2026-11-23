@@ -23,7 +23,8 @@ import kotlin.concurrent.thread
  * - /lockdown/<key>/items is the shared list of blocked apps and sites ([BlockItems]), which both sides
  *   change, each switch keeping the time it changed.
  * - /lockdown/<key>/tv is the TV's apps, sent by the PC that watches the TV (tools/tv-time), which
- *   follows the phone's lockdown from /phone's "tv": whether to block, and the blocked apps.
+ *   follows the TV's own lockdown from /phone's "tv": worked out here like the Mac's (on until turned
+ *   off, a timer, its windows, its break), and the blocked apps.
  * - /lockdown/<key>/mac/commands is what the Mac asks for (start, add time, end, a break), each once;
  *   the phone removes them as it does them. /mac/installed is the Mac's apps, to choose from here.
  *
@@ -97,7 +98,7 @@ object LockdownSync {
 
     // --- Phone to Mac ---
 
-    /** The Mac's windows of lockdown from today to a week on, as [[start, end]] on the wall clock */
+    /** A device's windows of lockdown from today to a week on, as [[start, end]] on the wall clock */
     private fun macWindows(plan: Lockdown.Plan, zone: ZoneId): JSONArray {
         val today = LocalDate.now()
         val windows = plan.schedules.flatMap { it.windows(today, today.plusDays(7)) } + plan.windows
@@ -120,6 +121,8 @@ object LockdownSync {
         val challenge = Lockdown.challenge(prefs)
         val macOn = macPlan.on(java.time.LocalDateTime.now())
         val macUntil = Lockdown.activeUntil(context, prefs, Lockdown.Device.MAC)
+        val tvPlan = Lockdown.plan(context, prefs, Lockdown.Device.TV)
+        val tvOn = tvPlan.on(java.time.LocalDateTime.now())
         return JSONObject()
             .put("v", 2)
             // The Mac's lockdown, worked out here
@@ -134,10 +137,14 @@ object LockdownSync {
                 .put("until", if (phoneOn) Lockdown.activeUntil(context, prefs) ?: 0L else 0L)
                 .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.PHONE)))
             .put("matched", prefs.lockdownMatchDevices)
-            // The TV follows the phone's lockdown, and is free during the phone's break
+            // The TV's own lockdown, worked out here like the Mac's; "blocking" is now, for a TV tool from before
             .put("tv", JSONObject()
-                .put("blocking", Lockdown.isActive(context, prefs))
-                .put("until", if (phoneOn) Lockdown.activeUntil(context, prefs) ?: 0L else 0L)
+                .put("blocking", tvOn && !Lockdown.onBreak(prefs, Lockdown.Device.TV))
+                .put("manual", tvPlan.manual)
+                .put("timedUntil", tvPlan.timedEnd?.let { Lockdown.epoch(it, zone) } ?: 0L)
+                .put("windows", macWindows(tvPlan, zone))
+                .put("breakUntil", Lockdown.breakUntil(prefs, Lockdown.Device.TV))
+                .put("until", if (tvOn) Lockdown.activeUntil(context, prefs, Lockdown.Device.TV) ?: 0L else 0L)
                 .put("apps", JSONArray(BlockItems.tvApps(items).sorted())))
             .put("sites", JSONArray(sites))
             .put("macApps", JSONArray(BlockItems.macApps(items).sorted()))
@@ -310,7 +317,7 @@ object LockdownSync {
     private fun runCommand(context: Context, prefs: Prefs, command: JSONObject) {
         val at = command.optLong("at")
         if (System.currentTimeMillis() - at > 24 * 60 * 60_000L) return
-        val devices = command.optInt("devices", Lockdown.Device.MAC.bit).coerceIn(1, Lockdown.BOTH)
+        val devices = command.optInt("devices", Lockdown.Device.MAC.bit).coerceIn(1, Lockdown.ALL)
         when (command.optString("type")) {
             "start" -> {
                 val until = command.optLong("until")

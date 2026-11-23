@@ -35,4 +35,14 @@ class LockdownLogTest {
         assertEquals(listOf(600 until 660), days[date(16)]!!.spans)
         assertEquals(days, LockdownLog.decode(LockdownLog.encode(days)))
     }
+
+    @Test
+    fun theTvsTimeIsCountedOnItsOwn() {
+        val days = LockdownLog.credit(emptyMap(), at(16, 10), at(16, 11), State(phone = false, mac = false, onBreak = false, tv = true))
+        val day = days.values.single()
+        assertEquals(60 * 60_000L, day.tvMs)
+        assertEquals(0L, day.phoneMs)
+        // Kept and read back
+        assertEquals(day, LockdownLog.decode(LockdownLog.encode(days)).values.single())
+    }
 }

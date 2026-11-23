@@ -11,7 +11,7 @@ import java.time.temporal.TemporalAdjusters
 /**
  * Short breaks from lockdown: for a few minutes, nothing lockdown blocks is blocked. How long they
  * are, how often and when they can be taken, and what has to be done to take one, are all set here.
- * Breaks are shared between the phone and the Mac (one break, counted once, lifts both) or each
+ * Breaks are shared between the devices (one break, counted once, lifts them all) or each
  * device has its own.
  *
  * The rules are plain functions of the settings, the log of breaks and the time, so they're the same
@@ -21,6 +21,7 @@ object Breaks {
 
     const val PHONE = "phone"
     const val MAC = "mac"
+    const val TV = "tv"
 
     data class Config(
         /** How long a break is; 0 is no breaks */

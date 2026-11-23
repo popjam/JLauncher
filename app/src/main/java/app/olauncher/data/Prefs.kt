@@ -535,14 +535,23 @@ class Prefs(context: Context) {
         get() = prefs.getLong("LOCKDOWN_MAC_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_MAC_UNTIL", value) }
 
-    /** Both devices take whichever lockdown is greater, and block the same things */
+    /** The TV's own lockdown, kept here like the Mac's */
+    var lockdownTvModeOn: Boolean
+        get() = prefs.getBoolean("LOCKDOWN_TV_MODE_ON", false)
+        set(value) = prefs.edit { putBoolean("LOCKDOWN_TV_MODE_ON", value) }
+
+    var lockdownTvUntil: Long
+        get() = prefs.getLong("LOCKDOWN_TV_UNTIL", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_TV_UNTIL", value) }
+
+    /** All devices take whichever lockdown is greatest, and block the same things */
     var lockdownMatchDevices: Boolean
         get() = prefs.getBoolean("LOCKDOWN_MATCH_DEVICES", false)
         set(value) = prefs.edit { putBoolean("LOCKDOWN_MATCH_DEVICES", value) }
 
     /** Which devices Start, Add time and the home lock act on, as [app.olauncher.helper.Lockdown.Device] bits */
     var lockdownStartDevices: Int
-        get() = prefs.getInt("LOCKDOWN_START_DEVICES", 3)
+        get() = prefs.getInt("LOCKDOWN_START_DEVICES", 7)
         set(value) = prefs.edit { putInt("LOCKDOWN_START_DEVICES", value) }
 
     /** Screen time that turns lockdown on, as written by [app.olauncher.helper.Lockdown.formatTriggers] */
@@ -578,6 +587,10 @@ class Prefs(context: Context) {
     var lockdownMacBreakUntil: Long
         get() = prefs.getLong("LOCKDOWN_MAC_BREAK_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_MAC_BREAK_UNTIL", value) }
+
+    var lockdownTvBreakUntil: Long
+        get() = prefs.getLong("LOCKDOWN_TV_BREAK_UNTIL", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_TV_BREAK_UNTIL", value) }
 
     /** What ending lockdown early (and loosening it) needs, as [app.olauncher.helper.Challenge.encode]; made from the older choice the first time */
     var lockdownChallenge: String

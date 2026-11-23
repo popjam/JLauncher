@@ -113,7 +113,7 @@ class LockdownFragment : LockdownBaseFragment() {
                 gate.showPassword()
             } else if (recoveryTaps % 50 == 0) context.showToast(getString(R.string.recovery_tap_progress, recoveryTaps))
         }
-        val paired = Lockdown.macPaired(context)
+        val several = Lockdown.several(context)
         val phoneOn = Lockdown.isOn(context, prefs)
         val anyOn = Lockdown.Device.values().any { Lockdown.isOn(context, prefs, it) }
         val stages = Limits.stages(prefs)
@@ -128,9 +128,9 @@ class LockdownFragment : LockdownBaseFragment() {
             setTextColor(ink)
         })
         LockdownGate.whyText(context)?.takeIf { phoneOn }?.let { card.add(card.textView(14f, 165).apply { text = it; updatePadding(top = 4.dpToPx()) }) }
-        // Each device on its own line, when there are two
-        if (paired) card.add(card.textView(14.5f, 215).apply {
-            text = Lockdown.Device.values().joinToString("\n") { LockdownGate.deviceName(context, it.bit) + " · " + LockdownGate.deviceStatus(context, it) }
+        // Each device on its own line, when there's more than the phone
+        if (several) card.add(card.textView(14.5f, 215).apply {
+            text = Lockdown.deviceList(context).joinToString("\n") { LockdownGate.deviceName(context, it.bit) + " · " + LockdownGate.deviceStatus(context, it) }
             setLineSpacing(0f, 1.25f)
             updatePadding(top = 10.dpToPx())
         })
@@ -140,7 +140,7 @@ class LockdownFragment : LockdownBaseFragment() {
         }
         val targets = Lockdown.startDevices(context, prefs)
         val endable = Lockdown.Device.values().filter { Lockdown.covers(targets, it) }.any { d ->
-            (if (d == Lockdown.Device.PHONE) prefs.lockdownModeOn else prefs.lockdownMacModeOn) || Lockdown.timedActive(context, prefs, d)
+            Lockdown.modeOn(prefs, d) || Lockdown.timedActive(context, prefs, d)
         }
         val breaks = Lockdown.breaks(prefs)
         val buttons = FlowLayout(context).apply {
@@ -154,6 +154,12 @@ class LockdownFragment : LockdownBaseFragment() {
             if (breaks.on && phoneOn) {
                 if (Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) addView(pill(getString(R.string.lockdown_end_break)) { gate.endBreak() })
                 else addView(pill(getString(R.string.lockdown_take_break)) { gate.takeBreak() })
+            }
+            // The TV's own break, when breaks aren't shared (it has no screen of its own to take one from)
+            val tv = Lockdown.Device.TV
+            if (breaks.on && !breaks.shared && Lockdown.tvPaired(context) && Lockdown.isOn(context, prefs, tv)) {
+                if (Lockdown.onBreak(prefs, tv)) addView(pill(getString(R.string.lockdown_end_tv_break)) { gate.endBreak(tv) })
+                else addView(pill(getString(R.string.lockdown_take_tv_break)) { gate.takeBreak(tv) })
             }
         }
         card.add(buttons)
@@ -174,7 +180,7 @@ class LockdownFragment : LockdownBaseFragment() {
             .setMessage(R.string.lockdown_keep_on_message)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.lockdown_keep_on_button) { _, _ ->
-                Lockdown.turnOn(prefs, Lockdown.Device.PHONE.bit or if (prefs.lockdownMatchDevices) Lockdown.BOTH else 0)
+                Lockdown.turnOn(prefs, Lockdown.Device.PHONE.bit or if (prefs.lockdownMatchDevices) Lockdown.devices(context) else 0)
                 render()
             }
             .show()
@@ -189,8 +195,13 @@ class LockdownFragment : LockdownBaseFragment() {
         val allow = prefs.lockdownAppMode == Lockdown.ALLOW
         val phone = if (allow) getString(R.string.lockdown_all_but, prefs.lockdownAllowedApps.count { context.isPackageInstalled(it) })
             else (BlockItems.phoneApps(items).count { context.isPackageInstalled(it) } + BlockItems.phoneSites(items).size).toString()
-        val mac = (BlockItems.macApps(items).size + BlockItems.macSites(items).size).toString()
-        val value = if (Lockdown.macPaired(context)) getString(R.string.lockdown_blocks_value, phone, mac) else phone
+        fun count(device: Lockdown.Device) = when (device) {
+            Lockdown.Device.PHONE -> phone
+            Lockdown.Device.MAC -> (BlockItems.macApps(items).size + BlockItems.macSites(items).size).toString()
+            Lockdown.Device.TV -> BlockItems.tvApps(items).size.toString()
+        }
+        val value = if (Lockdown.several(context)) Lockdown.deviceList(context).joinToString(" · ") { LockdownGate.deviceName(context, it.bit) + " " + count(it) }
+            else phone
         val locks = Lockdown.Lock.values()
         val limits = Limits.appsWithRules(context, prefs)
         val needsService = items.values.any { it.phone } || prefs.lockdownProtect || prefs.lockdownSystemSettings || limits > 0 || allow
@@ -211,9 +222,11 @@ class LockdownFragment : LockdownBaseFragment() {
     private fun devicesSection() {
         val context = requireContext()
         val card = section(getString(R.string.lockdown_devices))
-        val paired = Lockdown.macPaired(context)
+        val paired = Lockdown.several(context)
         card.add(
             row(card, getString(R.string.lockdown_mac), macValue(), R.string.info_lockdown_mac) { macOptions() },
+            if (Lockdown.macPaired(context)) row(card, getString(R.string.lockdown_tv), getString(if (Lockdown.tvPaired(context)) R.string.on else R.string.off),
+                R.string.info_lockdown_tv, onTap = null) else null,
             if (paired) row(card, getString(R.string.lockdown_match_devices), onOff(prefs.lockdownMatchDevices), R.string.info_lockdown_match) {
                 // Matching makes both as strict as the stricter; unmatching loosens one of them
                 if (prefs.lockdownMatchDevices) gate.loosen { prefs.lockdownMatchDevices = false; render() }
@@ -427,7 +440,7 @@ class LockdownFragment : LockdownBaseFragment() {
                 }, (now.hour + 1) % 24, 0, DateFormat.is24HourFormat(context)).show()
             }
             .setNegativeButton(R.string.cancel, null)
-        if (Lockdown.macPaired(context) && !prefs.lockdownMatchDevices) dialog.setNeutralButton(LockdownGate.deviceName(context, devices) + " ▾") { _, _ ->
+        if (Lockdown.several(context) && !prefs.lockdownMatchDevices) dialog.setNeutralButton(LockdownGate.deviceName(context, devices) + " ▾") { _, _ ->
             pickDevices(getString(R.string.lockdown_start_on), devices) { askLockFor(it) }
         }
         dialog.show()
@@ -488,7 +501,7 @@ class LockdownFragment : LockdownBaseFragment() {
                 val is24 = DateFormat.is24HourFormat(context)
                 TimePickerDialog(context, { _, startHour, startMinute ->
                     TimePickerDialog(context, { _, endHour, endMinute ->
-                        pickDevices(getString(R.string.lockdown_schedule_on), Lockdown.BOTH) { devices ->
+                        pickDevices(getString(R.string.lockdown_schedule_on), Lockdown.ALL) { devices ->
                             val schedule = Lockdown.Schedule(bits, startHour * 60 + startMinute, endHour * 60 + endMinute, devices)
                             val save = {
                                 prefs.lockdownSchedules = Lockdown.formatSchedules(Lockdown.schedules(prefs) + schedule)

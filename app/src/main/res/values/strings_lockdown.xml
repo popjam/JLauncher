@@ -6,8 +6,15 @@
     <string name="lockdown_device_phone">Phone</string>
     <string name="lockdown_device_mac">Mac</string>
     <string name="lockdown_device_both">Phone and Mac</string>
+    <string name="lockdown_device_tv">TV</string>
+    <string name="lockdown_device_all">All devices</string>
+    <string name="lockdown_device_only">%1$s · %2$s</string>
+    <string name="lockdown_tv">TV</string>
+    <string name="info_lockdown_tv">Its own lockdown, through the PC that watches the TV (tools/tv-time), paired with the same database as the Mac. While it\'s on, the apps switched on for the TV are closed there.</string>
+    <string name="lockdown_take_tv_break">TV break</string>
+    <string name="lockdown_end_tv_break">End TV break</string>
     <string name="lockdown_match_devices">Match devices</string>
-    <string name="info_lockdown_match">Both devices take whichever lockdown is greater, and block the same apps and sites where they can: sites on both, and apps that are on both.</string>
+    <string name="info_lockdown_match">Every device takes whichever lockdown is greatest, and blocks the same apps and sites where it can: sites on the phone and the Mac, and apps that are on more than one.</string>
     <string name="lockdown_start_on">Start on</string>
     <string name="info_lockdown_start_on">Which devices Start, Add time, the home lock and new websites act on.</string>
     <string name="lockdown_mac_only">Mac · %1$s</string>
@@ -24,7 +31,7 @@
     <string name="lockdown_add_apps">Add apps</string>
     <string name="lockdown_add_site_hint">Type a site above to add it</string>
     <string name="lockdown_sites_from_apps_line">Also blocked with their apps: %1$s</string>
-    <string name="lockdown_matched_note">Devices are matched: anything blocked on one is blocked on the other where it can be.</string>
+    <string name="lockdown_matched_note">Devices are matched: anything blocked on one is blocked on the others where it can be.</string>
     <string name="lockdown_during_phone">On the phone</string>
     <plurals name="lockdown_sites_count">
         <item quantity="one">%d site</item>
@@ -89,7 +96,7 @@
     <string name="lockdown_break_make_up">Make up the time</string>
     <string name="info_break_make_up">Each break is added to the end of lockdown, so it ends that much later.</string>
     <string name="lockdown_break_devices">Between devices</string>
-    <string name="info_break_devices">Shared: one break lifts both the phone and the Mac, and counts once. Each its own: each device has its own breaks and limits.</string>
+    <string name="info_break_devices">Shared: one break lifts every device, and counts once. Each its own: each device has its own breaks and limits.</string>
     <string name="lockdown_break_shared">Shared</string>
     <string name="lockdown_break_each">Each its own</string>
     <string name="lockdown_no_breaks_during">No breaks during</string>

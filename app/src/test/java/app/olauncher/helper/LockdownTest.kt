@@ -115,4 +115,16 @@ class LockdownTest {
         assertEquals(WaitState.Ready(Lockdown.READY_MS), Lockdown.waitState(wait, wait))
         assertEquals(WaitState.None, Lockdown.waitState(wait + Lockdown.READY_MS, wait))
     }
+
+    @Test
+    fun theTvIsADeviceInSchedulesAndTriggers() {
+        val tv = Lockdown.Device.TV.bit
+        val schedules = Lockdown.parseSchedules("31:1080:1320:$tv;127:0:0:${Lockdown.ALL};31:60:120:8;31:60:120")
+        assertEquals(listOf(tv, Lockdown.ALL, Lockdown.BOTH), schedules.map { it.devices })
+        assertEquals(schedules, Lockdown.parseSchedules(Lockdown.formatSchedules(schedules)))
+        val triggers = Lockdown.parseTriggers("TV:120:420:$tv;TOTAL:180:420:${Lockdown.ALL};PHONE:60:420:9")
+        assertEquals(listOf(tv, Lockdown.ALL), triggers.map { it.devices })
+        assertTrue(Lockdown.covers(Lockdown.ALL, Lockdown.Device.TV))
+        assertFalse(Lockdown.covers(Lockdown.BOTH, Lockdown.Device.TV))
+    }
 }

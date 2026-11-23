@@ -157,7 +157,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
     private fun blocksPage() {
         val context = requireContext()
         val paired = Lockdown.macPaired(context)
-        val matched = prefs.lockdownMatchDevices && paired
+        val matched = prefs.lockdownMatchDevices && Lockdown.several(context)
         val stored = prefs.lockdownItems
         val tv = tvByKey
         val items = (if (matched) BlockItems.matched(stored) else stored).mapValues { withTv(it.value, tv) }
@@ -205,19 +205,24 @@ class LockdownPageFragment : LockdownBaseFragment() {
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(devicePill(Lockdown.Device.PHONE, item.phone, item.onPhone) { toggle(item, Lockdown.Device.PHONE, matched) })
             if (paired) addView(devicePill(Lockdown.Device.MAC, item.mac, item.onMac) { toggle(item, Lockdown.Device.MAC, matched) })
-            if (LockdownSync.tvInstalled(context).isNotEmpty()) addView(tvPill(item.tv, item.onTv) { toggleTv(item, matched) })
+            if (Lockdown.tvPaired(context)) addView(devicePill(Lockdown.Device.TV, item.tv, item.onTv) { toggle(item, Lockdown.Device.TV, matched) })
         }
     }
 
-    /** Blocks or unblocks [item] on [device] (both, while matched); unblocking loosens unless it was added here */
+    /** Blocks or unblocks [item] on [device] (every device, while matched); unblocking loosens unless it was added here */
     private fun toggle(item: BlockItems.Item, device: Lockdown.Device, matched: Boolean) {
-        val on = if (device == Lockdown.Device.PHONE) item.phone else item.mac
+        val on = when (device) {
+            Lockdown.Device.PHONE -> item.phone
+            Lockdown.Device.MAC -> item.mac
+            Lockdown.Device.TV -> item.tv
+        }
         val now = System.currentTimeMillis()
         val change = {
             val phone = if (matched || device == Lockdown.Device.PHONE) (!on && item.onPhone) else null
             val mac = if (matched || device == Lockdown.Device.MAC) (!on && item.onMac) else null
+            val tv = if (matched || device == Lockdown.Device.TV) (!on && item.onTv) else null
             prefs.lockdownItems = BlockItems.set(prefs.lockdownItems, item.kind, item.name, phone, mac, now, item.pkg, item.bundle,
-                tv = if (matched) !on && item.onTv else null, tvName = item.tvName)
+                tv = tv, tvName = item.tvName)
             if (!on) addedHere += item.id + device.name
             render()
             if (!on && !isAccessServiceEnabled(requireContext()) && device == Lockdown.Device.PHONE) runCatching {
@@ -225,19 +230,6 @@ class LockdownPageFragment : LockdownBaseFragment() {
             }
         }
         if (on && item.id + device.name !in addedHere) gate.loosen(change) else change()
-    }
-
-    /** Blocks or unblocks [item] on the TV (on every device, while matched) */
-    private fun toggleTv(item: BlockItems.Item, matched: Boolean) {
-        val on = item.tv
-        val change = {
-            prefs.lockdownItems = BlockItems.set(prefs.lockdownItems, item.kind, item.name,
-                phone = if (matched) !on && item.onPhone else null, mac = if (matched) !on && item.onMac else null,
-                now = System.currentTimeMillis(), pkg = item.pkg, bundle = item.bundle, tv = !on, tvName = item.tvName)
-            if (!on) addedHere += item.id + "TV"
-            render()
-        }
-        if (on && item.id + "TV" !in addedHere) gate.loosen(change) else change()
     }
 
     private fun addSite(text: String) {
@@ -442,7 +434,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         return listOfNotNull(
             Lockdown.Source.TOTAL, Lockdown.Source.PHONE,
             Lockdown.Source.MAC.takeIf { Lockdown.macPaired(context) || app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.MAC) > 0 },
-            Lockdown.Source.TV.takeIf { app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.TV) > 0 },
+            Lockdown.Source.TV.takeIf { Lockdown.tvPaired(context) || app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.TV) > 0 },
         )
     }
 
@@ -462,7 +454,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             val amounts = listOf(30, 60, 90, 120, 150, 180, 240, 300, 360, 480, 600)
             choose(getString(R.string.lockdown_trigger_amount), amounts.map { minutesName(it) }, amounts.indexOf(180), suggested = true) { a ->
                 TimePickerDialog(context, { _, hour, minute ->
-                    pickDevices(getString(R.string.lockdown_schedule_on), Lockdown.BOTH) { devices ->
+                    pickDevices(getString(R.string.lockdown_schedule_on), Lockdown.ALL) { devices ->
                         val trigger = Lockdown.Trigger(source, amounts[a], hour * 60 + minute, devices)
                         val save = {
                             prefs.lockdownTriggers = Lockdown.formatTriggers(Lockdown.triggers(prefs).filter { it.key != trigger.key } + trigger)
@@ -528,7 +520,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             limitRow(R.string.lockdown_per_week, config.perWeek, R.string.info_break_limits) { config.copy(perWeek = it) },
             row(often, getString(R.string.lockdown_break_stack), onOff(config.stack), R.string.info_break_stack) { save(config, config.copy(stack = !config.stack)) },
             row(often, getString(R.string.lockdown_break_make_up), onOff(config.makeUp), R.string.info_break_make_up) { save(config, config.copy(makeUp = !config.makeUp)) },
-            if (Lockdown.macPaired(context)) row(often, getString(R.string.lockdown_break_devices),
+            if (Lockdown.several(context)) row(often, getString(R.string.lockdown_break_devices),
                 getString(if (config.shared) R.string.lockdown_break_shared else R.string.lockdown_break_each), R.string.info_break_devices) {
                 save(config, config.copy(shared = !config.shared))
             } else null,

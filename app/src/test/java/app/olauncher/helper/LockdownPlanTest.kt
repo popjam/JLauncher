@@ -72,7 +72,7 @@ class LockdownPlanTest {
         // Both devices is written the way it always was
         assertEquals("31:600:1020;31:600:1020:2;96:0:0:1", text)
         assertEquals(list, Lockdown.parseSchedules(text))
-        assertEquals(emptyList<Schedule>(), Lockdown.parseSchedules("31:600:1020:0;31:600:1020:4"))
+        assertEquals(emptyList<Schedule>(), Lockdown.parseSchedules("31:600:1020:0;31:600:1020:8"))
     }
 
     @Test

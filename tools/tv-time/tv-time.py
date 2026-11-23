@@ -11,8 +11,9 @@ the screen is really on: a minute counts only while the Frame is on and not in A
 the Frame's own (YouTube, Netflix… on the TV itself) when one is in front, otherwise the box's.
 
 With lockdown paired (lockdown.json in DIR: {"url": database, "key": pairing code}), it also follows
-the phone's lockdown: while the phone says the TV is blocking, blocked apps are closed, on the box
-through adb and on the Frame through its own API, checked every 15 seconds. The TV's apps are sent
+the TV's own lockdown, which the phone keeps like the Mac's (on until turned off, a timer, schedules,
+screen time, breaks): while it's on, the apps blocked on the TV are closed, on the box through adb and
+on the Frame through its own API, checked every 15 seconds. The TV's apps are sent
 to the phone once a day, so they can be chosen there.
 
     tv-time.py --tv 192.168.4.20 --frame 192.168.4.33 --out FILE
@@ -232,13 +233,26 @@ def db(config, path, method="GET", body=None):
         return json.loads(r.read().decode() or "null")
 
 
+def tv_blocking(tv, now):
+    """Whether the TV's own lockdown blocks at now (ms): on until turned off, a timer, one of its windows,
+    and not on a break. Worked out here, so schedules start and end on time between the phone's sends;
+    a phone from before the TV had its own lockdown only says "blocking"."""
+    if "manual" not in tv:
+        return bool(tv.get("blocking"))
+    if (tv.get("breakUntil") or 0) > now:
+        return False
+    if tv.get("manual") or (tv.get("timedUntil") or 0) > now:
+        return True
+    return any(isinstance(w, list) and len(w) == 2 and w[0] <= now < w[1] for w in tv.get("windows") or [])
+
+
 def blocked_apps(config):
-    """The TV apps lockdown blocks now (names made plain), or an empty set when it isn't blocking"""
+    """The TV apps lockdown blocks now (names made plain), or an empty set when the TV's lockdown isn't blocking"""
     try:
         tv = (db(config, "phone") or {}).get("tv") or {}
     except Exception:
         return set()
-    if not tv.get("blocking"):
+    if not tv_blocking(tv, int(time.time() * 1000)):
         return set()
     return {key(n) for n in tv.get("apps") or []}
 

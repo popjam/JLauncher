@@ -64,10 +64,10 @@ private fun StatPageFragment.lockdownNowCard() {
             }
         })
     })
-    // Each device, when there are two
-    if (Lockdown.macPaired(context)) {
+    // Each device, when there's more than the phone
+    if (Lockdown.several(context)) {
         body.addView(card.textView(14f, 200).apply {
-            text = Lockdown.Device.values().joinToString("\n") {
+            text = Lockdown.deviceList(context).joinToString("\n") {
                 LockdownGate.deviceName(context, it.bit) + " · " + LockdownGate.deviceStatus(context, it)
             }
             setLineSpacing(0f, 1.25f)
@@ -86,6 +86,7 @@ private fun StatPageFragment.lockdownNowCard() {
         (phoneApps?.let { counts(it, BlockItems.phoneSites(items).size) } ?: getString(R.string.lockdown_all_but, prefs.lockdownAllowedApps.size))
     if (Lockdown.macPaired(context)) lines += LockdownGate.deviceName(context, Lockdown.Device.MAC.bit) to
         counts(BlockItems.macApps(items).size, BlockItems.macSites(items).size)
+    if (Lockdown.tvPaired(context)) lines += LockdownGate.deviceName(context, Lockdown.Device.TV.bit) to counts(BlockItems.tvApps(items).size, 0)
     body.addView(card.textView(12.5f, 140).apply {
         text = getString(R.string.lockdown_what_it_blocks).uppercase()
         letterSpacing = 0.1f
@@ -153,6 +154,7 @@ private fun StatPageFragment.lockdownWeekCard() {
         LockdownGate.durationOrNone(context, thisWeek.values.sumOf { it.phoneMs }) to getString(R.string.lockdown_device_phone),
     )
     if (Lockdown.macPaired(context)) tiles += LockdownGate.durationOrNone(context, thisWeek.values.sumOf { it.macMs }) to getString(R.string.lockdown_device_mac)
+    if (Lockdown.tvPaired(context)) tiles += LockdownGate.durationOrNone(context, thisWeek.values.sumOf { it.tvMs }) to getString(R.string.lockdown_device_tv)
     tiles += breaks.size.toString() to getString(R.string.lockdown_breaks_taken)
     tiles(card, null, tiles)
     val longest = days.maxByOrNull { it.value.phoneMs }?.takeIf { it.value.phoneMs > 0 }

@@ -93,20 +93,20 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
 
     // --- Breaks ---
 
-    /** Takes a break on the phone, after whatever taking one needs; says why not when it can't be taken */
-    fun takeBreak(onStarted: () -> Unit = {}) {
+    /** Takes a break on [device], after whatever taking one needs; says why not when it can't be taken */
+    fun takeBreak(device: Lockdown.Device = Lockdown.Device.PHONE, onStarted: () -> Unit = {}) {
         val prefs = prefs
         val config = Lockdown.breaks(prefs)
-        when (val can = Lockdown.canBreak(context, prefs)) {
+        when (val can = Lockdown.canBreak(context, prefs, device)) {
             Breaks.Can.Yes -> {}
             else -> return context.showToast(cantBreakText(context, can))
         }
         val start = {
             // Checked again, in case time passed while the challenge was done
-            if (Lockdown.canBreak(context, prefs) == Breaks.Can.Yes) {
-                Lockdown.startBreak(context, prefs)
+            if (Lockdown.canBreak(context, prefs, device) == Breaks.Can.Yes) {
+                Lockdown.startBreak(context, prefs, device)
                 app.olauncher.helper.LockdownSystem.sync(context)
-                context.showToast(context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, Lockdown.Device.PHONE))))
+                context.showToast(context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, device))))
                 onChanged()
                 onStarted()
             }
@@ -122,9 +122,9 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         }
     }
 
-    /** Ends the phone's break now, so lockdown blocks again */
-    fun endBreak() {
-        Lockdown.endBreak(prefs, Lockdown.Device.PHONE)
+    /** Ends [device]'s break now, so lockdown blocks again */
+    fun endBreak(device: Lockdown.Device = Lockdown.Device.PHONE) {
+        Lockdown.endBreak(prefs, device)
         app.olauncher.helper.LockdownSystem.sync(context)
         onChanged()
     }
@@ -565,12 +565,20 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             }, can.count) + " · " + context.getString(R.string.lockdown_break_next, time(context, can.until))
         }
 
-        /** A device's name */
-        fun deviceName(context: Context, devices: Int): String = context.getString(when (devices) {
-            Lockdown.Device.PHONE.bit -> R.string.lockdown_device_phone
-            Lockdown.Device.MAC.bit -> R.string.lockdown_device_mac
-            else -> R.string.lockdown_device_both
-        })
+        /** A device's name, or the devices': "Phone", "Phone and TV", "All devices" */
+        fun deviceName(context: Context, devices: Int): String {
+            fun name(device: Lockdown.Device) = context.getString(when (device) {
+                Lockdown.Device.PHONE -> R.string.lockdown_device_phone
+                Lockdown.Device.MAC -> R.string.lockdown_device_mac
+                Lockdown.Device.TV -> R.string.lockdown_device_tv
+            })
+            val chosen = Lockdown.Device.values().filter { Lockdown.covers(devices, it) }
+            return when (chosen.size) {
+                0, 1 -> name(chosen.firstOrNull() ?: Lockdown.Device.PHONE)
+                2 -> context.getString(R.string.list_and, name(chosen[0]), name(chosen[1]))
+                else -> context.getString(R.string.lockdown_device_all)
+            }
+        }
 
         /** One device's state in a few words: "On until 07:00", "Break until 22:05", "Off" */
         fun deviceStatus(context: Context, device: Lockdown.Device): String {
@@ -654,8 +662,9 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         fun status(context: Context): String {
             val prefs = Prefs(context)
             if (!Lockdown.isOn(context, prefs)) {
-                if (Lockdown.macPaired(context) && Lockdown.isOn(context, prefs, Lockdown.Device.MAC))
-                    return context.getString(R.string.lockdown_mac_only, deviceStatus(context, Lockdown.Device.MAC))
+                Lockdown.deviceList(context).firstOrNull { it != Lockdown.Device.PHONE && Lockdown.isOn(context, prefs, it) }?.let {
+                    return context.getString(R.string.lockdown_device_only, deviceName(context, it.bit), deviceStatus(context, it))
+                }
                 return Lockdown.nextScheduled(prefs)?.let { context.getString(R.string.lockdown_off_next, time(context, it)) }
                     ?: context.getString(R.string.off)
             }

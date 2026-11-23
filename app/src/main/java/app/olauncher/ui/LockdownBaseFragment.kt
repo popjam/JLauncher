@@ -417,7 +417,11 @@ abstract class LockdownBaseFragment : CardPageFragment() {
             this.text = LockdownGate.deviceName(context, device.bit)
             textSize = 12.5f
             setTextColor(text)
-            val icon = StatIcons.drawable(if (device == Lockdown.Device.PHONE) StatIcons.PHONE_SMALL else StatIcons.LAPTOP, text, 13.dpToPx())
+            val icon = StatIcons.drawable(when (device) {
+                Lockdown.Device.PHONE -> StatIcons.PHONE_SMALL
+                Lockdown.Device.MAC -> StatIcons.LAPTOP
+                Lockdown.Device.TV -> StatIcons.TV
+            }, text, 13.dpToPx())
             icon.setBounds(0, 0, 13.dpToPx(), 13.dpToPx())
             setCompoundDrawablesRelative(icon, null, null, null)
             compoundDrawablePadding = 5.dpToPx()
@@ -434,21 +438,18 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         }
     }
 
-    /** The TV's switch, like a device's: it follows the phone's lockdown */
-    internal fun tvPill(on: Boolean, enabled: Boolean, onTap: () -> Unit): TextView = devicePill(Lockdown.Device.PHONE, on, enabled, onTap).apply {
-        text = getString(R.string.device_tv)
-        val color = currentTextColor
-        val icon = StatIcons.drawable(StatIcons.TV, color, 13.dpToPx())
-        icon.setBounds(0, 0, 13.dpToPx(), 13.dpToPx())
-        setCompoundDrawablesRelative(icon, null, null, null)
-        contentDescription = text.toString() + ", " + getString(if (on) R.string.on else R.string.off)
-    }
-
-    /** Picks devices: the phone, the Mac or both; straight to [onPicked] with the phone when there's no Mac */
+    /**
+     * Picks devices: all of them, each one, and each two when there are three; straight to [onPicked]
+     * with the phone when it's the only one
+     */
     internal fun pickDevices(title: String, current: Int, onPicked: (Int) -> Unit) {
-        if (!Lockdown.macPaired(requireContext())) return onPicked(Lockdown.Device.PHONE.bit)
-        val options = listOf(Lockdown.BOTH, Lockdown.Device.PHONE.bit, Lockdown.Device.MAC.bit)
-        choose(title, options.map { LockdownGate.deviceName(requireContext(), it) }, options.indexOf(current).coerceAtLeast(0), suggested = true) { onPicked(options[it]) }
+        val present = Lockdown.deviceList(requireContext())
+        if (present.size < 2) return onPicked(Lockdown.Device.PHONE.bit)
+        val all = present.sumOf { it.bit }
+        val pairs = if (present.size > 2) present.flatMapIndexed { i, a -> present.drop(i + 1).map { b -> a.bit or b.bit } } else emptyList()
+        val options = listOf(all) + present.map { it.bit } + pairs
+        val shown = (current and all).takeIf { it != 0 } ?: all
+        choose(title, options.map { LockdownGate.deviceName(requireContext(), it) }, options.indexOf(shown).coerceAtLeast(0), suggested = true) { onPicked(options[it]) }
     }
 
     /** Grayscale needs a permission only a computer can give */
