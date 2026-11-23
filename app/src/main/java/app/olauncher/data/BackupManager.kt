@@ -209,6 +209,9 @@ object BackupManager {
         requestSync(context)
     }
 
+    /** When the backup in the linked folder was last saved or found up to date; 0 if never */
+    fun lastSaved(context: Context): Long = prefs(context).getLong(LAST_SYNC, 0L)
+
     /** True when a folder is linked but backups to it aren't working (access lost or the last write failed). */
     fun isFolderFailing(context: Context): Boolean {
         val folder = backupFolder(context)

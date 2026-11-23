@@ -71,15 +71,31 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Every setting on one page, in sections: the home screen, gestures, apps, the daily check-in, what's
- * tracked, the stats, lockdown, backup and about. A setting's own options only show (indented) while
- * it's on, and holding any setting explains it in a line or two.
+ * Every setting on one page, in sections that open and close, one open at a time: lockdown, the home
+ * screen, gestures, apps, the check-in, money, places, tracking, stats, notes, the newsletter, backup
+ * and about. Each section's header shows a short summary of it. A setting's own options only show
+ * (indented) while it's on, and holding any setting explains it in a line or two. Searching shows the
+ * matching settings and opens the first section with one.
  */
 class SettingsFragment : CardPageFragment() {
 
     companion object {
-        /** Argument: open at the Tracking section */
-        const val TO_TRACKING = "toTracking"
+        /** Argument: the section to open at, one of the keys below ([MONEY], [TRACKING]) */
+        const val OPEN = "open"
+
+        const val LOCKDOWN = "lockdown"
+        const val HOME = "home"
+        const val GESTURES = "gestures"
+        const val APPS = "apps"
+        const val CHECK_IN = "checkIn"
+        const val MONEY = "money"
+        const val PLACES = "places"
+        const val TRACKING = "tracking"
+        const val STATS = "stats"
+        const val NOTES = "notes"
+        const val NEWSLETTER = "newsletter"
+        const val BACKUP = "backup"
+        const val ABOUT = "about"
     }
 
     private lateinit var prefs: Prefs
@@ -231,6 +247,7 @@ class SettingsFragment : CardPageFragment() {
     override fun onResume() {
         super.onResume()
         checkUpdate()
+        viewModel.getHiddenApps()
         // Permissions and services may have changed in the system's settings
         viewModel.isOlauncherDefault()
         if (prefs.lockModePending && isAccessServiceEnabled(requireContext())) {
@@ -240,8 +257,24 @@ class SettingsFragment : CardPageFragment() {
         render()
     }
 
-    /** Scrolls to the Tracking section once, when opened from a problem on the stat list */
-    private var toTracking = false
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        viewModel.hiddenApps.observe(viewLifecycleOwner) {
+            hiddenAppModels = it.orEmpty()
+            render()
+        }
+    }
+
+    override fun onPause() {
+        hiddenList.end()
+        super.onPause()
+    }
+
+    /** Which section is open: one at a time, kept while the page rebuilds and after coming back to it */
+    private val sections = OneOpen()
+
+    /** Rows that open inside a section (the hidden apps), apart from [sections] so opening one keeps its section open */
+    private val groups = OneOpen()
 
     private var scroll: ScrollView? = null
 
@@ -251,27 +284,34 @@ class SettingsFragment : CardPageFragment() {
     private fun render() {
         if (!isAdded) return
         restoreScrollSoon()
-        sections.clear()
-        toTracking = toTracking || arguments?.getBoolean(TO_TRACKING) == true
-        arguments?.remove(TO_TRACKING)
+        searchable.clear()
         cardList.removeAllViews()
         lockdownSection()
         homeSection()
         gesturesSection()
         appsSection()
         checkInSection()
+        moneySection()
+        placesSection()
         trackingSection()
         statsSection()
+        notesSection()
+        newsletterSection()
         backupSection()
         aboutSection()
         applySearch()
+        // Opened at a section (the Money page's limit, a problem on the stat list), once
+        arguments?.getString(OPEN)?.let { key ->
+            arguments?.remove(OPEN)
+            sections.show(key)
+        }
     }
 
     // --- Search ---
 
-    /** Each section's card, its title, and its rows with the words each is found by */
-    private class Section(val root: View, val title: String, val rows: List<Pair<View, String>>)
-    private val sections = mutableListOf<Section>()
+    /** Each section's key, card, title, and its rows with the words each is found by */
+    private class Section(val key: String, val root: View, val title: String, val rows: List<Pair<View, String>>)
+    private val searchable = mutableListOf<Section>()
     private var query = ""
     private val searchText = java.util.WeakHashMap<View, String>()
     private val noMatches by lazy {
@@ -325,12 +365,14 @@ class SettingsFragment : CardPageFragment() {
     /**
      * Shows only the settings matching the search: by their name, what holding them says, or their
      * section's name (which shows the whole section). A match under another setting keeps its line.
+     * Sections without a match go, and unless the open section has one, the first that does opens.
      */
     private fun applySearch() {
         val words = query.trim().lowercase(Locale.getDefault()).split(Regex("\\s+")).filter { it.isNotEmpty() }
         fun matches(text: String) = text.lowercase(Locale.getDefault()).let { t -> words.all { it in t } }
         var any = false
-        sections.forEach { section ->
+        val matching = mutableListOf<String>()
+        searchable.forEach { section ->
             val whole = words.isEmpty() || matches(section.title)
             var shown = 0
             section.rows.forEach { (view, text) ->
@@ -339,10 +381,14 @@ class SettingsFragment : CardPageFragment() {
                 if (show) shown++
             }
             section.root.visibility = if (shown > 0) View.VISIBLE else View.GONE
-            if (shown > 0) any = true
+            if (shown > 0) {
+                any = true
+                matching += section.key
+            }
         }
         noMatches.visibility = if (any || words.isEmpty()) View.GONE else View.VISIBLE
         if (!any && words.isNotEmpty()) noMatches.text = getString(R.string.settings_search_none, query.trim())
+        if (words.isNotEmpty() && matching.isNotEmpty() && sections.open !in matching) sections.show(matching.first())
     }
 
     private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
@@ -351,10 +397,12 @@ class SettingsFragment : CardPageFragment() {
     private fun row(card: Card, title: String, value: String?, about: Int, level: Int = 0, onTap: (() -> Unit)?): View =
         settingRow(title, value, getString(about), level, onTap = onTap).also { searchText[it] = title + "\n" + getString(about) }
 
-    private fun Card.body(vararg rows: View?) {
+    /** Makes [this] the section kept as [key], opening and closing, its header showing [value]; returns its rows' list */
+    private fun Card.body(key: String, value: String?, vararg rows: View?): LinearLayout {
         val shown = rows.filterNotNull()
-        rowsSection(shown)
-        sections.add(Section(root, titleView.text.toString(), shown.map { it to (searchText[it] ?: rowText(it)) }))
+        val list = collapsibleSection(sections, key, value, null, shown)
+        searchable.add(Section(key, root, titleView.text.toString(), shown.map { it to (searchText[it] ?: rowText(it)) }))
+        return list
     }
 
     /** The words in a row made some other way than [row], like Tracking's status lines */
@@ -389,7 +437,7 @@ class SettingsFragment : CardPageFragment() {
         val screenTime = context.appUsagePermissionGranted()
         val units = listOf(getString(R.string.units_auto), "°C", "°F")
         val screenTimeShown = screenTime && Arrangement.SCREEN_TIME !in Arrangement.hidden(context, Arrangement.HOME)
-        card.body(
+        card.body(HOME, null,
             row(card, getString(R.string.apps_on_home_screen), prefs.homeAppsNum.toString(), R.string.info_home_apps) {
                 choose(R.string.apps_on_home_screen, (0..8).map { it.toString() }, prefs.homeAppsNum) {
                     prefs.homeAppsNum = it
@@ -453,14 +501,12 @@ class SettingsFragment : CardPageFragment() {
                     viewModel.getWeather(force = true)
                 }
             } else null,
-            row(card, getString(R.string.settings_arrange), null, R.string.info_arrange) {
-                AppDialog(context).setTitle(R.string.settings_arrange).setMessage(R.string.info_arrange).setPositiveButton(R.string.okay, null).show()
-            },
-            row(card, getString(R.string.settings_reset_layout), null, R.string.info_reset_layout, level = 1) {
+            row(card, getString(R.string.settings_reset_layout), null, R.string.info_reset_layout) {
                 AppDialog(context)
+                    .setTitle(R.string.reset_layout_title)
                     .setMessage(R.string.reset_layout_ask)
                     .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.settings_reset_layout) { _, _ ->
+                    .setPositiveButton(R.string.reset) { _, _ ->
                         Arrangement.reset(context)
                         viewModel.refreshHome(true)
                         context.showToast(getString(R.string.layout_reset_done))
@@ -542,7 +588,7 @@ class SettingsFragment : CardPageFragment() {
         val downNames = listOf(getString(R.string.notifications), getString(R.string.search))
         val downs = listOf(Constants.SwipeDownAction.NOTIFICATIONS, Constants.SwipeDownAction.SEARCH)
         val lockOn = prefs.lockModeOn && (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || isAccessServiceEnabled(context))
-        card.body(
+        card.body(GESTURES, null,
             row(card, getString(R.string.swipe_left), swipeName(true), R.string.info_swipe_left) { pickSwipe(true) },
             row(card, getString(R.string.swipe_right), swipeName(false), R.string.info_swipe_right) { pickSwipe(false) },
             row(card, getString(R.string.swipe_down), downNames[downs.indexOf(prefs.swipeDownAction).coerceAtLeast(0)], R.string.info_swipe_down) {
@@ -554,9 +600,18 @@ class SettingsFragment : CardPageFragment() {
                 prefs.homeButtonShowRecents = !prefs.homeButtonShowRecents
                 render()
             },
-            row(card, getString(R.string.voice_tidy), onOff(app.olauncher.helper.AiTidy.isOn(context)), R.string.info_voice_tidy) { setTidyKey() },
-            if (app.olauncher.helper.AiTidy.isOn(context))
-                row(card, getString(R.string.journal_summarise_all), summarising, R.string.info_journal_summarise_all, level = 1) { summariseAll() }
+        )
+    }
+
+    // --- Notes ---
+
+    private fun notesSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.settings_notes))
+        val tidy = app.olauncher.helper.AiTidy.isOn(context)
+        card.body(NOTES, null,
+            row(card, getString(R.string.voice_tidy), onOff(tidy), R.string.info_voice_tidy) { setTidyKey() },
+            if (tidy) row(card, getString(R.string.journal_summarise_all), summarising, R.string.info_journal_summarise_all, level = 1) { summariseAll() }
             else null,
         )
     }
@@ -611,7 +666,7 @@ class SettingsFragment : CardPageFragment() {
                 addView(input)
             })
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.okay) { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 app.olauncher.helper.AiTidy.setKey(context, input.text?.toString())
                 if (isAdded) render()
             }
@@ -658,22 +713,53 @@ class SettingsFragment : CardPageFragment() {
 
     // --- Apps ---
 
+    /** The hidden apps, once looked up ([MainViewModel.getHiddenApps]) */
+    private var hiddenAppModels: List<app.olauncher.data.AppModel> = emptyList()
+
+    /** The hidden apps' list: tap or hold one for Open / Unhide, or select several to unhide */
+    private val hiddenList = HoldList<app.olauncher.data.AppModel>(onRemove = { unhide(it) }, tapOpensMenu = true, removeLabel = R.string.unhide)
+
     private fun appsSection() {
         val context = requireContext()
         val card = Card(getString(R.string.apps))
-        val hidden = prefs.hiddenApps.size
-        card.body(
-            row(card, getString(R.string.hidden_apps), hidden.toString(), R.string.info_hidden_apps) {
-                if (LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)) return@row
-                if (prefs.hiddenApps.isEmpty()) return@row context.showToast(getString(R.string.no_hidden_apps))
-                viewModel.getHiddenApps()
-                findNavController().navigate(R.id.appListFragment, bundleOf(Constants.Key.FLAG to Constants.FLAG_HIDDEN_APPS))
-            },
+        val apps = hiddenAppModels.filterIsInstance<app.olauncher.data.AppModel.App>().sortedBy { it.appLabel.lowercase(Locale.getDefault()) }
+        // Until they're looked up, as many as are kept
+        val count = if (apps.isNotEmpty()) apps.size else prefs.hiddenApps.size
+        val countText = if (count == 0) getString(R.string.none) else count.toString()
+        val locked = Lockdown.isLocked(context, Lockdown.Lock.HIDDEN_APPS, prefs)
+        val hiddenRows = apps.map { settingRow(it.appLabel, null, level = 1, onTap = null) }
+        // While lockdown keeps hidden apps hidden, the row only says so; otherwise it opens to the list
+        val hidden: View = if (locked || apps.isEmpty()) row(card, getString(R.string.hidden_apps), countText, R.string.info_hidden_apps) {
+            LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)
+        } else collapsibleGroup(groups, "hidden", getString(R.string.hidden_apps), countText, getString(R.string.info_hidden_apps), hiddenRows).also { group ->
+            hiddenList.attach(group.rows, scroll)
+            hiddenRows.forEachIndexed { i, row ->
+                val app = apps[i]
+                hiddenList.item(row, app, label = app.appLabel, actions = listOf(
+                    HoldList.Action(getString(R.string.open_app)) { viewModel.selectedApp(app, Constants.FLAG_HIDDEN_APPS) },
+                    HoldList.Action(getString(R.string.unhide)) { unhide(setOf(app)) },
+                ))
+            }
+        }.view
+        card.body(APPS, if (count == 0) null else resources.getQuantityString(R.plurals.hidden_count, count, count),
+            hidden,
             row(card, getString(R.string.auto_show_keyboard), onOff(prefs.autoShowKeyboard), R.string.info_keyboard) {
                 prefs.autoShowKeyboard = !prefs.autoShowKeyboard
                 render()
             },
         )
+    }
+
+    /** Puts [apps] back in the app list */
+    private fun unhide(apps: Set<app.olauncher.data.AppModel>) {
+        val context = requireContext()
+        if (LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)) return
+        val keys = apps.flatMap { listOf(it.appPackage, it.appPackage + "|" + it.user.toString()) }.toSet()
+        prefs.hiddenApps = prefs.hiddenApps.filter { it !in keys }.toMutableSet()
+        hiddenAppModels = hiddenAppModels.filter { it !in apps }
+        viewModel.getAppList()
+        viewModel.getHiddenApps()
+        render()
     }
 
     /** Anything that weakens a limit needs lockdown's unlock while lockdown is on */
@@ -685,7 +771,7 @@ class SettingsFragment : CardPageFragment() {
         val data = moodStore.load()
         val card = Card(getString(R.string.check_in))
         fun time(minutes: Int) = Formats.time(requireContext(), Formats.minutesOfDay(minutes))
-        card.body(
+        card.body(CHECK_IN, if (data.promptEnabled) time(data.promptMinutes) else getString(R.string.off),
             row(card, getString(R.string.daily_mood_prompt), onOff(data.promptEnabled), R.string.info_check_in) {
                 val enable = !data.promptEnabled
                 moodStore.update {
@@ -724,56 +810,6 @@ class SettingsFragment : CardPageFragment() {
             .show()
     }
 
-    /**
-     * Which of [keys] show, and in what order: a tick for each, and arrows to move it. Saved for
-     * [name] in [Arrangement].
-     */
-    private fun arrange(title: Int, name: String, keys: List<String>, label: (String) -> String) {
-        val context = requireContext()
-        val order = Arrangement.order(context, name, keys).toMutableList()
-        val hidden = Arrangement.hidden(context, name).toMutableSet()
-        val list = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20.dpToPx(), 8.dpToPx(), 12.dpToPx(), 0)
-        }
-        fun draw() {
-            list.removeAllViews()
-            order.forEachIndexed { i, key ->
-                list.addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    addView(android.widget.CheckBox(context).apply {
-                        text = label(key)
-                        isChecked = key !in hidden
-                        setOnCheckedChangeListener { _, on -> if (on) hidden -= key else hidden += key }
-                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    fun arrow(symbol: String, enabled: Boolean, by: Int) = TextView(context).apply {
-                        text = symbol
-                        textSize = Style.TEXT_TITLE
-                        alpha = if (enabled) 0.85f else 0.2f
-                        setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
-                        if (enabled) setOnClickListener {
-                            order.add(i + by, order.removeAt(i))
-                            draw()
-                        }
-                    }
-                    addView(arrow("↑", i > 0, -1))
-                    addView(arrow("↓", i < order.lastIndex, 1))
-                })
-            }
-        }
-        draw()
-        AppDialog(context)
-            .setTitle(title)
-            .setView(ScrollView(context).apply { addView(list) })
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.save) { _, _ ->
-                Arrangement.save(context, name, order, hidden)
-                render()
-            }
-            .show()
-    }
-
     private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
         TimePickerDialog(requireContext(), { _, hour, minute ->
             onPicked(hour * 60 + minute)
@@ -787,12 +823,7 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext()
         val items = Tracking.items(context)
         val card = Card(getString(R.string.tracking))
-        if (toTracking) {
-            toTracking = false
-            card.root.post { (cardList.parent?.parent as? ScrollView)?.smoothScrollTo(0, card.root.top) }
-        }
         val problems = items.count { !it.ok }
-        card.subtitle(if (problems == 0) getString(R.string.tracking_all_ok) else resources.getQuantityString(R.plurals.tracking_problems, problems, problems))
         val status = items.map { item ->
             LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -816,15 +847,13 @@ class SettingsFragment : CardPageFragment() {
                 })
             }
         }
-        card.body(
+        card.body(TRACKING, if (problems == 0) getString(R.string.tracking_all_ok) else resources.getQuantityString(R.plurals.tracking_problems, problems, problems),
             *status.toTypedArray(),
             row(card, getString(R.string.people_count_calls), onOff(People.hasCallLog(context)), R.string.info_calls) {
                 if (People.hasCallLog(context)) openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
                 else askCallLog.launch(android.Manifest.permission.READ_CALL_LOG)
             },
         )
-        placesSection()
-        spendingSection()
     }
 
     private fun placesSection() {
@@ -835,9 +864,9 @@ class SettingsFragment : CardPageFragment() {
         val work = Social.work(context)
         val (checks, scans) = Places.todayCounts(context)
         val placesOn = Places.enabled(context)
-        card.body(
+        card.body(PLACES, onOff(placesOn),
             row(card, getString(R.string.homes_and_work), listOfNotNull(homes.firstOrNull()?.name, homes.getOrNull(1)?.name, work?.name)
-                .joinToString(", ").ifEmpty { getString(R.string.social_not_set) }, R.string.info_homes) {
+                .joinToString(", ").ifEmpty { getString(R.string.none) }, R.string.info_homes) {
                 social?.let { id -> runCatching { findNavController().navigate(R.id.statFragment, bundleOf(StatFragment.STAT_ID to id)) } }
             },
             row(card, getString(R.string.places_find), onOff(placesOn), R.string.info_places) {
@@ -848,33 +877,64 @@ class SettingsFragment : CardPageFragment() {
                 resources.getQuantityString(R.plurals.places_scans, scans, scans), R.string.info_places_today, level = 1, onTap = null) else null,
             if (placesOn) row(card, getString(R.string.places_delete), null, R.string.info_places_delete, level = 1) {
                 AppDialog(context)
+                    .setTitle(R.string.places_delete_title)
                     .setMessage(R.string.places_delete_ask)
                     .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.places_delete) { _, _ -> Places.deleteHistory(context); render() }
+                    .setPositiveButton(R.string.delete_confirm) { _, _ -> Places.deleteHistory(context); render() }
                     .show()
             } else null,
         )
     }
 
-    private fun spendingSection() {
+    // --- Money ---
+
+    /** The weekly limit and what goes with it are set only here; the Money page's limit opens this section */
+    private fun moneySection() {
         val context = requireContext()
         val card = Card(getString(R.string.settings_spending))
         val limit = Spending.weekLimitCents(context)
-        card.body(
-            row(card, getString(R.string.week_limit), if (limit <= 0) getString(R.string.off) else moneyShort(limit), R.string.info_week_limit) {
-                askWeekLimit { if (isAdded) render() }
-            },
-            if (limit > 0) row(card, getString(R.string.money_left_on_home), onOff(Spending.showOnHome(context)), R.string.info_money_left, level = 1) {
-                Spending.setShowOnHome(context, !Spending.showOnHome(context))
-                render()
-            } else null,
+        val limitText = if (limit <= 0) getString(R.string.off) else moneyShort(limit)
+        card.body(MONEY, limitText,
+            row(card, getString(R.string.week_limit), limitText, R.string.info_week_limit) { askWeekLimit() },
             if (limit > 0) row(card, getString(R.string.settings_carry_over), onOff(Spending.carryOver(context)), R.string.info_carry_over, level = 1) {
                 Spending.setCarryOver(context, !Spending.carryOver(context))
+                render()
+            } else null,
+            if (limit > 0) row(card, getString(R.string.money_left_on_home), onOff(Spending.showOnHome(context)), R.string.info_money_left, level = 1) {
+                Spending.setShowOnHome(context, !Spending.showOnHome(context))
                 render()
             } else null,
             row(card, getString(R.string.settings_essentials), Spending.groupRules(context).size.takeIf { it > 0 }?.toString() ?: getString(R.string.settings_automatic),
                 R.string.info_essentials) { askRules() },
         )
+    }
+
+    /** The most to spend in a week; Turn off takes the limit away */
+    private fun askWeekLimit() {
+        val context = requireContext()
+        val current = Spending.weekLimitCents(context)
+        val input = EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            hint = "$"
+            if (current > 0) setText(if (current % 100 == 0L) (current / 100).toString() else String.format(Locale.US, "%.2f", current / 100.0))
+            setSelection(text.length)
+        }
+        AppDialog(context)
+            .setTitle(R.string.week_limit)
+            .setView(FrameLayout(context).apply {
+                setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+                addView(input)
+            })
+            .setPositiveButton(R.string.save) { _, _ ->
+                val dollars = input.text.toString().replace("$", "").replace(",", "").trim().toDoubleOrNull()
+                if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, Math.round(dollars * 100))
+                if (isAdded) render()
+            }
+            .apply { if (current > 0) setNeutralButton(R.string.turn_off) { _, _ -> Spending.setWeekLimitCents(context, 0); if (isAdded) render() } }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+            .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        input.requestFocus()
     }
 
     /** Each category set by hand: change it or put it back to automatic */
@@ -907,7 +967,7 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext()
         val card = Card(getString(R.string.stats_title))
         val newOnHome = StatsHomeFragment.showsNewStats(context)
-        card.body(
+        card.body(STATS, null,
             row(card, getString(R.string.week_starts), app.olauncher.helper.Week.first.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()),
                 R.string.info_week_starts) {
                 val days = listOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.SUNDAY, java.time.DayOfWeek.SATURDAY)
@@ -924,19 +984,6 @@ class SettingsFragment : CardPageFragment() {
             row(card, getString(R.string.settings_new_on_home), onOff(newOnHome), R.string.info_new_on_home) {
                 StatsHomeFragment.setShowsNewStats(context, !newOnHome)
                 render()
-            },
-            row(card, getString(R.string.stats_home_cards), Arrangement.shown(context, Arrangement.STATS_HOME, Arrangement.STATS_HOME_CARDS).size.toString(),
-                R.string.info_stats_home_cards) {
-                arrange(R.string.stats_home_cards, Arrangement.STATS_HOME, Arrangement.STATS_HOME_CARDS) { key ->
-                    getString(when (key) {
-                        Arrangement.DAILY -> R.string.stat_daily
-                        Arrangement.TRENDS -> R.string.graph_trends
-                        Arrangement.REMEMBER -> R.string.remember
-                        Arrangement.INSIGHTS -> R.string.insights
-                        Arrangement.THIS_WEEK -> R.string.this_week
-                        else -> R.string.compare_two
-                    })
-                }
             },
             row(card, getString(R.string.report_make), null, R.string.info_report) { askReport() },
             if (app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.MAC) > 0)
@@ -965,23 +1012,46 @@ class SettingsFragment : CardPageFragment() {
     private val gate by lazy { LockdownGate(this) { render() } }
 
     /**
-     * Lockdown has its own page (Limits is in it, under Screen time); here it's the first section's
-     * row, with a red dot by the value while it's in force.
+     * Lockdown has its own page (Limits is in it, under Screen time); here it's the first section,
+     * its header saying whether it's on, with a red dot while it's in force, and a row opening the page.
      */
     private fun lockdownSection() {
         val context = requireContext()
         val card = Card(getString(R.string.lockdown))
         val on = Lockdown.isActive(context, prefs)
-        card.body(
-            row(card, getString(R.string.lockdown), LockdownGate.status(context), R.string.info_lockdown) {
+        card.body(LOCKDOWN, LockdownGate.status(context),
+            row(card, getString(R.string.settings_lockdown_open), null, R.string.info_lockdown) {
                 findNavController().navigate(R.id.lockdownFragment)
-            }.also { if (on) it.valueDot(Style.DANGER) },
+            },
+        )
+        if (on) card.headerEnd.valueDot(Style.DANGER, first = true)
+    }
+
+    // --- Newsletter ---
+
+    /** Each newsletter's settings page, and how issues are read */
+    private fun newsletterSection() {
+        val context = requireContext()
+        val card = Card(getString(R.string.newsletter))
+        card.body(NEWSLETTER, null,
+            *app.olauncher.helper.NewsletterSync.PROFILES.map { profile ->
+                row(card, getString(if (profile == app.olauncher.helper.NewsletterSync.WEEKLY) R.string.newsletter_weekly else R.string.newsletter_daily),
+                    null, R.string.info_newsletter_profile) {
+                    findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(NewsletterSettingsFragment.PROFILE to profile))
+                }
+            }.toTypedArray(),
+            row(card, getString(R.string.newsletter_reader_mode), getString(
+                if (NewsletterReaderFragment.paged(context)) R.string.newsletter_pages else R.string.newsletter_scrolling), R.string.info_newsletter_reader) {
+                NewsletterReaderFragment.setPaged(context, !NewsletterReaderFragment.paged(context))
+                render()
+            },
         )
     }
 
-    /** A small dot before a row's value */
-    private fun View.valueDot(color: Int) {
-        val value = (this as? ViewGroup)?.let { it.getChildAt(it.childCount - 1) } as? android.widget.TextView ?: return
+    /** A small dot before a row's value (its last text), or before the first text with [first] */
+    private fun View.valueDot(color: Int, first: Boolean = false) {
+        val group = this as? ViewGroup ?: return
+        val value = group.getChildAt(if (first) 0 else group.childCount - 1) as? android.widget.TextView ?: return
         val size = 7.dpToPx()
         value.setCompoundDrawablesRelative(GradientDrawable().apply {
             shape = GradientDrawable.OVAL
@@ -998,7 +1068,13 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext()
         val card = Card(getString(R.string.backup))
         val folder = BackupManager.backupFolder(context)
-        card.body(
+        val saved = BackupManager.lastSaved(context)
+        card.body(BACKUP, when {
+                folder.isEmpty() -> getString(R.string.off)
+                BackupManager.isFolderFailing(context) -> getString(R.string.backup_not_saving)
+                saved > 0 -> getString(R.string.backup_saved_at, LockdownGate.time(context, saved))
+                else -> getString(R.string.on)
+            },
             row(card, getString(R.string.backup_folder), when {
                 folder.isEmpty() -> getString(R.string.off)
                 BackupManager.isFolderFailing(context) -> getString(R.string.backup_not_saving)
@@ -1088,7 +1164,7 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext()
         val card = Card(getString(R.string.about))
         val isDefault = isOlauncherDefault(context)
-        card.body(
+        card.body(ABOUT, BuildConfig.VERSION_NAME,
             if (!Lockdown.isLocked(context, Lockdown.Lock.LAUNCHER, prefs)) row(card, getString(if (isDefault) R.string.change_default_launcher else R.string.set_as_default_launcher),
                 null, R.string.info_default) { viewModel.resetLauncherLiveData.call() } else null,
             row(card, getString(R.string.tutorial), null, R.string.info_tutorial) { Tutorial.show(requireActivity()) },

@@ -300,25 +300,6 @@ class NewsletterSettingsFragment : CardPageFragment() {
                 }
             }
         })
-        val arrange = Card(getString(R.string.newsletter_arrange))
-        arrange.body(listOfNotNull(
-            if (index > 0) row(getString(R.string.newsletter_move_up), null) { move(s, subs, index, -1) } else null,
-            if (index < subs.lastIndex) row(getString(R.string.newsletter_move_down), null) { move(s, subs, index, 1) } else null,
-            row(getString(R.string.newsletter_remove), null, faded = true) {
-                if (subs.size <= 1) return@row requireContext().showToast(R.string.newsletter_keep_one)
-                changed(NewsletterSync.withSubreddits(s, subs.filterIndexed { i, _ -> i != index }))
-                findNavController().popBackStack()
-            },
-        ))
-    }
-
-    private fun move(s: JSONObject, subs: List<NewsletterSync.Subreddit>, index: Int, by: Int) {
-        val list = subs.toMutableList()
-        list.add(index + by, list.removeAt(index))
-        // This page follows the subreddit to where it went
-        subIndex = index + by
-        requireArguments().putInt(SUBREDDIT, subIndex)
-        changed(NewsletterSync.withSubreddits(s, list))
     }
 
     // --- Changing one setting ---
@@ -374,7 +355,7 @@ class NewsletterSettingsFragment : CardPageFragment() {
     }
 
     private fun shown(setting: Setting, value: Any?): String = when {
-        value == null || value == JSONObject.NULL -> "–"
+        value == null || value == JSONObject.NULL -> getString(R.string.none)
         setting.kind == Kind.BOOL -> getString(if (value == true) R.string.on else R.string.off)
         else -> value.toString()
     }

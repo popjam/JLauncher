@@ -263,7 +263,7 @@
         <item>Sad</item>
     </string-array>
     <string name="stats_title">Stats</string>
-    <string name="stats_home">Home</string>
+    <string name="stats_home">Overview</string>
     <string name="remember">From before</string>
     <string name="quoted">“%1$s”</string>
     <string name="this_week">This week</string>
@@ -329,19 +329,14 @@
     <string name="steps_usual_heading">Steps, usually</string>
     <string name="week_limit">Weekly limit</string>
     <string name="week_limit_none">Set a limit to see what’s left each week and which weeks went over</string>
-    <string name="week_limit_set">Set a limit</string>
-    <string name="week_limit_change">Limit %1$s · Change</string>
-    <string name="week_limit_ask">Most to spend a week</string>
-    <string name="week_limit_remove">Remove</string>
-    <string name="week_limit_left">left this week, of %1$s</string>
+    <string name="week_limit_change">Weekly limit · %1$s</string>
+    <string name="week_limit_left">Left this week, of %1$s</string>
     <string name="week_limit_over">over this week’s %1$s</string>
     <string name="week_limit_broken">%1$d of %2$d weeks over</string>
     <string name="week_limit_under">Under</string>
     <string name="week_limit_over_key">Over</string>
     <string name="week_limit_over_by">Over by</string>
     <string name="week_limit_under_by">Under by</string>
-    <string name="week_limit_carry">Carry leftover or debt into next week</string>
-    <string name="week_limit_on_home">Show what’s left on the home screen</string>
     <string name="week_limit_carried">%1$s carried over</string>
     <string name="week_limit_debt">%1$s debt from last week</string>
     <string name="week_limit_allowed">Allowed</string>
@@ -353,7 +348,7 @@
     <string name="swipe_left_opens">Swipe left opens</string>
     <string name="swipe_right_opens">Swipe right opens</string>
     <string name="swipe_an_app">An app…</string>
-    <string name="swipe_stats_home">Stats home</string>
+    <string name="swipe_stats_home">Overview</string>
     <string name="music_streak">days in a row</string>
     <string name="music_when">When you listen</string>
     <string name="music_peak">%1$s–%2$s</string>
@@ -484,11 +479,11 @@
     <string name="tracking_backup">Backups to Drive</string>
     <string name="tracking_backup_ok">Saving</string>
     <string name="tracking_backup_failing">Not saving; check the folder in Settings</string>
-    <string name="settings_spending">Spending</string>
+    <string name="settings_spending">Money</string>
     <string name="settings_essentials">Essentials</string>
     <string name="settings_essentials_how">Hold a purchase on the Money page to count it, or everything in its category, as essential or not.</string>
     <string name="settings_not_essential">not essential</string>
-    <string name="settings_new_on_home">New stats on Stats Home</string>
+    <string name="settings_new_on_home">New stats on Overview</string>
     <string name="report_make">Appointment report</string>
     <string name="report_file">JLauncher report %1$s.pdf</string>
     <string name="report_done">Report saved</string>
@@ -693,7 +688,7 @@
         <item quantity="other">%d Wi-Fi scans</item>
     </plurals>
     <string name="places_delete">Delete location history</string>
-    <string name="places_delete_ask">Delete every visit kept? Places you’ve named stay, and so does the time already counted at them.</string>
+    <string name="places_delete_ask">Every visit goes. Places you’ve named stay, and so does the time already counted at them.</string>
     <string name="tracking_places">Places</string>
     <string name="tracking_places_waiting">Waiting for the first location</string>
     <string name="tracking_places_ok">Last location %1$s ago</string>
@@ -784,50 +779,50 @@
     <string name="settings_automatic">Automatic</string>
     <string name="app_info">App info</string>
     <string name="version">Version</string>
-    <string name="info_home_apps">How many apps are listed on each home page.</string>
-    <string name="info_home_pages">Swipe up or down on home to move between pages of apps.</string>
-    <string name="info_clock">The time and date at the top of home.</string>
-    <string name="info_alignment">Which side the app names line up on.</string>
+    <string name="info_home_apps">How many apps each home page lists.</string>
+    <string name="info_home_pages">How many pages of apps home has. Swipe up or down on home to move between them.</string>
+    <string name="info_clock">Shows the time and date at the top of home, or just the date.</string>
+    <string name="info_alignment">Lines the app names up on the left, in the centre or on the right.</string>
     <string name="info_bottom">Puts the apps near the bottom of the screen, closer to your thumb.</string>
-    <string name="info_text_size">The size of app names and text on home.</string>
-    <string name="info_theme">Dark, light, or follow the phone.</string>
+    <string name="info_text_size">Sets the size of app names and text on home.</string>
+    <string name="info_theme">Uses dark or light colours, or follows the phone.</string>
     <string name="info_status_bar">Shows the phone’s status bar (time, battery, signal) at the top.</string>
     <string name="info_screen_time">Shows today’s screen time under the mood face. Needs usage access.</string>
     <string name="info_weather">Shows today’s weather at the top of home. Tap it for the forecast.</string>
-    <string name="info_money_left">Shows what’s left of your weekly spending limit on home.</string>
-    <string name="info_swipe_left">What swiping left on home opens.</string>
-    <string name="info_swipe_right">What swiping right on home opens.</string>
-    <string name="info_swipe_down">Pull down on home for notifications or search.</string>
+    <string name="info_money_left">Shows on home what’s left of the weekly limit this week.</string>
+    <string name="info_swipe_left">Picks what swiping left on home opens.</string>
+    <string name="info_swipe_right">Picks what swiping right on home opens.</string>
+    <string name="info_swipe_down">Picks what pulling down on home opens: notifications or search.</string>
     <string name="info_double_tap">Double tap an empty part of home to lock the phone.</string>
     <string name="info_home_recents">Pressing home while already on home shows recent apps.</string>
-    <string name="info_hidden_apps">Apps you’ve hidden from the app list. Tap to see or unhide them.</string>
+    <string name="info_hidden_apps">Apps hidden from the app list. Tap one to open or unhide it.</string>
     <string name="info_keyboard">Opens the keyboard as soon as the app list opens, so you can type to find an app.</string>
     <string name="info_pause_length">How long the pause before a paused app opens lasts.</string>
-    <string name="info_check_in">Asks how your day was once a day, from home.</string>
+    <string name="info_check_in">Asks how your day was, once a day, when you’re on home.</string>
     <string name="info_check_in_time">When the check-in shows up.</string>
     <string name="info_missed_day">If you missed yesterday, asks about it the next morning.</string>
     <string name="info_missed_until">How late in the morning it still asks about yesterday.</string>
     <string name="info_homes">Your homes and work, known by their Wi-Fi. Tap to change them.</string>
     <string name="info_places">Finds places you spend time at, using rough location and nearby Wi-Fi. No GPS.</string>
-    <string name="info_places_today">How often it checked where you are today.</string>
-    <string name="info_places_delete">Forgets every visit. Named places stay.</string>
-    <string name="info_week_limit">A weekly spending limit, from CommBank and Google Wallet notifications.</string>
-    <string name="info_carry_over">Money left over (or overspent) moves into next week.</string>
-    <string name="info_essentials">Spending that doesn’t count towards the limit, like groceries and bills.</string>
+    <string name="info_places_today">How many times it checked where you are today.</string>
+    <string name="info_places_delete">Forgets every visit. Named places, and the time already counted at them, stay.</string>
+    <string name="info_week_limit">The most you want to spend in a week. Spending is read from CommBank and Google Wallet notifications.</string>
+    <string name="info_carry_over">Money left at the end of a week is added to the next week, and overspending is taken off it.</string>
+    <string name="info_essentials">Spending that doesn’t count towards the weekly limit, like groceries and bills. Worked out automatically; hold a purchase on the Money page to change it.</string>
     <string name="info_calls">Counts calls in People, from the call log. Only counts, never who or what.</string>
-    <string name="info_new_on_home">New stats show on Stats Home straight away.</string>
-    <string name="info_report">A PDF of your mood, medicines and other stats, to bring to an appointment.</string>
+    <string name="info_new_on_home">New stats show on Overview as soon as they’re made.</string>
+    <string name="info_report">Makes a PDF of your mood, medicines and other stats, to take to an appointment.</string>
     <string name="info_lockdown">Blocks apps, sites and settings changes on the phone and the switched-on devices, and makes that hard to undo. While it\'s on, loosening anything needs what Unlock is set to.</string>
     <string name="info_lockdown_schedules">Turns lockdown on by itself on chosen days, between two times.</string>
     <string name="info_lockdown_accessibility">Needed to block apps opened from links, notifications or recent apps, and to protect JLauncher.</string>
     <string name="info_change_password">Changes the password. Asks for the current one first.</string>
     <string name="info_recovery">Ways to see the password again if you forget it.</string>
-    <string name="info_backup_folder">Saves a backup to this folder, like Google Drive, whenever something changes.</string>
+    <string name="info_backup_folder">Saves a backup to this folder, such as one on Google Drive, whenever something changes.</string>
     <string name="info_export">Saves a backup file once, wherever you choose.</string>
-    <string name="info_import">Replaces everything with a backup file.</string>
+    <string name="info_import">Replaces everything with what’s in a backup file.</string>
     <string name="info_default">Makes this your home screen, or switches to another.</string>
     <string name="info_app_info">Android’s page for this app: permissions, storage and battery.</string>
-    <string name="info_version">The version you’re running.</string>
+    <string name="info_version">The version of JLauncher on this phone.</string>
     <string name="tracking_check">Check</string>
     <string name="places_title_short">Places</string>
     <string name="lockdown">Lockdown</string>
@@ -888,7 +883,6 @@
     <string name="system_app_cannot_delete">System apps can\'t be uninstalled</string>
     <string name="type_a_new_app_name_first">Type a new name first</string>
     <string name="app_not_found">Couldn\'t find that app</string>
-    <string name="no_hidden_apps">No hidden apps</string>
     <string name="hidden_apps">Hidden apps</string>
     <string name="adapter_show">Show</string>
     <string name="adapter_hide">Hide</string>
@@ -966,8 +960,8 @@
     <string name="no_data">No data</string>
     <string name="how_was_today">How was today?</string>
     <string name="how_was_yesterday">How was yesterday?</string>
-    <string name="ask_missed_day">Ask about a missed day</string>
-    <string name="ask_missed_day_until">Next morning until</string>
+    <string name="ask_missed_day">Missed days</string>
+    <string name="ask_missed_day_until">Ask until</string>
     <string name="stat_step">%1$s  %2$d/%3$d</string>
     <string name="previous_stat">Previous stat</string>
     <string name="next_stat">Next stat</string>
@@ -1017,20 +1011,18 @@
     <string name="show">Show</string>
     <string name="check_in_asks">Asks about</string>
     <string name="info_check_in_asks">Which stats the check-in asks about, after mood.</string>
-    <string name="stats_home_cards">Stats Home cards</string>
-    <string name="info_stats_home_cards">Which cards Stats Home shows, and in what order.</string>
     <plurals name="stat_count">
         <item quantity="one">%d stat</item>
         <item quantity="other">%d stats</item>
     </plurals>
     <string name="tutorial">Tutorial</string>
-    <string name="info_tutorial">A quick look round the app.</string>
+    <string name="info_tutorial">Shows a short walk-through of the app.</string>
     <string name="tutorial_step">%1$d of %2$d</string>
     <string name="tutorial_skip">Skip</string>
     <string name="tutorial_next">Next</string>
     <string name="tutorial_done">Done</string>
     <string name="tutorial_home_title">Just your apps</string>
-    <string name="tutorial_home">Tap a name to open it. Swipe up for every app, and type to find one.\n\nHold an app to rename or hide it.</string>
+    <string name="tutorial_home">Tap a name to open it. Swipe up for every app, and type to find one.\n\nHold an app to rename it, or drag it onto Hide to hide it.</string>
     <string name="tutorial_stats_title">Swipe left for stats</string>
     <string name="tutorial_stats">A quick check-in each evening, and stats that fill themselves in: screen time, sleep, places and more.\n\nHold any day to see all of it.</string>
     <string name="tutorial_settings_title">Hold home for settings</string>
@@ -1057,7 +1049,7 @@
     <string name="info_temperature">Degrees in °C or °F, or whatever your region uses.</string>
     <string name="units_auto">Automatic</string>
     <string name="week_starts">Week starts on</string>
-    <string name="info_week_starts">For the weekly spending limit, weekly stats and calendars.</string>
+    <string name="info_week_starts">The day weeks start on, for the weekly limit, weekly stats and calendars.</string>
     <string name="size_smallest">Smallest</string>
     <string name="size_small">Small</string>
     <string name="size_normal">Normal</string>
@@ -1074,7 +1066,7 @@
     <string name="info_use_for_lengths">The times you can pick from when opening an app set to Use for a set time.</string>
     <string name="money_left_on_home">On home</string>
     <string name="step_goal">Step goal</string>
-    <string name="info_step_goal">The daily steps the Steps page aims for.</string>
+    <string name="info_step_goal">The steps a day the Steps page aims for.</string>
     <string name="battery">Battery</string>
     <string name="battery_now">Now</string>
     <string name="battery_waiting">Readings show here as the battery changes</string>
@@ -1173,14 +1165,14 @@
         <item quantity="other">%d recordings not written out</item>
     </plurals>
     <string name="voice_note_app">Voice note</string>
-    <string name="voice_tidy">Tidy dictation with Claude</string>
+    <string name="voice_tidy">Tidy with Claude</string>
     <string name="voice_tidy_key">Anthropic API key</string>
     <string name="voice_tidy_off">Turn off</string>
     <string name="journal_summarise_all">Tidy and summarise notes</string>
-    <string name="journal_summarise">Go</string>
+    <string name="journal_summarise">Summarise</string>
     <string name="journal_summarising">Working…</string>
     <string name="journal_summarise_none">No notes to tidy or summarise</string>
-    <string name="info_journal_summarise_all">Tidies every journal note of 40 words or more that Claude hasn\'t tidied since it last changed, then makes the summary of every note over 150 words again. Each note is sent to Claude.</string>
+    <string name="info_journal_summarise_all">Tidies every note of 40 words or more that Claude hasn’t tidied since it last changed, and summarises every note over 150 words again. Each note is sent to Claude.</string>
     <plurals name="journal_summarise_ask">
         <item quantity="one">Tidy and summarise %d note?</item>
         <item quantity="other">Tidy and summarise %d notes?</item>
@@ -1193,7 +1185,7 @@
         <item quantity="one">%d note couldn\'t be done</item>
         <item quantity="other">%d notes couldn\'t be done</item>
     </plurals>
-    <string name="info_voice_tidy">Spoken notes are written out on the phone, with filler words taken out. With an Anthropic API key, the written-out text is also sent to Claude, which adds punctuation and paragraphs and keeps your words. The key stays on this phone.</string>
+    <string name="info_voice_tidy">Sends the written-out text of spoken notes to Claude, which adds punctuation and paragraphs and keeps your words. Needs an Anthropic API key, which stays on this phone. Without one, notes are still written out on the phone with filler words taken out.</string>
     <string name="journal_day_hint">Write about the day</string>
     <string name="journal_open_day">Day</string>
     <string name="journal_more">Show more</string>
@@ -1215,11 +1207,9 @@
         <item quantity="other">%d hidden cards · tap to bring them back</item>
     </plurals>
     <string name="hidden_cards_title">Hidden cards</string>
-    <string name="settings_arrange">Moving things around</string>
-    <string name="info_arrange">Hold anything on the home screen (apps, the clock, the weather, screen time, money), a card’s title on Stats Home or a stat’s page, or Stats Home’s bubble, then drag it. It snaps into place when you let go. Drag it onto Hide at the top to hide it. Holding and letting go without dragging does what holding always did.</string>
     <string name="settings_reset_layout">Reset layout</string>
-    <string name="info_reset_layout">Puts the home screen, Stats Home and every stat page back the way they first were. Your apps and stats stay.</string>
-    <string name="reset_layout_ask">Put everything back where it first was? Hidden cards come back too.</string>
+    <string name="info_reset_layout">Puts home, Overview and every stat page back the way they first were, and shows hidden cards again. Your apps and stats stay.</string>
+    <string name="reset_layout_ask">Home, Overview and every stat page go back the way they first were. Hidden cards come back too.</string>
     <string name="layout_reset_done">Layout reset</string>
     <string name="people_who_messages">Who messages you most</string>
     <string name="people_who_none">Shows who messages you most once messages come in. Names are only kept from this update on.</string>
@@ -1445,7 +1435,7 @@
         <item quantity="one">%d subreddit</item>
         <item quantity="other">%d subreddits</item>
     </plurals>
-    <string name="newsletter_subreddits_count">Subreddits (%1$d)</string>
+    <string name="newsletter_subreddits_count">Subreddits · %1$d</string>
     <string name="newsletter_add_subreddit">Add subreddit</string>
     <string name="newsletter_bad_name">Not a subreddit name</string>
     <string name="newsletter_bad_number">A number from 0 to 1000</string>
@@ -1456,10 +1446,6 @@
     <string name="newsletter_own_settings">Own settings</string>
     <string name="newsletter_as_default">Default (%1$s)</string>
     <string name="newsletter_default">Default</string>
-    <string name="newsletter_arrange">Order</string>
-    <string name="newsletter_move_up">Move up</string>
-    <string name="newsletter_move_down">Move down</string>
-    <string name="newsletter_remove">Remove</string>
     <string name="newsletter_keep_one">Keep at least one subreddit</string>
     <string name="newsletter_set_posts">Posts per subreddit</string>
     <string name="newsletter_set_sort">Sort</string>
@@ -1505,5 +1491,21 @@
     <string name="app_update_latest">Latest · %1$s</string>
     <string name="app_update_newer">New build, %1$s</string>
     <string name="app_update_not_found">No build on Drive</string>
-    <string name="info_app_update">Installs JLauncher-debug.apk from the Drive folder picked for other devices\' screen time. Tapping installs it when it\'s newer than this one, or looks on Drive again.</string>
+    <string name="info_app_update">Installs a newer version of JLauncher when one is on Drive. Tap to install it, or to check again.</string>
+    <!-- Settings -->
+    <string name="none">None</string>
+    <string name="unhide">Unhide</string>
+    <string name="settings_notes">Notes</string>
+    <string name="settings_lockdown_open">Lockdown settings</string>
+    <string name="backup_saved_at">Saved %1$s</string>
+    <string name="places_delete_title">Delete location history?</string>
+    <string name="reset_layout_title">Reset layout?</string>
+    <string name="reset">Reset</string>
+    <string name="delete_confirm">Delete</string>
+    <string name="info_newsletter_profile">The subreddits this newsletter takes posts from, and how it makes the book. Changes go to the PC that makes it.</string>
+    <string name="info_newsletter_reader">Reads issues as pages you turn, or as one long scroll.</string>
+    <plurals name="hidden_count">
+        <item quantity="one">%d hidden</item>
+        <item quantity="other">%d hidden</item>
+    </plurals>
 </resources>

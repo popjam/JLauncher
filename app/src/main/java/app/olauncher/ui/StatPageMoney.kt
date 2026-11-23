@@ -11,7 +11,9 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.ColorUtils
+import androidx.core.os.bundleOf
 import androidx.core.view.updatePadding
+import androidx.navigation.fragment.findNavController
 import app.olauncher.helper.Formats
 import app.olauncher.R
 import app.olauncher.helper.Spending
@@ -175,7 +177,7 @@ internal fun StatPageFragment.weekLimitCard() {
     val limit = Spending.weekLimitCents(context)
     if (limit <= 0) {
         card.showNote(getString(R.string.week_limit_none))
-        card.chipRow(listOf(getString(R.string.week_limit_set) to moneyGold), null) { askWeekLimit { if (isAdded) render() } }
+        card.chipRow(listOf(getString(R.string.week_limit_change, getString(R.string.off)) to moneyGold), null) { openMoneySettings() }
         return
     }
     val today = LocalDate.now()
@@ -200,7 +202,7 @@ internal fun StatPageFragment.weekLimitCard() {
     if (weeks.size > 1) card.subtitle(getString(R.string.week_limit_broken, pastOver, weeks.size - 1))
     card.keyItem(moneyGold, getString(R.string.week_limit_under))
     card.keyItem(over, getString(R.string.week_limit_over_key))
-    card.chipRow(listOf(getString(R.string.week_limit_change, moneyShort(limit)) to moneyGold), null) { askWeekLimit { if (isAdded) render() } }
+    card.chipRow(listOf(getString(R.string.week_limit_change, moneyShort(limit)) to moneyGold), null) { openMoneySettings() }
     card.describe = { key ->
         val i = key as Int
         val cents = weekCents[i]
@@ -243,46 +245,11 @@ internal fun StatPageFragment.weekLimitCard() {
     }
 }
 
-/** The weekly limit, carrying over, and the home screen widget, then [onDone] */
-internal fun androidx.fragment.app.Fragment.askWeekLimit(onDone: () -> Unit) {
-    val context = requireContext()
-    val current = Spending.weekLimitCents(context)
-    val input = EditText(context).apply {
-        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-        hint = "$"
-        if (current > 0) setText(if (current % 100 == 0L) (current / 100).toString() else String.format(Locale.US, "%.2f", current / 100.0))
-        setSelection(text.length)
+/** The weekly limit, carry-over and showing it on home are set in Settings: opens it at the Money section */
+internal fun androidx.fragment.app.Fragment.openMoneySettings() {
+    runCatching {
+        findNavController().navigate(R.id.action_global_settingsFragment, bundleOf(SettingsFragment.OPEN to SettingsFragment.MONEY))
     }
-    val carry = android.widget.CheckBox(context).apply {
-        setText(R.string.week_limit_carry)
-        isChecked = Spending.carryOver(context)
-    }
-    val onHome = android.widget.CheckBox(context).apply {
-        setText(R.string.week_limit_on_home)
-        isChecked = Spending.showOnHome(context)
-    }
-    val box = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
-        addView(input)
-        addView(carry)
-        addView(onHome)
-    }
-    AppDialog(context)
-        .setTitle(R.string.week_limit_ask)
-        .setView(box)
-        .setPositiveButton(R.string.okay) { _, _ ->
-            val dollars = input.text.toString().replace("$", "").replace(",", "").trim().toDoubleOrNull()
-            if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, (dollars * 100).roundToInt().toLong())
-            Spending.setCarryOver(context, carry.isChecked)
-            Spending.setShowOnHome(context, onHome.isChecked)
-            onDone()
-        }
-        .apply { if (current > 0) setNeutralButton(R.string.week_limit_remove) { _, _ -> Spending.setWeekLimitCents(context, 0); onDone() } }
-        .setNegativeButton(R.string.close, null)
-        .show()
-        .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-    input.requestFocus()
 }
 
 /**

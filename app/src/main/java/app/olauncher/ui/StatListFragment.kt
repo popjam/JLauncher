@@ -93,7 +93,7 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
                 setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(Style.WARNING, 48))
             }
             setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 12.dpToPx())
-            setOnClickListener { findNavController().navigate(R.id.action_global_settingsFragment, bundleOf(SettingsFragment.TO_TRACKING to true)) }
+            setOnClickListener { findNavController().navigate(R.id.action_global_settingsFragment, bundleOf(SettingsFragment.OPEN to SettingsFragment.TRACKING)) }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             setMargins(20.dpToPx(), 0, 20.dpToPx(), 12.dpToPx())
         })

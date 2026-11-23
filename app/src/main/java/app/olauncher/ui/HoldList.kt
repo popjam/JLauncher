@@ -53,6 +53,8 @@ class HoldList<K : Any>(
     private val onReorder: ((List<K>) -> Unit)? = null,
     private val onRemove: ((Set<K>) -> Unit)? = null,
     private val tapOpensMenu: Boolean = false,
+    /** What the select bar's action says, when it does something other than remove (Unhide, say) */
+    private val removeLabel: Int = R.string.remove,
 ) {
     /** Something the menu offers for one row */
     class Action(val label: String, val run: () -> Unit)
@@ -199,7 +201,7 @@ class HoldList<K : Any>(
             setPadding(18.dpToPx(), 2.dpToPx(), 4.dpToPx(), 2.dpToPx())
             isClickable = true
             addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(action(context.getString(R.string.remove)) {
+            addView(action(context.getString(removeLabel)) {
                 val keys = selected.toSet()
                 end()
                 onRemove?.invoke(keys)
