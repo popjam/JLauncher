@@ -95,6 +95,21 @@
             </intent-filter>
         </activity>
 
+        <!-- The newsletter's entry in the app list, after the voice note's so that stays the app's first -->
+        <activity
+            android:name=".NewsletterActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/newsletter"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <!-- Keeps a voice note recording with the screen off -->
         <service
             android:name=".helper.DictationService"

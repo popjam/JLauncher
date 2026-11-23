@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.NewsletterActivity
 import android.annotation.SuppressLint
 import android.app.SearchManager
 import android.app.WallpaperManager
@@ -99,8 +100,9 @@ suspend fun getAppsList(
                         user = profile
                     )
 
-                    // if the current app is not OLauncher
-                    if (app.applicationInfo.packageName != BuildConfig.APPLICATION_ID) {
+                    // if the current app is not OLauncher, except the newsletter's entry
+                    if (app.applicationInfo.packageName != BuildConfig.APPLICATION_ID
+                        || app.componentName.className == NewsletterActivity::class.java.name) {
                         // is this a hidden app?
                         if (hiddenApps.contains(app.applicationInfo.packageName + "|" + profile.toString())) {
                             if (includeHiddenApps) {

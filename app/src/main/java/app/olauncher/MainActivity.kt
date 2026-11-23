@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
         setupOrientation()
 
         window.addFlags(FLAG_LAYOUT_NO_LIMITS)
-        if (savedInstanceState == null) openLockdownIfAsked(intent)
+        if (savedInstanceState == null && !openLockdownIfAsked(intent)) openNewsletterIfAsked(intent)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             profileReceiver = object : BroadcastReceiver() {
@@ -164,7 +164,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onNewIntent(intent: Intent?) {
-        if (openLockdownIfAsked(intent)) return super.onNewIntent(intent)
+        if (openLockdownIfAsked(intent) || openNewsletterIfAsked(intent)) return super.onNewIntent(intent)
         val alreadyHome = navController.currentDestination?.id == R.id.mainFragment
         backToHomeScreen()
         if (alreadyHome && isResumed && prefs.homeButtonShowRecents)
@@ -181,6 +181,15 @@ class MainActivity : AppCompatActivity() {
         runCatching {
             navController.navigate(R.id.lockdownFragment, androidx.core.os.bundleOf(app.olauncher.ui.LockdownFragment.LOCK_FOR to lockFor))
         }
+        return true
+    }
+
+    /** From the newsletter's entry in the app list: opens its page */
+    private fun openNewsletterIfAsked(intent: Intent?): Boolean {
+        if (intent?.getBooleanExtra(NewsletterActivity.EXTRA_OPEN, false) != true) return false
+        intent.removeExtra(NewsletterActivity.EXTRA_OPEN)
+        if (navController.currentDestination?.id != R.id.mainFragment) navController.popBackStack(R.id.mainFragment, false)
+        runCatching { navController.navigate(R.id.newsletterFragment) }
         return true
     }
 

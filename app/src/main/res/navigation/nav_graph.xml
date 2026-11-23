@@ -184,6 +184,22 @@
         android:name="app.olauncher.ui.LockdownPageFragment"
         android:label="LockdownPageFragment" />
 
+    <!-- The Reddit newsletter: running it on the PC, its settings, and reading its issues -->
+    <fragment
+        android:id="@+id/newsletterFragment"
+        android:name="app.olauncher.ui.NewsletterFragment"
+        android:label="NewsletterFragment" />
+
+    <fragment
+        android:id="@+id/newsletterSettingsFragment"
+        android:name="app.olauncher.ui.NewsletterSettingsFragment"
+        android:label="NewsletterSettingsFragment" />
+
+    <fragment
+        android:id="@+id/newsletterReaderFragment"
+        android:name="app.olauncher.ui.NewsletterReaderFragment"
+        android:label="NewsletterReaderFragment" />
+
     <!-- Wellness pause before opening an app; always shown over the home screen -->
     <fragment
         android:id="@+id/pauseFragment"
