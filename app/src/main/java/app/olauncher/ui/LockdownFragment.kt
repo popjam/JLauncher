@@ -164,7 +164,7 @@ class LockdownFragment : LockdownBaseFragment() {
             .setMessage(R.string.lockdown_keep_on_message)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.lockdown_keep_on_button) { _, _ ->
-                Lockdown.turnOn(prefs)
+                Lockdown.turnOn(requireContext(), prefs)
                 render()
             }
             .show()
@@ -485,7 +485,7 @@ class LockdownFragment : LockdownBaseFragment() {
                     return@setItems confirmLockFor(ms)
                 }
                 if (which > minutes.size) {
-                    Lockdown.turnOn(prefs)
+                    Lockdown.turnOn(requireContext(), prefs)
                     return@setItems render()
                 }
                 val now = java.time.LocalTime.now()

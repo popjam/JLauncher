@@ -35,7 +35,7 @@ object BlockItems {
         val tvAt: Long = 0,
     ) {
         val id get() = idFor(kind, name)
-        val shown get() = phone || mac || tv
+        val shown get() = blocked(this)
 
         /** Whether it can be blocked on the phone, the Mac: sites anywhere, apps where they are */
         val onPhone get() = kind == Kind.SITE || pkg != null
@@ -134,8 +134,15 @@ object BlockItems {
               pkg: String? = null, bundle: String? = null, tvName: String? = null): Map<String, Item> =
         set(items, kind, name, phone = on, mac = on, now = now, pkg = pkg, bundle = bundle, tv = on, tvName = tvName)
 
-    /** Whether [item] is blocked: switched on for any device (the Mac app still keeps a switch for each) */
-    fun blocked(item: Item) = item.phone || item.mac || item.tv
+    /**
+     * Whether [item] is blocked, as its most recent change left it: the Mac app still keeps a switch for
+     * each device and only changes the phone's and its own, so the TV's switch from an older change
+     * doesn't keep an item the Mac unblocked blocked. Switches changed at the same time count if any is on.
+     */
+    fun blocked(item: Item): Boolean {
+        val latest = maxOf(item.phoneAt, item.macAt, item.tvAt)
+        return (item.phone && item.phoneAt == latest) || (item.mac && item.macAt == latest) || (item.tv && item.tvAt == latest)
+    }
 
     /**
      * What each device blocks: anything blocked anywhere is blocked on every device where it can be:

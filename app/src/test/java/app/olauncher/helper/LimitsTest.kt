@@ -194,4 +194,18 @@ class LimitsTest {
         assertEquals(apps to apps, AppPause.migrate(pauseOn = true, useForOn = true, apps = apps))
         assertEquals(emptySet<String>() to emptySet<String>(), AppPause.migrate(pauseOn = false, useForOn = false, apps = apps))
     }
+
+    @Test
+    fun gentleIsKeptOnARuleWithNoLimitsYet() {
+        // Gentle chosen before any limit: kept, so the first limit set is gentle
+        val gentle = Rule().copy(gentle = true)
+        assertEquals("a.b:0:0:g", Limits.formatRules(mapOf("a.b" to gentle)))
+        assertEquals(mapOf("a.b" to gentle), Limits.parseRules("a.b:0:0:g"))
+        assertTrue(Limits.parseRules("a.b:0:0:g").getValue("a.b").isEmpty)
+        // Choosing it isn't loosening, nor is setting the first limit on it
+        assertFalse(Limits.loosens(Rule(), gentle))
+        assertFalse(Limits.loosens(gentle, gentle.withMinutes(null, 30)))
+        // Strict with no limits is still dropped
+        assertEquals("", Limits.formatRules(mapOf("a.b" to Rule())))
+    }
 }

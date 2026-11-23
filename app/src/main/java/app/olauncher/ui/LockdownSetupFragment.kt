@@ -185,6 +185,6 @@ class LockdownSetupFragment : LockdownBaseFragment() {
 
         /** Whether nothing's been set up yet, so the setup is offered */
         fun isFresh(prefs: app.olauncher.data.Prefs) = prefs.lockdownBlockedApps.isEmpty() && prefs.lockdownAllowedApps.isEmpty() &&
-            Lockdown.schedules(prefs).isEmpty() && Limits.rules(prefs).isEmpty() && !prefs.lockdownModeOn
+            Lockdown.schedules(prefs).isEmpty() && Limits.rules(prefs).values.all { it.isEmpty } && !prefs.lockdownModeOn
     }
 }

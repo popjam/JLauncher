@@ -525,7 +525,10 @@ class Prefs(context: Context) {
     private fun str(key: String) = prefs.getString(key, "").orEmpty()
     private fun putStr(key: String, value: String) = prefs.edit { putString(key, value) }
 
-    /** The Mac's own lockdown, kept here: on until turned off, and a timed end (wall clock) */
+    /**
+     * The Mac's own lockdown from before there was one lockdown: on until turned off, and a timed end
+     * (wall clock). Read once, by Lockdown.foldOldDevices, then cleared; the TV's and their breaks too.
+     */
     var lockdownMacModeOn: Boolean
         get() = prefs.getBoolean("LOCKDOWN_MAC_MODE_ON", false)
         set(value) = prefs.edit { putBoolean("LOCKDOWN_MAC_MODE_ON", value) }
@@ -590,6 +593,11 @@ class Prefs(context: Context) {
     var lockdownTvBreakUntil: Long
         get() = prefs.getLong("LOCKDOWN_TV_BREAK_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_TV_BREAK_UNTIL", value) }
+
+    /** Whether the Mac's and the TV's own lockdowns from before there was one lockdown have been carried over and cleared */
+    var lockdownDevicesFolded: Boolean
+        get() = prefs.getBoolean("LOCKDOWN_DEVICES_FOLDED", false)
+        set(value) = prefs.edit { putBoolean("LOCKDOWN_DEVICES_FOLDED", value) }
 
     /** What ending lockdown early (and loosening it) needs, as [app.olauncher.helper.Challenge.encode]; made from the older choice the first time */
     var lockdownChallenge: String

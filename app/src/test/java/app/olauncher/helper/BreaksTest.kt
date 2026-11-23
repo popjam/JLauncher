@@ -172,4 +172,20 @@ class BreaksTest {
         assertTrue(config.loosensTo(config.copy(off = emptyList())))
         assertFalse(five.loosensTo(config))
     }
+
+    @Test
+    fun automaticBreaksSkipTheirTimesOff() {
+        // No breaks 10:00–11:00: the 10:40 one is skipped, 9:50 and 11:30 aren't
+        val auto = Config(autoMinutes = 5, autoEvery = 50, off = listOf(Lockdown.Schedule(Lockdown.EVERY_DAY, 10 * 60, 11 * 60)))
+        val start = at(18, 9)
+        assertEquals(at(18, 9, 50) to at(18, 9, 55), Breaks.autoWindow(auto, start, at(18, 9, 51), zone))
+        assertEquals(null, Breaks.autoWindow(auto, start, at(18, 10, 41), zone))
+        assertEquals(at(18, 11, 30) to at(18, 11, 35), Breaks.autoWindow(auto, start, at(18, 11, 31), zone))
+        assertEquals(at(18, 11, 30), Breaks.nextAuto(auto, start, at(18, 9, 56), zone))
+        assertEquals(listOf(at(18, 9, 50) to at(18, 9, 55), at(18, 11, 30) to at(18, 11, 35)),
+            Breaks.autoWindows(auto, start, start, at(18, 12), zone))
+        // One running at the start of the span counts
+        assertEquals(listOf(at(18, 9, 50) to at(18, 9, 55)), Breaks.autoWindows(auto, start, at(18, 9, 52), at(18, 10, 30), zone))
+        assertEquals(emptyList<Pair<Long, Long>>(), Breaks.autoWindows(auto, 0L, start, at(18, 12), zone))
+    }
 }

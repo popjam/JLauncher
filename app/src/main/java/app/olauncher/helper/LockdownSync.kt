@@ -150,20 +150,34 @@ object LockdownSync {
 
     // --- Phone to Mac ---
 
-    /** A plan's windows of lockdown from [today] to a week on, as [[start, end]] on the wall clock, the ones ended over a day before [now] left out */
-    fun windowsJson(plan: Lockdown.Plan, zone: ZoneId, today: LocalDate, now: Long): JSONArray {
+    /**
+     * How many days on lockdown with no end that turning off doesn't end (at a place) is sent as a window:
+     * sent as on until turned off, the Mac would let End end it. The phone sends again when it changes.
+     */
+    const val OPEN_DAYS = 7L
+
+    /** The window an open-ended lockdown is sent as: from the start of [today] to [OPEN_DAYS] on */
+    fun openWindow(zone: ZoneId, today: LocalDate) =
+        Lockdown.epoch(today.atStartOfDay(), zone) to Lockdown.epoch(today.plusDays(OPEN_DAYS).atStartOfDay(), zone)
+
+    /**
+     * A plan's windows of lockdown from [today] to a week on, as start to end on the wall clock, the ones
+     * ended over a day before [now] left out; being at a place ([Lockdown.Plan.open]) is one of them
+     */
+    fun windowList(plan: Lockdown.Plan, zone: ZoneId, today: LocalDate, now: Long): List<Pair<Long, Long>> {
         val windows = plan.schedules.flatMap { it.windows(today, today.plusDays(7)) } + plan.windows
-        return JSONArray().apply {
-            windows.map { Lockdown.epoch(it.start, zone) to Lockdown.epoch(it.end, zone) }.distinct().sortedBy { it.first }
-                .filter { it.second > now - 24 * 60 * 60_000L }
-                .forEach { (s, e) -> put(JSONArray().put(s).put(e)) }
-        }
+        return (windows.map { Lockdown.epoch(it.start, zone) to Lockdown.epoch(it.end, zone) } + listOfNotNull(openWindow(zone, today).takeIf { plan.open }))
+            .distinct().sortedBy { it.first }.filter { it.second > now - 24 * 60 * 60_000L }
     }
+
+    private fun json(windows: List<Pair<Long, Long>>) = JSONArray().apply { windows.forEach { (s, e) -> put(JSONArray().put(s).put(e)) } }
+
+    fun windowsJson(plan: Lockdown.Plan, zone: ZoneId, today: LocalDate, now: Long): JSONArray = json(windowList(plan, zone, today, now))
 
     /**
      * The lockdown a device ([plan], [breakUntil]) is sent, in the form the Mac app and the TV's PC read:
      * on until turned off, a timer, its windows and its break. A switched-off device's plan is empty, so
-     * this says it's off.
+     * this says it's off. Being at a place is sent as a window, which the Mac's End can't end.
      */
     fun deviceJson(plan: Lockdown.Plan, breakUntil: Long, zone: ZoneId, today: LocalDate, now: Long): JSONObject = JSONObject()
         .put("manual", plan.manual)
@@ -171,12 +185,55 @@ object LockdownSync {
         .put("windows", windowsJson(plan, zone, today, now))
         .put("breakUntil", breakUntil)
 
+    /** [windows] (start to end) made into runs: ones that overlap or follow on become one */
+    fun runs(windows: List<Pair<Long, Long>>): List<Pair<Long, Long>> = windows.sortedBy { it.first }.fold(mutableListOf()) { acc, w ->
+        val last = acc.lastOrNull()
+        if (last != null && w.first <= last.second) acc[acc.size - 1] = last.first to maxOf(last.second, w.second) else acc += w
+        acc
+    }
+
+    /** [windows] with [gaps] taken out */
+    fun carve(windows: List<Pair<Long, Long>>, gaps: List<Pair<Long, Long>>): List<Pair<Long, Long>> = windows.flatMap { w ->
+        gaps.sortedBy { it.first }.fold(listOf(w)) { pieces, (gs, ge) ->
+            pieces.flatMap { (s, e) -> if (ge <= s || gs >= e) listOf(s to e) else listOfNotNull((s to gs).takeIf { gs > s }, (ge to e).takeIf { ge < e }) }
+        }
+    }
+
+    /**
+     * The lockdown sent to the TV when there are automatic breaks: everything as windows, with the
+     * automatic breaks up to the end of tomorrow taken out, so they lift on the TV by themselves even
+     * when the phone doesn't send during them (asleep). The run on now started at [runStart] (0 when
+     * it's off); later runs count from their own start. An automatic break ended early (its end at or
+     * before [skipUntil]) isn't taken out. On until turned off and being at a place are sent as one
+     * [OPEN_DAYS] window, the timer as a window from the start of [today]: the TV has nothing that ends them.
+     */
+    fun carvedDeviceJson(plan: Lockdown.Plan, breakUntil: Long, zone: ZoneId, today: LocalDate, now: Long,
+                         config: Breaks.Config, runStart: Long, skipUntil: Long): JSONObject {
+        val dayStart = Lockdown.epoch(today.atStartOfDay(), zone)
+        val windows = windowList(plan, zone, today, now) +
+            listOfNotNull(openWindow(zone, today).takeIf { plan.manual },
+                plan.timedEnd?.let { Lockdown.epoch(it, zone) }?.takeIf { it > now }?.let { dayStart to it })
+        val horizon = Lockdown.epoch(today.plusDays(2).atStartOfDay(), zone)
+        val pieces = runs(windows).flatMap { run ->
+            val start = if (run.first <= now && now < run.second && runStart > 0L) runStart else run.first
+            val gaps = Breaks.autoWindows(config, start, maxOf(run.first, now), minOf(run.second, horizon), zone).filter { it.second > skipUntil }
+            carve(listOf(run), gaps)
+        }
+        return JSONObject()
+            .put("manual", false)
+            .put("timedUntil", 0L)
+            .put("windows", json(pieces))
+            .put("breakUntil", breakUntil)
+    }
+
     /** What this phone says now. The send is skipped when it's the same as last time. */
     fun phoneState(context: Context, prefs: Prefs = Prefs(context)): JSONObject {
         val zone = ZoneId.systemDefault()
         val now = System.currentTimeMillis()
         val today = LocalDate.now()
         val time = java.time.LocalDateTime.now()
+        // Keeps when the lockdown on now started (or clears it), for automatic breaks
+        Lockdown.trackRun(context, prefs)
         val macOn = deviceOn(context, Lockdown.Device.MAC)
         val tvOn = deviceOn(context, Lockdown.Device.TV)
         // One list: each device blocks what it can
@@ -193,6 +250,11 @@ object LockdownSync {
         val macActive = macPlan.on(time)
         val macUntil = macPlan.until(time)?.let { Lockdown.epoch(it, zone) }
         val tvActive = tvPlan.on(time)
+        val breaks = Lockdown.breaks(prefs)
+        val tvBreakUntil = if (tvOn) breakUntil else 0L
+        // With automatic breaks, the TV is sent its lockdown with them taken out (see carvedDeviceJson)
+        val tvJson = if (tvOn && breaks.autoOn) carvedDeviceJson(tvPlan, tvBreakUntil, zone, today, now, breaks, prefs.lockdownOnSince, prefs.lockdownAutoBreakSkip)
+            else deviceJson(tvPlan, tvBreakUntil, zone, today, now)
         return JSONObject()
             .put("v", 2)
             // The Mac's lockdown, worked out here: the one lockdown, or off while it's switched off
@@ -207,7 +269,7 @@ object LockdownSync {
             // Always: every device blocks everything on the list it can
             .put("matched", true)
             // The TV's lockdown, worked out here like the Mac's; "blocking" is now, for a TV tool from before
-            .put("tv", deviceJson(tvPlan, if (tvOn) breakUntil else 0L, zone, today, now)
+            .put("tv", tvJson
                 .put("blocking", tvActive && breakUntil <= now)
                 .put("until", if (tvActive) tvPlan.until(time)?.let { Lockdown.epoch(it, zone) } ?: 0L else 0L)
                 .put("apps", JSONArray(if (tvOn) BlockItems.tvApps(items).sorted() else emptyList())))
@@ -222,8 +284,8 @@ object LockdownSync {
             // The Mac requests done here, so the Mac knows when to stop acting on its own
             .put("applied", JSONArray(applied(context)))
             // For a Mac app from before: its own lockdown as one on-or-timed state
-            .put("manualOn", macPlan.manual)
-            .put("timedUntil", if (macActive && !macPlan.manual) macUntil ?: 0L else 0L)
+            .put("manualOn", macPlan.manual || macPlan.open)
+            .put("timedUntil", if (macActive && !macPlan.manual && !macPlan.open) macUntil ?: 0L else 0L)
             .put("schedules", "")
             .put("phoneOnly", false)
             .put("unlock", when (challenge.type) {
@@ -396,7 +458,7 @@ object LockdownSync {
         when (command.optString("type")) {
             "start" -> {
                 val until = command.optLong("until")
-                if (until <= 0L) Lockdown.turnOn(prefs)
+                if (until <= 0L) Lockdown.turnOn(context, prefs)
                 else Lockdown.lockForTotal(context, until - System.currentTimeMillis(), prefs)
             }
             "add" -> Lockdown.addTime(context, command.optLong("ms"), prefs)

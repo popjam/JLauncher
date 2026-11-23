@@ -114,4 +114,26 @@ class BlockItemsTest {
         assertEquals(items, BlockItems.changed(items, emptyMap()))
         assertEquals(emptyMap<String, BlockItems.Item>(), BlockItems.changed(items, items))
     }
+
+    @Test
+    fun theMacUnblockingAnItemUnblocksItEverywhere() {
+        // Blocked on the phone (every switch at 10), then the Mac turns its own and the phone's off at 20
+        val added = BlockItems.block(emptyMap(), Kind.APP, "YouTube", true, now = 10, pkg = "com.google.android.youtube", tvName = "YouTube")
+        val mac = BlockItems.set(added, Kind.APP, "YouTube", phone = false, mac = false, now = 20)
+        val merged = BlockItems.mergeAll(added, mac)
+        val item = merged.values.single()
+        // The TV's switch is still on from the older change, but the latest change says off
+        assertTrue(item.tv)
+        assertFalse(BlockItems.blocked(item))
+        assertFalse(item.shown)
+        val matched = BlockItems.matched(merged)
+        assertEquals(emptySet<String>(), BlockItems.phoneApps(matched))
+        assertEquals(emptySet<String>(), BlockItems.tvApps(matched))
+        // Blocking it again later blocks it everywhere
+        val again = BlockItems.block(merged, Kind.APP, "YouTube", true, now = 30)
+        assertTrue(BlockItems.blocked(again.values.single()))
+        // The Mac turning only its own switch on still blocks it everywhere
+        val macOn = BlockItems.set(mac, Kind.APP, "YouTube", phone = null, mac = true, now = 40)
+        assertEquals(setOf("YouTube"), BlockItems.tvApps(BlockItems.matched(macOn)))
+    }
 }

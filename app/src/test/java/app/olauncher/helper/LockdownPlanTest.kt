@@ -143,4 +143,88 @@ class LockdownPlanTest {
         val old = "${Lockdown.epoch(at(16, 21), zone)}:${Lockdown.epoch(at(17, 7), zone)}:3"
         assertEquals(windows, Lockdown.parseWindows(old, zone))
     }
+
+    @Test
+    fun atAPlaceIsOnWithNoEndButNotSentAsOnUntilTurnedOff() {
+        val plan = Plan(open = true)
+        assertTrue(plan.on(at(16, 12)))
+        assertNull(plan.until(at(16, 12)))
+        assertTrue((Plan() + plan).open)
+        // Sent as a window the Mac's End can't end, from the start of today to a week on
+        val zone = ZoneOffset.UTC
+        val today = at(16, 0).toLocalDate()
+        val json = LockdownSync.deviceJson(plan, 0L, zone, today, Lockdown.epoch(at(16, 12), zone))
+        assertFalse(json.getBoolean("manual"))
+        assertEquals(0L, json.getLong("timedUntil"))
+        val window = json.getJSONArray("windows").getJSONArray(0)
+        assertEquals(Lockdown.epoch(at(16, 0), zone), window.getLong(0))
+        assertEquals(Lockdown.epoch(at(23, 0), zone), window.getLong(1))
+        // On until turned off is still sent as that, so End can end it
+        val both = LockdownSync.deviceJson(Plan(manual = true, open = true), 0L, zone, today, Lockdown.epoch(at(16, 12), zone))
+        assertTrue(both.getBoolean("manual"))
+        assertEquals(1, both.getJSONArray("windows").length())
+    }
+
+    @Test
+    fun aRunStartsWhereItsSchedulesAndWindowsSay() {
+        val plan = Plan(schedules = listOf(nights), windows = listOf(Window(at(16, 21), at(16, 22))))
+        // Screen time from 21:00 runs into the night's 22:00 schedule: one run from 21:00
+        assertEquals(at(16, 21), plan.coveredSince(at(16, 23)))
+        assertEquals(at(16, 21), plan.coveredSince(at(17, 6)))
+        assertNull(plan.coveredSince(at(17, 12)))
+        // A lockdown found on counts from there, or from now when nothing says
+        val now = Lockdown.epoch(at(16, 23), ZoneOffset.UTC)
+        val covered = Lockdown.epoch(at(16, 21), ZoneOffset.UTC)
+        assertEquals(covered, Lockdown.runStart(on = true, since = 0L, now = now, covered = covered))
+        assertEquals(now, Lockdown.runStart(on = true, since = 0L, now = now, covered = null))
+        // One already kept stays; off clears it, so a new lockdown doesn't start inside an old run's breaks
+        assertEquals(500L, Lockdown.runStart(on = true, since = 500L, now = now, covered = covered))
+        assertEquals(0L, Lockdown.runStart(on = false, since = 500L, now = now, covered = covered))
+    }
+
+    @Test
+    fun theMacsAndTvsOldLockdownsCarryOverOnlyWhenSwitchedOn() {
+        val now = 1_000_000L
+        val mac = Lockdown.OldDevice(on = true, modeOn = true, until = now + 60_000, breakUntil = now + 5_000)
+        val tv = Lockdown.OldDevice(on = false, modeOn = true, until = now + 120_000, breakUntil = now + 9_000)
+        assertEquals(Lockdown.Folded(true, now + 60_000, now + 5_000), Lockdown.foldOld(listOf(mac, tv), now))
+        // A switched-off device's stale lockdown doesn't lock the phone
+        assertEquals(Lockdown.Folded(false, 0L, 0L), Lockdown.foldOld(listOf(tv), now))
+        // Ended timers and breaks are dropped
+        assertEquals(Lockdown.Folded(false, 0L, 0L), Lockdown.foldOld(listOf(mac.copy(modeOn = false, until = now - 1, breakUntil = now)), now))
+    }
+
+    @Test
+    fun theTvGetsItsAutomaticBreaksTakenOut() {
+        val zone = ZoneOffset.UTC
+        val today = at(16, 0).toLocalDate()
+        val auto = Breaks.Config(autoMinutes = 5, autoEvery = 50)
+        // A timer from 9:00 to 11:00, started at 9:00: breaks 9:50–9:55 and 10:40–10:45
+        val now = Lockdown.epoch(at(16, 9, 10), zone)
+        val plan = Plan(timedEnd = at(16, 11))
+        val json = LockdownSync.carvedDeviceJson(plan, 0L, zone, today, now, auto, Lockdown.epoch(at(16, 9), zone), 0L)
+        assertFalse(json.getBoolean("manual"))
+        assertEquals(0L, json.getLong("timedUntil"))
+        fun e(h: Int, m: Int) = Lockdown.epoch(at(16, h, m), zone)
+        val windows = json.getJSONArray("windows").let { a -> (0 until a.length()).map { a.getJSONArray(it).getLong(0) to a.getJSONArray(it).getLong(1) } }
+        assertEquals(listOf(e(0, 0) to e(9, 50), e(9, 55) to e(10, 40), e(10, 45) to e(11, 0)), windows)
+        // One ended early isn't taken out
+        val skipped = LockdownSync.carvedDeviceJson(plan, 0L, zone, today, now, auto, Lockdown.epoch(at(16, 9), zone), e(9, 55))
+        assertEquals(2, skipped.getJSONArray("windows").length())
+        // A schedule later on counts its breaks from its own start
+        val night = LockdownSync.carvedDeviceJson(Plan(schedules = listOf(Schedule(Lockdown.EVERY_DAY, 22 * 60, 23 * 60))), 0L, zone, today,
+            Lockdown.epoch(at(16, 12), zone), auto, 0L, 0L)
+        val first = night.getJSONArray("windows").let { a -> (0 until a.length()).map { a.getJSONArray(it).getLong(0) to a.getJSONArray(it).getLong(1) } }
+        assertTrue(e(22, 0) to e(22, 50) in first)
+        assertTrue(e(22, 55) to e(23, 0) in first)
+    }
+
+    @Test
+    fun carvingAndRuns() {
+        assertEquals(listOf(1L to 5L, 6L to 9L), LockdownSync.runs(listOf(6L to 9L, 1L to 3L, 2L to 5L)))
+        assertEquals(listOf(1L to 4L, 9L to 10L), LockdownSync.runs(listOf(1L to 3L, 3L to 4L, 9L to 10L)))
+        assertEquals(listOf(0L to 2L, 3L to 5L, 6L to 10L), LockdownSync.carve(listOf(0L to 10L), listOf(5L to 6L, 2L to 3L)))
+        assertEquals(listOf(2L to 10L), LockdownSync.carve(listOf(0L to 10L), listOf(-5L to 2L, 20L to 30L)))
+        assertEquals(emptyList<Pair<Long, Long>>(), LockdownSync.carve(listOf(3L to 4L), listOf(0L to 10L)))
+    }
 }

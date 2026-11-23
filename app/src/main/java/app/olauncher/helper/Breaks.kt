@@ -173,25 +173,44 @@ object Breaks {
     /**
      * The automatic break running at [now] in a lockdown that started at [runStart] (wall clock), as
      * start to end, or null: one starts every [Config.autoEvery] minutes after the lockdown started and
-     * lasts [Config.autoMinutes].
+     * lasts [Config.autoMinutes]. One that would start during "No breaks during" ([Config.off]) is skipped.
      */
-    fun autoWindow(config: Config, runStart: Long, now: Long): Pair<Long, Long>? {
+    fun autoWindow(config: Config, runStart: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Pair<Long, Long>? {
         if (!config.autoOn || runStart <= 0L || now < runStart) return null
         val every = config.autoEvery * 60_000L
         val n = (now - runStart) / every
         if (n < 1) return null
         val start = runStart + n * every
         val end = start + config.autoMinutes * 60_000L
-        return if (now < end) start to end else null
+        return if (now < end && !offAt(config, start, zone)) start to end else null
     }
 
-    /** When the next automatic break starts after [now], in a lockdown that started at [runStart], or null */
-    fun nextAuto(config: Config, runStart: Long, now: Long): Long? {
+    /** When the next automatic break starts after [now], in a lockdown that started at [runStart], or null; skips ones during [Config.off] */
+    fun nextAuto(config: Config, runStart: Long, now: Long, zone: ZoneId = ZoneId.systemDefault()): Long? {
         if (!config.autoOn || runStart <= 0L) return null
         val every = config.autoEvery * 60_000L
-        val n = ((now - runStart).coerceAtLeast(0) / every) + 1
-        return runStart + n * every
+        val first = ((now - runStart).coerceAtLeast(0) / every) + 1
+        // A week of them at most: times off can't cover every start for longer than that
+        val limit = first + 7 * 24 * 60 / config.autoEvery + 1
+        return (first..limit).asSequence().map { runStart + it * every }.firstOrNull { !offAt(config, it, zone) }
     }
+
+    /**
+     * The automatic breaks in a lockdown that started at [runStart] that overlap [from] to [to], as start
+     * to end, the ones during [Config.off] left out
+     */
+    fun autoWindows(config: Config, runStart: Long, from: Long, to: Long, zone: ZoneId = ZoneId.systemDefault()): List<Pair<Long, Long>> {
+        if (!config.autoOn || runStart <= 0L || to <= from) return emptyList()
+        val every = config.autoEvery * 60_000L
+        val length = config.autoMinutes * 60_000L
+        val first = maxOf(1L, (from - runStart - length) / every)
+        return generateSequence(first) { it + 1 }.map { runStart + it * every }.takeWhile { it < to }
+            .filter { it + length > from && !offAt(config, it, zone) }.map { it to it + length }.toList()
+    }
+
+    /** Whether breaks can't be taken at [time]: an automatic one starting then is skipped */
+    private fun offAt(config: Config, time: Long, zone: ZoneId) =
+        config.off.isNotEmpty() && LocalDateTime.ofInstant(Instant.ofEpochMilli(time), zone).let { local -> config.off.any { it.covers(local) } }
 
     /** When a break taken at [now] ends: added to the running one when they stack */
     fun newEnd(config: Config, now: Long, breakUntil: Long): Long =

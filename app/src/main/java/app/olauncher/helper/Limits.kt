@@ -65,7 +65,7 @@ object Limits {
     // "package:minutes:opens" with the same limits every day (how they were always written), or
     // "package:m1,…,m7:o1,…,o7" day by day from Monday; either with ":g" on the end when gentle.
 
-    /** Anything unreadable, and rules with no limits, are skipped */
+    /** Anything unreadable, and strict rules with no limits, are skipped; a gentle one with none is kept, so the choice stays for the first limit */
     fun parseRules(text: String): Map<String, Rule> = text.split(';').mapNotNull { part ->
         val bits = part.trim().split(':')
         if (bits.size !in 3..4 || bits[0].isBlank()) return@mapNotNull null
@@ -77,7 +77,7 @@ object Limits {
             else -> return@mapNotNull null
         }
         val rule = Rule(minutes, opens, gentle)
-        if (rule.isEmpty) null else bits[0] to rule
+        if (rule.isEmpty && !rule.gentle) null else bits[0] to rule
     }.toMap()
 
     /** One number for every day, or seven */
@@ -91,7 +91,7 @@ object Limits {
     }
 
     fun formatRules(rules: Map<String, Rule>): String =
-        rules.filterValues { !it.isEmpty }.entries.joinToString(";") { (pkg, rule) ->
+        rules.filterValues { !it.isEmpty || it.gentle }.entries.joinToString(";") { (pkg, rule) ->
             val days = if (rule.sameEveryDay) "${rule.minutes[0]}:${rule.opens[0]}"
                 else rule.minutes.joinToString(",") + ":" + rule.opens.joinToString(",")
             "$pkg:$days" + if (rule.gentle) ":g" else ""
@@ -104,7 +104,7 @@ object Limits {
     /** How many installed apps have a limit, a pause or a choice of time */
     fun appsWithRules(context: android.content.Context, prefs: Prefs): Int {
         AppPause.migrateIfNeeded(prefs)
-        return (rules(prefs).keys + prefs.pausedApps + prefs.useForApps).count { context.isPackageInstalled(it) }
+        return (rules(prefs).filterValues { !it.isEmpty }.keys + prefs.pausedApps + prefs.useForApps).count { context.isPackageInstalled(it) }
     }
 
     fun setRule(prefs: Prefs, pkg: String, rule: Rule) {
