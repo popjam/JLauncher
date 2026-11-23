@@ -824,7 +824,7 @@
     <string name="info_lockdown_schedules">Turns lockdown on by itself on chosen days and times. Tap one to remove it.</string>
     <string name="info_blocked_apps">Apps that can\'t be opened while lockdown is on.</string>
     <string name="info_lockdown_accessibility">Needed to block apps opened from links, notifications or recent apps, and to protect JLauncher.</string>
-    <string name="info_lockdown_unlock_with">What loosening lockdown needs: nothing, a password, or a wait before it unlocks for 10 minutes.</string>
+    <string name="info_lockdown_unlock_with">What ending lockdown early and loosening it need, from nothing to not possible: keeping a countdown open, tapping, typing a phrase or random text, the password, or asking and waiting.</string>
     <string name="info_change_password">Needs the current password.</string>
     <string name="info_recovery">Ways to get your password back if you forget it.</string>
     <string name="info_backup_folder">Saves a backup to this folder, like Google Drive, whenever something changes.</string>
@@ -1272,7 +1272,7 @@
     <string name="lockdown_places">Places</string>
     <string name="lockdown_home_widget">Home widget</string>
     <string name="lockdown_each_tap">Each tap adds</string>
-    <string name="info_lockdown_home_widget">A lock on the home screen. Tapping it adds time to a timed lockdown; it shows how long until lockdown opens.</string>
+    <string name="info_lockdown_home_widget">A lock on the home screen showing how long until lockdown opens. Tapping it adds time; holding it takes a break when breaks are on. During a break the lock is open and counts down the break; tapping it ends the break.</string>
     <string name="info_lockdown_each_tap">How much time a tap on the home widget adds.</string>
     <string name="lockdown_on_at">Lockdown on at</string>
     <string name="lockdown_no_places">No places set up</string>
@@ -1309,7 +1309,7 @@
     <string name="lockdown_mac_code">Pairing code</string>
     <string name="lockdown_mac_bad_url">Starts with https://</string>
     <string name="copy">Copy</string>
-    <string name="info_lockdown_mac">Shares lockdown with the paired Mac: on and off, the timer, schedules and blocked websites. The phone sends only when something changes and reads the Mac\'s requests only when it\'s unlocked or the home screen shows, at most once a minute. The number is today\'s requests.</string>
+    <string name="info_lockdown_mac">Shares lockdown with the paired Mac: each device\'s lockdown, what each blocks, breaks and what ending early needs. The phone sends only when something changes and reads the Mac\'s side only when it\'s unlocked or the home screen shows, at most once a minute. The number is today\'s requests.</string>
     <string name="lockdown_start">Start</string>
     <string name="lockdown_start_title">Start lockdown</string>
     <string name="lockdown_until_off">Until I turn it off</string>

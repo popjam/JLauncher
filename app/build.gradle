@@ -85,5 +85,7 @@ dependencies {
     implementation 'com.anthropic:anthropic-java:3.9.0'
 
     testImplementation 'junit:junit:4.13.2'
+    // The real org.json, as Android's is only stubs in unit tests
+    testImplementation 'org.json:json:20240303'
 
 }

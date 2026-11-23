@@ -218,6 +218,7 @@ class SettingsFragment : CardPageFragment() {
                 overScrollMode = View.OVER_SCROLL_NEVER
                 isVerticalScrollBarEnabled = false
                 addView(content)
+                scroll = this
             })
         }
         return PullDismissLayout(context).apply {
@@ -245,8 +246,14 @@ class SettingsFragment : CardPageFragment() {
     /** Scrolls to the Tracking section once, when opened from a problem on the stat list */
     private var toTracking = false
 
+    private var scroll: ScrollView? = null
+
+    /** Where the page was scrolled to, kept while a page opened from it is on top */
+    private var savedScroll = -1
+
     private fun render() {
         if (!isAdded) return
+        restoreScrollSoon()
         sections.clear()
         toTracking = toTracking || arguments?.getBoolean(TO_TRACKING) == true
         arguments?.remove(TO_TRACKING)
@@ -1046,13 +1053,12 @@ class SettingsFragment : CardPageFragment() {
     private val gate by lazy { LockdownGate(this) { render() } }
 
     /**
-     * Limits and Lockdown each have their own page; here they're the first two rows, with no heading,
-     * and a dot by the value while either is in force (red for lockdown, teal for limits).
+     * Limits and Lockdown each have their own page; here they're the first section's two rows, with a
+     * dot by the value while either is in force (red for lockdown, teal for limits).
      */
     private fun lockdownSection() {
         val context = requireContext()
-        val card = Card(getString(R.string.lockdown))
-        (card.titleView.parent as? View)?.isVisible = false
+        val card = Card(getString(R.string.limits_and_lockdown))
         val limits = Limits.appsWithRules(context, prefs)
         val on = Lockdown.isActive(context, prefs)
         card.body(
@@ -1187,7 +1193,17 @@ class SettingsFragment : CardPageFragment() {
         showRestoreSummary()
     }
 
+    /** Back from a page opened here, the page goes back to where it was, once it's laid out again */
+    private fun restoreScrollSoon() {
+        if (savedScroll < 0) return
+        val y = savedScroll
+        savedScroll = -1
+        scroll?.let { view -> view.post { view.scrollTo(0, y) } }
+    }
+
     override fun onDestroyView() {
+        scroll?.let { savedScroll = it.scrollY }
+        scroll = null
         info?.dismiss()
         info = null
         super.onDestroyView()

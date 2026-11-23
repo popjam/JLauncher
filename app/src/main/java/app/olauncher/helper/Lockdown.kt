@@ -6,15 +6,22 @@ import android.provider.Settings
 import app.olauncher.data.Prefs
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
- * Lockdown: limits that are hard to undo. It's on while it's switched on, while a timed lockdown
- * runs, or during one of its schedules.
+ * Lockdown: limits that are hard to undo, on the phone and (when paired) the Mac, each with its own
+ * lockdown or both matched to whichever is greater. A device is in lockdown while it's switched on,
+ * while a timed lockdown runs, during one of its schedules, after screen time passes a set amount,
+ * and on the phone at one of its places or the last screen time stage.
+ *
+ * Everything that has it on is a window of time, and they don't add up: one inside another changes
+ * nothing, and windows that overlap or follow on make one long lockdown. Adding time always adds to
+ * the end of that whole run. A break lifts what lockdown blocks for a few minutes without ending it.
  *
  * While it's on, the chosen [Lock]s apply, blocked apps can't be opened, and anything that loosens
- * a limit needs the chosen [Unlock]. A timed lockdown can't be loosened at all until it ends.
+ * a limit needs the chosen [Challenge]. A timed lockdown can't be loosened at all until it ends.
  *
  * Times that matter (the end of a timed lockdown, the start of a wait to unlock) are kept on both
  * the wall clock and the clock since the phone started, which can't be changed. The second is
@@ -25,26 +32,27 @@ object Lockdown {
     /** What lockdown can lock, besides blocked apps */
     enum class Lock { APP_LIST, APP_CHANGES, HIDDEN_APPS, LAUNCHER, PROTECT, SYSTEM_SETTINGS }
 
-    /** How lockdown is loosened while it's on. Stored as the ordinal. */
-    enum class Unlock { NOTHING, PASSWORD, WAIT }
+    /** The devices lockdown runs on, as bits so a choice can be one, the other or both */
+    enum class Device(val bit: Int) { PHONE(1), MAC(2) }
+
+    const val BOTH = 3
+
+    fun covers(devices: Int, device: Device) = devices and device.bit != 0
 
     /** After waiting to unlock, how long loosening stays open */
     const val READY_MS = 10 * 60_000L
 
-    /** After the password, how long loosening stays open without asking again */
+    /** After passing the challenge, how long loosening stays open without asking again */
     private const val GRACE_MS = 5 * 60_000L
-
-    /** The choices for how long a wait to unlock is */
-    val WAIT_CHOICES = listOf(5, 15, 30, 60)
 
     // --- Schedules ---
 
     /**
      * Lockdown on [days] (bit 0 Monday … bit 6 Sunday) from [start] to [end], in minutes after
-     * midnight. An end before the start runs past midnight into the next day; the same start and end
-     * is the whole day.
+     * midnight, on [devices]. An end before the start runs past midnight into the next day; the same
+     * start and end is the whole day.
      */
-    data class Schedule(val days: Int, val start: Int, val end: Int) {
+    data class Schedule(val days: Int, val start: Int, val end: Int, val devices: Int = BOTH) {
 
         fun on(day: DayOfWeek) = days and (1 shl (day.value - 1)) != 0
 
@@ -77,21 +85,112 @@ object Lockdown {
             .filter { on(it.dayOfWeek) }
             .map { it.atStartOfDay().plusMinutes(if (start == end) 0L else start.toLong()) }
             .firstOrNull { it.isAfter(time) }
+
+        /** Its windows that start on the days from [from] to [to] */
+        fun windows(from: LocalDate, to: LocalDate): List<Window> = generateSequence(from.minusDays(1)) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(to) }
+            .filter { on(it.dayOfWeek) }
+            .map { day ->
+                val s = day.atStartOfDay().plusMinutes(if (start == end) 0L else start.toLong())
+                val e = when {
+                    start == end -> day.plusDays(1).atStartOfDay()
+                    start < end -> day.atStartOfDay().plusMinutes(end.toLong())
+                    else -> day.plusDays(1).atStartOfDay().plusMinutes(end.toLong())
+                }
+                Window(s, e, devices)
+            }.toList()
     }
 
     const val WEEKDAYS = 0b0011111
     const val WEEKENDS = 0b1100000
     const val EVERY_DAY = 0b1111111
 
-    /** "days:start:end" for each, separated by ";". Anything unreadable is skipped. */
+    /** "days:start:end" (on both devices) or "days:start:end:devices" for each, separated by ";". Anything unreadable is skipped. */
     fun parseSchedules(text: String): List<Schedule> = text.split(';').mapNotNull { part ->
         val bits = part.trim().split(':').map { it.toIntOrNull() ?: return@mapNotNull null }
-        if (bits.size != 3) return@mapNotNull null
+        if (bits.size != 3 && bits.size != 4) return@mapNotNull null
         val (days, start, end) = bits
-        if (days !in 1..EVERY_DAY || start !in 0 until 1440 || end !in 0 until 1440) null else Schedule(days, start, end)
+        val devices = bits.getOrElse(3) { BOTH }
+        if (days !in 1..EVERY_DAY || start !in 0 until 1440 || end !in 0 until 1440 || devices !in 1..BOTH) null
+        else Schedule(days, start, end, devices)
     }
 
-    fun formatSchedules(schedules: List<Schedule>) = schedules.joinToString(";") { "${it.days}:${it.start}:${it.end}" }
+    fun formatSchedules(schedules: List<Schedule>) =
+        schedules.joinToString(";") { "${it.days}:${it.start}:${it.end}" + if (it.devices == BOTH) "" else ":${it.devices}" }
+
+    // --- Windows: lockdowns with a start and an end ---
+
+    data class Window(val start: LocalDateTime, val end: LocalDateTime, val devices: Int = BOTH) {
+        fun covers(time: LocalDateTime) = !time.isBefore(start) && time.isBefore(end)
+    }
+
+    /** "start:end:devices" in wall clock milliseconds, separated by ";" */
+    fun parseWindows(text: String, zone: ZoneId = ZoneId.systemDefault()): List<Window> = text.split(';').mapNotNull { part ->
+        val bits = part.trim().split(':').map { it.toLongOrNull() ?: return@mapNotNull null }
+        if (bits.size != 3 || bits[1] <= bits[0]) return@mapNotNull null
+        Window(localTime(bits[0], zone), localTime(bits[1], zone), bits[2].toInt())
+    }
+
+    fun formatWindows(windows: List<Window>, zone: ZoneId = ZoneId.systemDefault()) =
+        windows.joinToString(";") { "${epoch(it.start, zone)}:${epoch(it.end, zone)}:${it.devices}" }
+
+    /**
+     * Everything that puts one device in lockdown: on with no end ([manual]), a timer ending at
+     * [timedEnd], [schedules] and other [windows]. Two plans together ([plus]) are on whenever either is.
+     */
+    data class Plan(
+        val manual: Boolean = false,
+        val timedEnd: LocalDateTime? = null,
+        val schedules: List<Schedule> = emptyList(),
+        val windows: List<Window> = emptyList(),
+    ) {
+        fun on(time: LocalDateTime) = manual || timedEnd?.isAfter(time) == true || schedules.any { it.covers(time) } || windows.any { it.covers(time) }
+
+        /** When it ends, if it's on and has an end: the end of the whole run of windows that follow on from now */
+        fun until(time: LocalDateTime): LocalDateTime? = if (manual) null else coveredUntil(schedules, timedEnd, time, windows)
+
+        operator fun plus(other: Plan) = Plan(manual || other.manual, listOfNotNull(timedEnd, other.timedEnd).maxOrNull(),
+            schedules + other.schedules, windows + other.windows)
+    }
+
+    // --- Screen time that turns lockdown on ---
+
+    /** Whose screen time a [Trigger] counts */
+    enum class Source { TOTAL, PHONE, MAC, TV }
+
+    /**
+     * Once [source]'s screen time today reaches [minutes], lockdown on [devices] until the next [until]
+     * (minutes after midnight: 420 is 7:00 the next morning, if it's evening).
+     */
+    data class Trigger(val source: Source, val minutes: Int, val until: Int, val devices: Int = BOTH) {
+        val key get() = "${source.name}:$minutes:$until:$devices"
+
+        /** The window it starts when it goes off at [time] */
+        fun windowFrom(time: LocalDateTime): Window {
+            var end = time.toLocalDate().atStartOfDay().plusMinutes(until.toLong())
+            while (!end.isAfter(time)) end = end.plusDays(1)
+            return Window(time, end, devices)
+        }
+    }
+
+    fun parseTriggers(text: String): List<Trigger> = text.split(';').mapNotNull { part ->
+        val bits = part.trim().split(':')
+        if (bits.size != 4) return@mapNotNull null
+        val source = runCatching { Source.valueOf(bits[0]) }.getOrNull() ?: return@mapNotNull null
+        val minutes = bits[1].toIntOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+        val until = bits[2].toIntOrNull()?.takeIf { it in 0 until 1440 } ?: return@mapNotNull null
+        val devices = bits[3].toIntOrNull()?.takeIf { it in 1..BOTH } ?: return@mapNotNull null
+        Trigger(source, minutes, until, devices)
+    }
+
+    fun formatTriggers(triggers: List<Trigger>) = triggers.joinToString(";") { it.key }
+
+    /**
+     * The triggers that go off now, given each source's screen time today ([used], ms) and the ones
+     * that already went off today ([fired], by key). Each goes off once a day.
+     */
+    fun dueTriggers(triggers: List<Trigger>, used: Map<Source, Long>, fired: Set<String>): List<Trigger> =
+        triggers.filter { it.key !in fired && (used[it.source] ?: 0L) >= it.minutes * 60_000L }
 
     // --- Time that can't be changed ---
 
@@ -121,9 +220,20 @@ object Lockdown {
         Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT)
     }.getOrDefault(-1)
 
-    // --- The state on the phone ---
+    // --- The devices ---
 
-    /** How long the timed lockdown has left, or 0 */
+    /** Whether the Mac is paired, so it has a lockdown of its own */
+    fun macPaired(context: Context) = LockdownSync.isOn(context)
+
+    /** The devices there are: the phone, and the Mac when it's paired */
+    fun devices(context: Context): Int = if (macPaired(context)) BOTH else Device.PHONE.bit
+
+    /** [wanted] cut down to the devices there are */
+    fun present(context: Context, wanted: Int): Int = (wanted and devices(context)).takeIf { it != 0 } ?: Device.PHONE.bit
+
+    // --- The timer ---
+
+    /** How long the phone's timed lockdown has left, or 0 */
     fun timedMsLeft(context: Context, prefs: Prefs = Prefs(context)): Long {
         val until = prefs.lockdownUntil
         if (until <= 0L) return 0L
@@ -131,47 +241,118 @@ object Lockdown {
             System.currentTimeMillis(), SystemClock.elapsedRealtime(), boot(context)).coerceAtLeast(0L)
     }
 
+    /** How long [device]'s timed lockdown has left, or 0 */
+    fun timedMsLeft(context: Context, prefs: Prefs, device: Device): Long = when (device) {
+        Device.PHONE -> timedMsLeft(context, prefs)
+        Device.MAC -> (prefs.lockdownMacUntil - System.currentTimeMillis()).coerceAtLeast(0L)
+    }
+
     fun timedActive(context: Context, prefs: Prefs = Prefs(context)) = timedMsLeft(context, prefs) > 0L
 
-    /** Locks for [total] from now. Never shortens the timed lockdown already running. */
-    fun lockForTotal(context: Context, total: Long, prefs: Prefs = Prefs(context)) {
-        if (total <= timedMsLeft(context, prefs)) return
-        prefs.lockdownUntil = System.currentTimeMillis() + total
-        prefs.lockdownUntilElapsed = SystemClock.elapsedRealtime() + total
-        prefs.lockdownUntilBoot = boot(context)
+    fun timedActive(context: Context, prefs: Prefs, device: Device) = timedMsLeft(context, prefs, device) > 0L
+
+    /** Locks [devices] (the phone only if not given) for [total] from now. Never shortens a timed lockdown already running. */
+    fun lockForTotal(context: Context, total: Long, prefs: Prefs = Prefs(context), devices: Int = Device.PHONE.bit) {
+        if (covers(devices, Device.PHONE) && total > timedMsLeft(context, prefs)) {
+            prefs.lockdownUntil = System.currentTimeMillis() + total
+            prefs.lockdownUntilElapsed = SystemClock.elapsedRealtime() + total
+            prefs.lockdownUntilBoot = boot(context)
+        }
+        if (covers(devices, Device.MAC) && total > timedMsLeft(context, prefs, Device.MAC)) {
+            prefs.lockdownMacUntil = System.currentTimeMillis() + total
+        }
+    }
+
+    /** Turns [devices] on until turned off */
+    fun turnOn(prefs: Prefs, devices: Int) {
+        if (covers(devices, Device.PHONE)) prefs.lockdownModeOn = true
+        if (covers(devices, Device.MAC)) prefs.lockdownMacModeOn = true
     }
 
     /**
-     * Adds [ms] to lockdown: to the timer, or past the end of the schedule (or stage) keeping it on now,
-     * so a tap always pushes the end later.
+     * Adds [ms] to lockdown on [devices]: to the timer, or past the end of whatever keeps it on now
+     * (schedules, screen time, a stage), so a tap always pushes the end later.
      */
-    fun addTime(context: Context, ms: Long, prefs: Prefs = Prefs(context)) {
-        val untilNow = activeUntil(context, prefs)?.let { it - System.currentTimeMillis() } ?: 0L
-        lockForTotal(context, maxOf(timedMsLeft(context, prefs), untilNow) + ms, prefs)
+    fun addTime(context: Context, ms: Long, prefs: Prefs = Prefs(context), devices: Int = Device.PHONE.bit) {
+        Device.values().filter { covers(devices, it) }.forEach { device ->
+            val untilNow = activeUntil(context, prefs, device)?.let { it - System.currentTimeMillis() } ?: 0L
+            lockForTotal(context, maxOf(timedMsLeft(context, prefs, device), untilNow) + ms, prefs, device.bit)
+        }
     }
 
-    /** When the timed lockdown ends, on the wall clock now, or null */
+    /** The devices the home lock and Start act on: the chosen ones, or both while they're matched */
+    fun startDevices(context: Context, prefs: Prefs = Prefs(context)) =
+        if (prefs.lockdownMatchDevices) devices(context) else present(context, prefs.lockdownStartDevices)
+
+    /** When the phone's timed lockdown ends, on the wall clock now, or null */
     fun timedEnd(context: Context, prefs: Prefs = Prefs(context)): Long? =
         timedMsLeft(context, prefs).takeIf { it > 0 }?.let { System.currentTimeMillis() + it }
 
+    fun timedEnd(context: Context, prefs: Prefs, device: Device): Long? =
+        timedMsLeft(context, prefs, device).takeIf { it > 0 }?.let { System.currentTimeMillis() + it }
+
     fun schedules(prefs: Prefs) = parseSchedules(prefs.lockdownSchedules)
+
+    fun triggers(prefs: Prefs) = parseTriggers(prefs.lockdownTriggers)
+
+    /** The lockdowns screen time has started that haven't ended */
+    fun triggerWindows(prefs: Prefs): List<Window> {
+        val now = now()
+        return parseWindows(prefs.lockdownTriggerBlocks).filter { it.end.isAfter(now) }
+    }
 
     private fun now(): LocalDateTime = LocalDateTime.now()
 
-    fun scheduleActive(prefs: Prefs, time: LocalDateTime = now()) = schedules(prefs).any { it.covers(time) }
+    fun scheduleActive(prefs: Prefs, time: LocalDateTime = now(), device: Device = Device.PHONE) =
+        schedules(prefs).any { covers(it.devices, device) && it.covers(time) }
 
-    fun isActive(context: Context, prefs: Prefs = Prefs(context)) = why(context, prefs) != null
+    /** [device]'s own plan, without the other device's */
+    private fun ownPlan(context: Context, prefs: Prefs, device: Device): Plan = when (device) {
+        Device.PHONE -> Plan(
+            manual = prefs.lockdownModeOn || placeActive(context, prefs),
+            timedEnd = timedEnd(context, prefs)?.let { localTime(it) },
+            schedules = schedules(prefs).filter { covers(it.devices, device) },
+            windows = triggerWindows(prefs).filter { covers(it.devices, device) } +
+                listOfNotNull(Window(LocalDate.now().atStartOfDay(), localTime(midnight())).takeIf { Limits.stageToday(context, prefs) >= Limits.STAGES }),
+        )
+        Device.MAC -> if (!macPaired(context)) Plan() else Plan(
+            manual = prefs.lockdownMacModeOn,
+            timedEnd = timedEnd(context, prefs, device)?.let { localTime(it) },
+            schedules = schedules(prefs).filter { covers(it.devices, device) },
+            windows = triggerWindows(prefs).filter { covers(it.devices, device) },
+        )
+    }
 
-    /** Why lockdown is on, the first that applies, or null when it's off */
-    enum class Why { MANUAL, TIMER, SCHEDULE, PLACE, STAGE }
+    /** Everything that puts [device] in lockdown: its own, and the other device's while they're matched */
+    fun plan(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE): Plan {
+        val own = ownPlan(context, prefs, device)
+        if (!prefs.lockdownMatchDevices || !macPaired(context)) return own
+        return own + ownPlan(context, prefs, if (device == Device.PHONE) Device.MAC else Device.PHONE)
+    }
 
-    fun why(context: Context, prefs: Prefs = Prefs(context)): Why? = when {
-        prefs.lockdownModeOn -> Why.MANUAL
-        timedActive(context, prefs) -> Why.TIMER
-        scheduleActive(prefs) -> Why.SCHEDULE
-        placeActive(context, prefs) -> Why.PLACE
-        Limits.stageToday(context, prefs) >= Limits.STAGES -> Why.STAGE
-        else -> null
+    /** Whether [device] is in lockdown, on a break or not */
+    fun isOn(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE) = plan(context, prefs, device).on(now())
+
+    /** Whether lockdown blocks things on the phone now: it's on, and not on a break */
+    fun isActive(context: Context, prefs: Prefs = Prefs(context)) = isOn(context, prefs) && !onBreak(prefs, Device.PHONE)
+
+    /** Why the phone is in lockdown, the first that applies, or null when it's off */
+    enum class Why { MANUAL, TIMER, SCHEDULE, PLACE, STAGE, SCREEN_TIME, OTHER_DEVICE }
+
+    fun why(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE): Why? {
+        val time = now()
+        val own = ownPlan(context, prefs, device)
+        return when {
+            device == Device.PHONE && prefs.lockdownModeOn -> Why.MANUAL
+            device == Device.MAC && prefs.lockdownMacModeOn -> Why.MANUAL
+            own.timedEnd?.isAfter(time) == true -> Why.TIMER
+            own.schedules.any { it.covers(time) } -> Why.SCHEDULE
+            device == Device.PHONE && placeActive(context, prefs) -> Why.PLACE
+            device == Device.PHONE && Limits.stageToday(context, prefs) >= Limits.STAGES -> Why.STAGE
+            triggerWindows(prefs).any { covers(it.devices, device) && it.covers(time) } -> Why.SCREEN_TIME
+            plan(context, prefs, device).on(time) -> Why.OTHER_DEVICE
+            else -> null
+        }
     }
 
     /** Whether you're at one of lockdown's places, as far as place tracking knows */
@@ -201,7 +382,6 @@ object Lockdown {
         Lock.SYSTEM_SETTINGS -> prefs.lockdownSystemSettings = on
     }
 
-    /** Apps never blocked: JLauncher, and the phone app, so calls can still be made and answered */
     /**
      * Any app but JLauncher and the phone app. System screens that aren't apps on a list (the
      * emergency dialer, the in-call screen, permission dialogs, the share sheet, recents) are never
@@ -245,10 +425,10 @@ object Lockdown {
     /** An app or site that can't be used now: why, and until when on the wall clock (null: until lockdown ends, with no set end) */
     data class Block(val reason: Reason, val until: Long?)
 
-    private fun midnight() = midnightAfter(java.time.LocalDateTime.now())
+    private fun midnight() = midnightAfter(LocalDateTime.now())
 
     /** The next midnight after [now], when limits and stages reset */
-    fun midnightAfter(now: java.time.LocalDateTime, zone: ZoneId = ZoneId.systemDefault()) =
+    fun midnightAfter(now: LocalDateTime, zone: ZoneId = ZoneId.systemDefault()) =
         now.toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
     /**
@@ -265,7 +445,8 @@ object Lockdown {
                 null -> {}
             }
         }
-        val stage = Limits.stageToday(context, prefs)
+        // The last stage is a lockdown, which a break lifts
+        val stage = Limits.stageToday(context, prefs).let { if (onBreak(prefs, Device.PHONE)) it.coerceAtMost(Limits.STAGES - 1) else it }
         if (stageBlocks(stage, packageName, prefs.lockdownBlockedApps, prefs.lockdownEssentials)) return Block(Reason.STAGE, midnight())
         if (!isActive(context, prefs)) return null
         return when {
@@ -301,27 +482,26 @@ object Lockdown {
 
     // --- Blocked attempts, by day ---
 
-    fun blockedDays(prefs: Prefs): Map<java.time.LocalDate, Int> = runCatching {
+    fun blockedDays(prefs: Prefs): Map<LocalDate, Int> = runCatching {
         val json = org.json.JSONObject(prefs.lockdownBlockedDays)
-        json.keys().asSequence().mapNotNull { key -> runCatching { java.time.LocalDate.parse(key) to json.getInt(key) }.getOrNull() }.toMap()
+        json.keys().asSequence().mapNotNull { key -> runCatching { LocalDate.parse(key) to json.getInt(key) }.getOrNull() }.toMap()
     }.getOrDefault(emptyMap())
 
-    fun blockedToday(prefs: Prefs) = blockedDays(prefs)[java.time.LocalDate.now()] ?: 0
+    fun blockedToday(prefs: Prefs) = blockedDays(prefs)[LocalDate.now()] ?: 0
 
     /** Counts one more blocked attempt today, keeping a year of days */
     fun countBlocked(context: Context, prefs: Prefs = Prefs(context)) {
-        val today = java.time.LocalDate.now()
+        val today = LocalDate.now()
         val days = blockedDays(prefs).filterKeys { it > today.minusDays(400) }.toMutableMap()
         days[today] = (days[today] ?: 0) + 1
         prefs.lockdownBlockedDays = org.json.JSONObject().apply { days.forEach { (date, n) -> put(date.toString(), n) } }.toString()
-        LockdownStats.update(context, days)
     }
 
     /** Days in a row, up to yesterday, that didn't reach stage 3; null when it isn't set */
     fun streak(context: Context, prefs: Prefs = Prefs(context)): Int? {
         val last = Limits.stages(prefs).getOrNull(Limits.STAGES - 1)?.takeIf { it > 0 } ?: return null
         val data = app.olauncher.data.MoodStore(context).load()
-        var date = java.time.LocalDate.now().minusDays(1)
+        var date = LocalDate.now().minusDays(1)
         var days = 0
         while (days < 365) {
             val used = data.days[date.toString()]?.totalUsageMs ?: break
@@ -333,25 +513,19 @@ object Lockdown {
     }
 
     /**
-     * When lockdown, on now, turns off by itself, on the wall clock; null when it's switched on or has
-     * no end. A timed lockdown, schedules and the last screen time stage that follow on from each
-     * other count as one; at a place, there's no end to give.
+     * When [device]'s lockdown, on now, turns off by itself, on the wall clock; null when it's
+     * switched on or has no end (at a place). Everything that follows on counts as one.
      */
-    fun activeUntil(context: Context, prefs: Prefs = Prefs(context)): Long? {
-        if (prefs.lockdownModeOn || placeActive(context, prefs)) return null
-        val ends = listOfNotNull(timedEnd(context, prefs),
-            midnight().takeIf { Limits.stageToday(context, prefs) >= Limits.STAGES })
-        val until = ends.maxOrNull()?.let { localTime(it) }
-        val end = coveredUntil(schedules(prefs), until, now()) ?: return null
-        return end.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    }
+    fun activeUntil(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE): Long? =
+        plan(context, prefs, device).until(now())?.let { epoch(it, ZoneId.systemDefault()) }
 
-    /** Where a run of [schedules] and a timed lockdown ending at [timedEnd] covering [time] ends, or null if none covers it */
-    fun coveredUntil(schedules: List<Schedule>, timedEnd: LocalDateTime?, time: LocalDateTime): LocalDateTime? {
+    /** Where a run of [schedules], [windows] and a timed lockdown ending at [timedEnd] covering [time] ends, or null if none covers it */
+    fun coveredUntil(schedules: List<Schedule>, timedEnd: LocalDateTime?, time: LocalDateTime, windows: List<Window> = emptyList()): LocalDateTime? {
         var end: LocalDateTime? = null
         var at = time
-        for (i in 0 until 32) {
-            val next = (schedules.filter { it.covers(at) }.map { it.endAfter(at) } + listOfNotNull(timedEnd?.takeIf { it.isAfter(at) })).maxOrNull()
+        for (i in 0 until 64) {
+            val next = (schedules.filter { it.covers(at) }.map { it.endAfter(at) } + windows.filter { it.covers(at) }.map { it.end } +
+                listOfNotNull(timedEnd?.takeIf { it.isAfter(at) })).maxOrNull()
             if (next == null || !next.isAfter(at)) break
             end = next
             at = next
@@ -359,23 +533,102 @@ object Lockdown {
         return end
     }
 
-    /** The next scheduled start, on the wall clock, when lockdown is off */
-    fun nextScheduled(prefs: Prefs): Long? {
+    /** The next scheduled start on [device], on the wall clock, when lockdown is off */
+    fun nextScheduled(prefs: Prefs, device: Device = Device.PHONE): Long? {
         val time = now()
-        return schedules(prefs).mapNotNull { it.nextStart(time) }.minOrNull()
-            ?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        return schedules(prefs).filter { covers(it.devices, device) || prefs.lockdownMatchDevices }.mapNotNull { it.nextStart(time) }.minOrNull()
+            ?.let { epoch(it, ZoneId.systemDefault()) }
     }
 
-    fun localTime(epochMs: Long): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault())
+    fun localTime(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone)
+
+    fun epoch(time: LocalDateTime, zone: ZoneId = ZoneId.systemDefault()) = time.atZone(zone).toInstant().toEpochMilli()
+
+    // --- Screen time triggers ---
+
+    /** Today's screen time from each source, as far as it's known */
+    fun screenTimeToday(context: Context): Map<Source, Long> {
+        val today = LocalDate.now()
+        val phone = Limits.totalToday(context)
+        val mac = (DeviceTime.days(context, DeviceTime.Device.MAC)[today]?.minutes ?: 0) * 60_000L
+        val tv = (DeviceTime.days(context, DeviceTime.Device.TV)[today]?.minutes ?: 0) * 60_000L
+        return mapOf(Source.PHONE to phone, Source.MAC to mac, Source.TV to tv, Source.TOTAL to phone + mac + tv)
+    }
+
+    /** Starts the lockdowns of triggers whose screen time has been reached today; returns whether any did */
+    fun checkTriggers(context: Context, prefs: Prefs = Prefs(context)): Boolean {
+        val triggers = triggers(prefs)
+        if (triggers.isEmpty()) return false
+        val today = LocalDate.now().toString()
+        val firedJson = runCatching { org.json.JSONObject(prefs.lockdownTriggerFired) }.getOrDefault(org.json.JSONObject())
+        val fired = firedJson.keys().asSequence().filter { firedJson.optString(it) == today }.toSet()
+        val due = dueTriggers(triggers, screenTimeToday(context), fired)
+        if (due.isEmpty()) return false
+        val now = now()
+        prefs.lockdownTriggerBlocks = formatWindows(triggerWindows(prefs) + due.map { it.windowFrom(now) })
+        val next = org.json.JSONObject()
+        firedJson.keys().forEach { if (firedJson.optString(it) == today) next.put(it, today) }
+        due.forEach { next.put(it.key, today) }
+        prefs.lockdownTriggerFired = next.toString()
+        return true
+    }
+
+    // --- Breaks ---
+
+    fun breaks(prefs: Prefs) = Breaks.Config.decode(prefs.lockdownBreaks)
+
+    fun breakLog(prefs: Prefs) = Breaks.decodeLog(prefs.lockdownBreakLog)
+
+    /** When [device]'s break ends, or 0: with shared breaks, a break on either */
+    fun breakUntil(prefs: Prefs, device: Device): Long {
+        val shared = breaks(prefs).shared
+        return when {
+            shared -> maxOf(prefs.lockdownBreakUntil, prefs.lockdownMacBreakUntil)
+            device == Device.PHONE -> prefs.lockdownBreakUntil
+            else -> prefs.lockdownMacBreakUntil
+        }
+    }
+
+    fun onBreak(prefs: Prefs, device: Device) = breakUntil(prefs, device) > System.currentTimeMillis()
+
+    /** Whether [device] can take a break now */
+    fun canBreak(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE): Breaks.Can =
+        Breaks.check(breaks(prefs), breakLog(prefs), System.currentTimeMillis(), device.name.lowercase(),
+            isOn(context, prefs, device), breakUntil(prefs, device))
+
+    /** Starts a break on [device] (both, when shared), with the id the Mac gave it if it came from there */
+    fun startBreak(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE, id: String = java.util.UUID.randomUUID().toString(),
+                   at: Long = System.currentTimeMillis()) {
+        val config = breaks(prefs)
+        if (!config.on) return
+        val end = Breaks.newEnd(config, at, breakUntil(prefs, device))
+        when (device) {
+            Device.PHONE -> prefs.lockdownBreakUntil = end
+            Device.MAC -> prefs.lockdownMacBreakUntil = end
+        }
+        prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.trim(Breaks.started(breakLog(prefs), id, at, end, device.name.lowercase()), at))
+        // Lockdown ends a break's length later
+        if (config.makeUp) addTime(context, config.minutes * 60_000L, prefs, if (config.shared) devices(context) else device.bit)
+    }
+
+    /** Ends [device]'s break now (both, when shared) */
+    fun endBreak(prefs: Prefs, device: Device = Device.PHONE) {
+        val now = System.currentTimeMillis()
+        val shared = breaks(prefs).shared
+        if (shared || device == Device.PHONE) prefs.lockdownBreakUntil = 0L
+        if (shared || device == Device.MAC) prefs.lockdownMacBreakUntil = 0L
+        val devices = if (shared) setOf(Breaks.PHONE, Breaks.MAC) else setOf(device.name.lowercase())
+        prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.ended(breakLog(prefs), now, devices))
+    }
 
     // --- Loosening ---
 
-    fun unlock(prefs: Prefs) = Unlock.values().getOrElse(prefs.lockdownUnlock) { Unlock.NOTHING }
+    fun challenge(prefs: Prefs) = Challenge.decode(prefs.lockdownChallenge) ?: Challenge.DEFAULT
 
     fun waitState(context: Context, prefs: Prefs = Prefs(context)): WaitState {
         val started = prefs.lockdownWaitRequestedAt
         if (started <= 0L) return WaitState.None
-        val waitMs = prefs.lockdownWaitMinutes * 60_000L
+        val waitMs = challenge(prefs).amount * 60_000L
         val since = -msUntil(started, prefs.lockdownWaitRequestedElapsed, prefs.lockdownWaitBoot,
             System.currentTimeMillis(), SystemClock.elapsedRealtime(), boot(context))
         return waitState(since, waitMs)
@@ -387,11 +640,20 @@ object Lockdown {
         prefs.lockdownWaitBoot = boot(context)
     }
 
-    /** Ends the timed lockdown now; schedules, places and stages carry on */
-    fun endTimed(prefs: Prefs) {
-        prefs.lockdownUntil = 0L
-        prefs.lockdownUntilElapsed = 0L
-        prefs.lockdownUntilBoot = -1
+    /** Ends the timed lockdown on [devices] now; schedules, places and stages carry on */
+    fun endTimed(prefs: Prefs, devices: Int = Device.PHONE.bit) {
+        if (covers(devices, Device.PHONE)) {
+            prefs.lockdownUntil = 0L
+            prefs.lockdownUntilElapsed = 0L
+            prefs.lockdownUntilBoot = -1
+        }
+        if (covers(devices, Device.MAC)) prefs.lockdownMacUntil = 0L
+    }
+
+    /** Turns off [devices]' lockdown that's on until turned off */
+    fun turnOff(prefs: Prefs, devices: Int) {
+        if (covers(devices, Device.PHONE)) prefs.lockdownModeOn = false
+        if (covers(devices, Device.MAC)) prefs.lockdownMacModeOn = false
     }
 
     fun cancelWait(prefs: Prefs) {
@@ -400,7 +662,7 @@ object Lockdown {
 
     private var graceUntil = 0L
 
-    /** The password was just given: loosening needs nothing more for a few minutes, while JLauncher stays open */
+    /** The challenge was just passed: loosening needs nothing more for a few minutes, while JLauncher stays open */
     fun startGrace() {
         graceUntil = SystemClock.elapsedRealtime() + GRACE_MS
     }
@@ -409,14 +671,18 @@ object Lockdown {
         graceUntil = 0L
     }
 
-    /** Whether loosening needs nothing right now */
+    /** Whether loosening needs nothing right now: lockdown is off on every device (a break doesn't count), or its challenge was passed */
     fun isOpen(context: Context, prefs: Prefs = Prefs(context)): Boolean {
-        if (!isActive(context, prefs)) return true
-        if (timedActive(context, prefs)) return false
-        return when (unlock(prefs)) {
-            Unlock.NOTHING -> true
-            Unlock.PASSWORD -> !prefs.isLockdownPasswordSet || SystemClock.elapsedRealtime() < graceUntil
-            Unlock.WAIT -> waitState(context, prefs) is WaitState.Ready
+        val on = Device.values().any { isOn(context, prefs, it) }
+        if (!on) return true
+        if (Device.values().any { timedActive(context, prefs, it) }) return false
+        val challenge = challenge(prefs)
+        return when (challenge.type) {
+            Challenge.Type.NONE -> true
+            Challenge.Type.NEVER -> false
+            Challenge.Type.PASSWORD -> !prefs.isLockdownPasswordSet || SystemClock.elapsedRealtime() < graceUntil
+            Challenge.Type.WAIT -> waitState(context, prefs) is WaitState.Ready
+            else -> SystemClock.elapsedRealtime() < graceUntil
         }
     }
 }

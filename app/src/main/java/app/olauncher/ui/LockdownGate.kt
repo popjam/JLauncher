@@ -12,6 +12,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import app.olauncher.R
 import app.olauncher.data.Prefs
+import app.olauncher.helper.Breaks
+import app.olauncher.helper.Challenge
 import app.olauncher.helper.Limits
 import app.olauncher.helper.Lockdown
 import app.olauncher.helper.PasswordHelper
@@ -39,34 +41,47 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     fun loosen(action: () -> Unit) {
         val prefs = prefs
         if (Lockdown.isOpen(context, prefs)) return action()
-        Lockdown.timedEnd(context, prefs)?.let { end ->
+        Lockdown.Device.values().mapNotNull { Lockdown.timedEnd(context, prefs, it) }.maxOrNull()?.let { end ->
             return locked(context, context.getString(R.string.lockdown_locked_until, time(context, end)))
         }
-        when (Lockdown.unlock(prefs)) {
-            Lockdown.Unlock.PASSWORD -> requirePassword(action)
-            Lockdown.Unlock.WAIT -> askWait()
-            Lockdown.Unlock.NOTHING -> action()
+        val challenge = Lockdown.challenge(prefs)
+        when (challenge.type) {
+            Challenge.Type.NONE -> action()
+            Challenge.Type.NEVER -> locked(context, lockedMessage(context))
+            Challenge.Type.PASSWORD -> requirePassword(action)
+            Challenge.Type.WAIT -> askWait()
+            else -> run(challenge, context.getString(R.string.lockdown_loosen_title)) {
+                Lockdown.startGrace()
+                action()
+            }
         }
     }
 
     /**
-     * Ends the timed lockdown early, after the unlock method: the password, or a finished wait (asking
-     * to start one if there isn't). With no unlock method, it's asked first.
+     * Ends lockdown on [devices] early: switched on and timed lockdowns end; schedules, screen time,
+     * places and stages carry on. Needs what ending early is set to need.
      */
-    fun endTimed() {
+    fun endEarly(devices: Int) {
         val prefs = prefs
         val end = {
-            Lockdown.endTimed(prefs)
-            if (Lockdown.unlock(prefs) == Lockdown.Unlock.WAIT) Lockdown.cancelWait(prefs)
+            Lockdown.turnOff(prefs, devices)
+            Lockdown.endTimed(prefs, devices)
+            if (Lockdown.challenge(prefs).type == Challenge.Type.WAIT) Lockdown.cancelWait(prefs)
             app.olauncher.helper.LockdownSystem.sync(context)
             onChanged()
         }
-        when (Lockdown.unlock(prefs)) {
-            Lockdown.Unlock.PASSWORD -> if (prefs.isLockdownPasswordSet) requirePassword(end) else confirmEnd(end)
-            Lockdown.Unlock.WAIT -> if (Lockdown.waitState(context, prefs) is Lockdown.WaitState.Ready) end() else askWait()
-            Lockdown.Unlock.NOTHING -> confirmEnd(end)
+        val challenge = Lockdown.challenge(prefs)
+        when (challenge.type) {
+            Challenge.Type.NONE -> confirmEnd(end)
+            Challenge.Type.NEVER -> AppDialog(context).setTitle(R.string.lockdown_cant_end).setPositiveButton(R.string.okay, null).show()
+            Challenge.Type.PASSWORD -> if (prefs.isLockdownPasswordSet) requirePassword(end) else confirmEnd(end)
+            Challenge.Type.WAIT -> if (Lockdown.waitState(context, prefs) is Lockdown.WaitState.Ready) end() else askWait()
+            else -> run(challenge, context.getString(R.string.lockdown_end_title)) { end() }
         }
     }
+
+    /** The phone's timed lockdown (and the Mac's, matched) ended early */
+    fun endTimed() = endEarly(Lockdown.startDevices(context, prefs))
 
     private fun confirmEnd(end: () -> Unit) {
         AppDialog(context)
@@ -76,10 +91,204 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             .show()
     }
 
+    // --- Breaks ---
+
+    /** Takes a break on the phone, after whatever taking one needs; says why not when it can't be taken */
+    fun takeBreak(onStarted: () -> Unit = {}) {
+        val prefs = prefs
+        val config = Lockdown.breaks(prefs)
+        when (val can = Lockdown.canBreak(context, prefs)) {
+            Breaks.Can.Yes -> {}
+            else -> return context.showToast(cantBreakText(context, can))
+        }
+        val start = {
+            // Checked again, in case time passed while the challenge was done
+            if (Lockdown.canBreak(context, prefs) == Breaks.Can.Yes) {
+                Lockdown.startBreak(context, prefs)
+                app.olauncher.helper.LockdownSystem.sync(context)
+                context.showToast(context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, Lockdown.Device.PHONE))))
+                onChanged()
+                onStarted()
+            }
+        }
+        val challenge = config.challenge
+        when (challenge.type) {
+            Challenge.Type.NONE -> start()
+            Challenge.Type.PASSWORD -> if (prefs.isLockdownPasswordSet) askPassword(context.getString(R.string.enter_password)) { password ->
+                if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) start()
+                else context.showToast(context.getString(R.string.password_incorrect))
+            } else start()
+            else -> run(challenge, context.getString(R.string.lockdown_break_title, config.minutes)) { start() }
+        }
+    }
+
+    /** Ends the phone's break now, so lockdown blocks again */
+    fun endBreak() {
+        Lockdown.endBreak(prefs, Lockdown.Device.PHONE)
+        app.olauncher.helper.LockdownSystem.sync(context)
+        onChanged()
+    }
+
+    // --- Challenges done there and then ---
+
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Asks for [challenge] (one done on the spot: holding, tapping, typing) under [title], then does [onPass] */
+    fun run(challenge: Challenge, title: String, onPass: () -> Unit) {
+        when (challenge.type) {
+            Challenge.Type.HOLD -> hold(challenge.amount, title, onPass)
+            Challenge.Type.TAPS -> taps(challenge.amount, title, onPass)
+            Challenge.Type.PHRASE -> type(title, List(challenge.amount.coerceAtLeast(1)) { prefs.lockdownPhrase }, ignoreSpaces = false, onPass)
+            Challenge.Type.RANDOM -> type(title, listOf(Challenge.randomText(challenge.amount)), ignoreSpaces = true, onPass)
+            Challenge.Type.PASSWORD -> requirePassword(onPass)
+            Challenge.Type.NEVER -> locked(context, lockedMessage(context))
+            else -> onPass()
+        }
+    }
+
+    /** A countdown that has to stay open on screen; leaving it starts it again */
+    private fun hold(seconds: Int, title: String, onPass: () -> Unit) {
+        val text = TextView(context, null, 0, R.style.TextLarge).apply {
+            textSize = 40f
+            gravity = android.view.Gravity.CENTER
+        }
+        var left = seconds
+        val dialog = AppDialog(context)
+            .setTitle(title)
+            .setMessage(R.string.lockdown_hold_message)
+            .setView(padded(context, text))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.lockdown_continue) { _, _ -> onPass() }
+            .create()
+        val tick = object : Runnable {
+            override fun run() {
+                if (!dialog.isShowing) return
+                text.text = clockText(left * 1000L)
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = left <= 0
+                if (left > 0) {
+                    left--
+                    main.postDelayed(this, 1000)
+                }
+            }
+        }
+        dialog.setOnShowListener { tick.run() }
+        dialog.setOnDismissListener { main.removeCallbacks(tick) }
+        // Leaving the screen starts it again
+        dialog.window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener { focused -> if (!focused && left > 0) left = seconds }
+        dialog.show()
+    }
+
+    /** A button tapped [count] times */
+    private fun taps(count: Int, title: String, onPass: () -> Unit) {
+        var done = 0
+        lateinit var dialog: AlertDialog
+        val counter = TextView(context, null, 0, R.style.TextLarge).apply {
+            textSize = 22f
+            gravity = android.view.Gravity.CENTER
+            text = context.getString(R.string.lockdown_taps_left, count)
+        }
+        val button = TextView(context, null, 0, R.style.TextLarge).apply {
+            text = context.getString(R.string.lockdown_tap)
+            textSize = 20f
+            gravity = android.view.Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setStroke(2.dpToPx(), androidx.core.graphics.ColorUtils.setAlphaComponent(currentTextColor, 160))
+            }
+            setOnClickListener {
+                done++
+                counter.text = context.getString(R.string.lockdown_taps_left, count - done)
+                if (done >= count) {
+                    dialog.dismiss()
+                    onPass()
+                }
+            }
+        }
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 8.dpToPx())
+            addView(counter)
+            addView(button, LinearLayout.LayoutParams(140.dpToPx(), 140.dpToPx()).apply { topMargin = 16.dpToPx() })
+        }
+        dialog = AppDialog(context).setTitle(title).setView(box).setNegativeButton(R.string.cancel, null).create()
+        dialog.show()
+    }
+
+    /** Each of [texts] typed out in turn, exactly, with pasting turned off */
+    private fun type(title: String, texts: List<String>, ignoreSpaces: Boolean, onPass: () -> Unit) {
+        var index = 0
+        val shown = TextView(context, null, 0, R.style.TextSmall).apply {
+            textSize = 16f
+            setLineSpacing(0f, 1.2f)
+            // Not selectable, so it can't be copied
+            setTextIsSelectable(false)
+        }
+        val progress = TextView(context, null, 0, R.style.TextSmall).apply {
+            textSize = 13f
+            alpha = 0.6f
+            setPadding(0, 6.dpToPx(), 0, 0)
+        }
+        val input = EditText(context).apply {
+            maxLines = 8
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            isLongClickable = false
+            customSelectionActionModeCallback = noPaste
+            customInsertionActionModeCallback = noPaste
+        }
+        fun show() {
+            shown.text = texts[index]
+            progress.text = if (texts.size > 1) context.getString(R.string.lockdown_n_of, index + 1, texts.size) else ""
+            input.setText("")
+        }
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+            addView(shown)
+            addView(progress)
+            addView(input)
+        }
+        show()
+        val dialog = AppDialog(context)
+            .setTitle(title)
+            .setView(box)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.okay, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (!Challenge.matches(input.text.toString(), texts[index], ignoreSpaces)) {
+                    context.showToast(context.getString(R.string.lockdown_not_matching))
+                    return@setOnClickListener
+                }
+                index++
+                if (index >= texts.size) {
+                    dialog.dismiss()
+                    onPass()
+                } else show()
+            }
+        }
+        dialog.show()
+    }
+
+    /** Takes paste out of the text box's menus */
+    private val noPaste = object : android.view.ActionMode.Callback {
+        override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = true.also { strip(menu) }
+        override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = true.also { strip(menu) }
+        override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?) = false
+        override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
+        private fun strip(menu: android.view.Menu?) {
+            menu?.removeItem(android.R.id.paste)
+            menu?.removeItem(android.R.id.pasteAsPlainText)
+            menu?.removeItem(android.R.id.autofill)
+        }
+    }
+
     // --- Waiting ---
 
     private fun askWait() {
         val prefs = prefs
+        val waitMs = Lockdown.challenge(prefs).amount * 60_000L
         when (val state = Lockdown.waitState(context, prefs)) {
             is Lockdown.WaitState.Waiting -> AppDialog(context)
                 .setTitle(context.getString(R.string.lockdown_unlocks_in, duration(context, state.msLeft)))
@@ -91,8 +300,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 .show()
             else -> AppDialog(context)
                 .setTitle(R.string.lockdown_wait_title)
-                .setMessage(context.getString(R.string.lockdown_wait_message, duration(context, prefs.lockdownWaitMinutes * 60_000L),
-                    duration(context, Lockdown.READY_MS)))
+                .setMessage(context.getString(R.string.lockdown_wait_message, duration(context, waitMs), duration(context, Lockdown.READY_MS)))
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.lockdown_start_wait) { _, _ ->
                     Lockdown.startWait(context, prefs)
@@ -325,8 +533,52 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                     ?.let { context.getString(R.string.lockdown_why_schedule, scheduleName(context, it)) }
                 Lockdown.Why.PLACE -> placeName(context, Social.currentPlace(context))?.let { context.getString(R.string.lockdown_why_place, it) }
                 Lockdown.Why.STAGE -> context.getString(R.string.lockdown_why_stage)
+                Lockdown.Why.SCREEN_TIME -> context.getString(R.string.lockdown_why_screen_time)
+                Lockdown.Why.OTHER_DEVICE -> context.getString(R.string.lockdown_why_matched)
                 null -> null
             }
+        }
+
+        /** A duration, rounded down to the minute, with 0 for none */
+        fun durationOrNone(context: Context, ms: Long): String =
+            if (ms < 60_000L) context.getString(R.string.minutes_short, 0) else duration(context, ms / 60_000L * 60_000L)
+
+        /** "0:42" or "1:05:00", for a countdown */
+        fun clockText(ms: Long): String {
+            val s = ((ms + 999) / 1000).coerceAtLeast(0)
+            return if (s >= 3600) String.format(Locale.getDefault(), "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+            else String.format(Locale.getDefault(), "%d:%02d", s / 60, s % 60)
+        }
+
+        /** Why a break can't be taken now */
+        fun cantBreakText(context: Context, can: Breaks.Can): String = when (can) {
+            Breaks.Can.Yes -> ""
+            Breaks.Can.Off -> context.getString(R.string.lockdown_breaks_off)
+            Breaks.Can.NotLocked -> context.getString(R.string.lockdown_break_not_locked)
+            is Breaks.Can.OnBreak -> context.getString(R.string.lockdown_break_until, time(context, can.until))
+            is Breaks.Can.Cooldown -> context.getString(R.string.lockdown_break_next, time(context, can.until))
+            is Breaks.Can.OffNow -> context.getString(R.string.lockdown_break_not_now, time(context, can.until))
+            is Breaks.Can.Limit -> context.getString(when (can.period) {
+                "hour" -> R.string.lockdown_break_limit_hour
+                "day" -> R.string.lockdown_break_limit_day
+                else -> R.string.lockdown_break_limit_week
+            }, can.count) + " · " + context.getString(R.string.lockdown_break_next, time(context, can.until))
+        }
+
+        /** A device's name */
+        fun deviceName(context: Context, devices: Int): String = context.getString(when (devices) {
+            Lockdown.Device.PHONE.bit -> R.string.lockdown_device_phone
+            Lockdown.Device.MAC.bit -> R.string.lockdown_device_mac
+            else -> R.string.lockdown_device_both
+        })
+
+        /** One device's state in a few words: "On until 07:00", "Break until 22:05", "Off" */
+        fun deviceStatus(context: Context, device: Lockdown.Device): String {
+            val prefs = Prefs(context)
+            if (!Lockdown.isOn(context, prefs, device)) return context.getString(R.string.off)
+            if (Lockdown.onBreak(prefs, device)) return context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, device)))
+            return Lockdown.activeUntil(context, prefs, device)?.let { context.getString(R.string.lockdown_on_until, time(context, it)) }
+                ?: context.getString(R.string.on)
         }
 
         /** Today's screen time against the next stage, and how far along as a percent of the last stage; null without stages */
@@ -355,9 +607,13 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         })
 
         /** The notification's title */
-        fun notificationTitle(context: Context): String =
-            Lockdown.activeUntil(context)?.let { context.getString(R.string.lockdown_on_until_title, time(context, it)) }
+        fun notificationTitle(context: Context): String {
+            val prefs = Prefs(context)
+            if (Lockdown.onBreak(prefs, Lockdown.Device.PHONE))
+                return context.getString(R.string.lockdown_break_until, time(context, Lockdown.breakUntil(prefs, Lockdown.Device.PHONE)))
+            return Lockdown.activeUntil(context)?.let { context.getString(R.string.lockdown_on_until_title, time(context, it)) }
                 ?: context.getString(R.string.lockdown_on_title)
+        }
 
         /** A place's name from its id in [Social]: a home, work, or a named place */
         fun placeName(context: Context, id: Int): String? = when {
@@ -397,13 +653,16 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         /** Lockdown's state in a few words */
         fun status(context: Context): String {
             val prefs = Prefs(context)
-            if (!Lockdown.isActive(context, prefs)) {
+            if (!Lockdown.isOn(context, prefs)) {
+                if (Lockdown.macPaired(context) && Lockdown.isOn(context, prefs, Lockdown.Device.MAC))
+                    return context.getString(R.string.lockdown_mac_only, deviceStatus(context, Lockdown.Device.MAC))
                 return Lockdown.nextScheduled(prefs)?.let { context.getString(R.string.lockdown_off_next, time(context, it)) }
                     ?: context.getString(R.string.off)
             }
+            if (Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) return deviceStatus(context, Lockdown.Device.PHONE)
             val on = Lockdown.activeUntil(context, prefs)?.let { context.getString(R.string.lockdown_on_until, time(context, it)) }
                 ?: context.getString(R.string.on)
-            if (Lockdown.timedActive(context, prefs) || Lockdown.unlock(prefs) != Lockdown.Unlock.WAIT) return on
+            if (Lockdown.timedActive(context, prefs) || Lockdown.challenge(prefs).type != Challenge.Type.WAIT) return on
             return when (val wait = Lockdown.waitState(context, prefs)) {
                 is Lockdown.WaitState.Waiting -> on + " · " + context.getString(R.string.lockdown_unlocks_in, duration(context, wait.msLeft))
                 is Lockdown.WaitState.Ready -> on + " · " + context.getString(R.string.lockdown_unlocked_for, duration(context, wait.msLeft))

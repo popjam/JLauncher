@@ -35,6 +35,8 @@ object LockdownSystem {
 
     fun sync(context: Context) {
         val prefs = Prefs(context)
+        runCatching { Lockdown.checkTriggers(context, prefs) }
+        runCatching { LockdownLog.tick(context, prefs) }
         runCatching { syncGrayscale(context, prefs) }
         runCatching { syncNotification(context, prefs) }
         runCatching { TileService.requestListeningState(context, ComponentName(context, LockdownTileService::class.java)) }
@@ -80,7 +82,7 @@ object LockdownSystem {
 
     private fun syncNotification(context: Context, prefs: Prefs) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (!prefs.lockdownNotification || !canNotify(context) || !Lockdown.isActive(context, prefs)) {
+        if (!prefs.lockdownNotification || !canNotify(context) || !Lockdown.isOn(context, prefs)) {
             manager.cancel(NOTIFICATION_ID)
             return
         }
@@ -122,7 +124,7 @@ class LockdownReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != LockdownSystem.ACTION_ADD_HOUR) return
         val prefs = Prefs(context)
-        Lockdown.addTime(context, 60 * 60_000L, prefs)
+        Lockdown.addTime(context, 60 * 60_000L, prefs, Lockdown.startDevices(context, prefs))
         LockdownSystem.sync(context)
     }
 }
@@ -133,7 +135,7 @@ class LockdownTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         val tile = qsTile ?: return
-        val on = Lockdown.isActive(this)
+        val on = Lockdown.isOn(this)
         tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = getString(R.string.lockdown)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

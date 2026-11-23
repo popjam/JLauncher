@@ -21,6 +21,7 @@ import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
 import app.olauncher.R
 import app.olauncher.data.Prefs
+import app.olauncher.helper.Challenge
 import app.olauncher.helper.Lockdown
 import app.olauncher.helper.LockdownSystem
 import app.olauncher.helper.dpToPx
@@ -38,6 +39,10 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     override val cards: LinearLayout get() = cardList
     internal val gate by lazy { LockdownGate(this) { render() } }
     private var info: PopupWindow? = null
+    private var scroll: ScrollView? = null
+
+    /** Where the page was scrolled to, kept while a page opened from it is on top */
+    private var savedScroll = -1
     internal val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     /** The page's title in its header */
@@ -70,6 +75,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
                 overScrollMode = View.OVER_SCROLL_NEVER
                 isVerticalScrollBarEnabled = false
                 addView(content)
+                scroll = this
             })
         }
         return PullDismissLayout(context).apply {
@@ -91,6 +97,8 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     }
 
     override fun onDestroyView() {
+        scroll?.let { savedScroll = it.scrollY }
+        scroll = null
         info?.dismiss()
         info = null
         main.removeCallbacksAndMessages(null)
@@ -101,6 +109,11 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         if (!isAdded || view == null) return
         cards.removeAllViews()
         build()
+        if (savedScroll >= 0) {
+            val y = savedScroll
+            savedScroll = -1
+            scroll?.let { view -> view.post { view.scrollTo(0, y) } }
+        }
         app.olauncher.helper.LockdownSystem.sync(requireContext())
     }
 
@@ -299,49 +312,133 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dpToPx() }
     }
 
-    internal fun unlockName(unlock: Lockdown.Unlock) = when (unlock) {
-        Lockdown.Unlock.NOTHING -> getString(R.string.lockdown_unlock_nothing)
-        Lockdown.Unlock.PASSWORD -> getString(R.string.lockdown_password)
-        Lockdown.Unlock.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(requireContext(), prefs.lockdownWaitMinutes * 60_000L))
+    // --- What ending early, loosening and breaks need ---
+
+    /** A challenge in a few words: "100 taps", "Type 200 random characters", "15m wait" */
+    internal fun challengeName(challenge: Challenge): String {
+        val context = requireContext()
+        return when (challenge.type) {
+            Challenge.Type.NONE -> getString(R.string.lockdown_unlock_nothing)
+            Challenge.Type.HOLD -> getString(R.string.challenge_hold_n, if (challenge.amount < 60) getString(R.string.seconds_value, challenge.amount)
+                else LockdownGate.duration(context, challenge.amount * 1000L))
+            Challenge.Type.TAPS -> getString(R.string.challenge_taps_n, challenge.amount)
+            Challenge.Type.PHRASE -> if (challenge.amount <= 1) getString(R.string.challenge_phrase) else getString(R.string.challenge_phrase_n, challenge.amount)
+            Challenge.Type.RANDOM -> getString(R.string.challenge_random_n, challenge.amount)
+            Challenge.Type.PASSWORD -> getString(R.string.lockdown_password)
+            Challenge.Type.WAIT -> getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, challenge.amount * 60_000L))
+            Challenge.Type.NEVER -> getString(R.string.challenge_never)
+        }
     }
 
-    /** Nothing, the password, or one of the waits. Anything but a stricter choice loosens lockdown. */
-    internal fun pickUnlock() {
-        val context = requireContext()
-        val current = Lockdown.unlock(prefs)
-        val waits = Lockdown.WAIT_CHOICES
-        val names = listOf(getString(R.string.lockdown_unlock_nothing), getString(R.string.lockdown_password)) +
-            waits.map { getString(R.string.lockdown_unlock_wait, LockdownGate.duration(context, it * 60_000L)) }
-        val selected = when (current) {
-            Lockdown.Unlock.NOTHING -> 0
-            Lockdown.Unlock.PASSWORD -> 1
-            Lockdown.Unlock.WAIT -> 2 + waits.indexOf(prefs.lockdownWaitMinutes)
+    internal fun typeName(type: Challenge.Type) = getString(when (type) {
+        Challenge.Type.NONE -> R.string.lockdown_unlock_nothing
+        Challenge.Type.HOLD -> R.string.challenge_type_hold
+        Challenge.Type.TAPS -> R.string.challenge_type_taps
+        Challenge.Type.PHRASE -> R.string.challenge_type_phrase
+        Challenge.Type.RANDOM -> R.string.challenge_type_random
+        Challenge.Type.PASSWORD -> R.string.lockdown_password
+        Challenge.Type.WAIT -> R.string.challenge_type_wait
+        Challenge.Type.NEVER -> R.string.challenge_never
+    })
+
+    /** Simple … Impossible */
+    internal fun difficultyName(level: Int) = resources.getStringArray(R.array.challenge_difficulty).getOrElse(level) { "" }
+
+    internal fun difficultyOf(challenge: Challenge) = challenge.difficulty(prefs.lockdownPhrase.length)
+
+    /**
+     * Picks a challenge from [types]: the type, then how much of it, each shown with how hard it is.
+     * Choosing the password sets one if there isn't one. [onPicked] gets the choice.
+     */
+    internal fun pickChallenge(title: String, current: Challenge, types: List<Challenge.Type>, onPicked: (Challenge) -> Unit) {
+        val selected = types.indexOf(current.type)
+        choose(title, types.map { typeName(it) }, selected, suggested = true) { which ->
+            val type = types[which]
+            val amounts = Challenge.amount(type)
+            if (amounts.isEmpty()) return@choose onPicked(Challenge(type))
+            val start = if (type == current.type) current.amount else Challenge.defaultAmount(type)
+            choose(typeName(type), amounts.map { amount ->
+                val c = Challenge(type, amount)
+                challengeName(c) + " · " + difficultyName(difficultyOf(c))
+            }, amounts.indexOf(start), suggested = true) { onPicked(Challenge(type, amounts[it])) }
         }
-        choose(getString(R.string.lockdown_unlock_with), names, selected) { which ->
-            val stricter = current == Lockdown.Unlock.NOTHING ||
-                (current == Lockdown.Unlock.WAIT && which >= 2 && waits[which - 2] > prefs.lockdownWaitMinutes)
-            val change = {
-                when (which) {
-                    0 -> {
-                        gate.clearPassword()
-                        prefs.lockdownUnlock = Lockdown.Unlock.NOTHING.ordinal
-                        render()
-                    }
-                    1 -> gate.setNewPassword(warn = true) {
-                        prefs.lockdownUnlock = Lockdown.Unlock.PASSWORD.ordinal
-                        render()
-                    }
-                    else -> {
-                        gate.clearPassword()
-                        prefs.lockdownWaitMinutes = waits[which - 2]
-                        prefs.lockdownUnlock = Lockdown.Unlock.WAIT.ordinal
-                        Lockdown.cancelWait(prefs)
-                        render()
-                    }
-                }
+    }
+
+    /** Saves [new] as what ending early needs, through the unlock when it's easier; a password is set first if there isn't one */
+    internal fun setEndChallenge(new: Challenge) {
+        val old = Lockdown.challenge(prefs)
+        if (new == old) return
+        val save = {
+            val apply = {
+                prefs.lockdownChallenge = new.encode()
+                Lockdown.cancelWait(prefs)
+                render()
             }
-            if (stricter) change() else gate.loosen(change)
+            if (new.type == Challenge.Type.PASSWORD && !prefs.isLockdownPasswordSet) gate.setNewPassword(warn = true) { apply() } else apply()
         }
+        if (Challenge.loosens(old, new, prefs.lockdownPhrase.length)) gate.loosen(save) else save()
+    }
+
+    /** The phrase typed out; a shorter one loosens */
+    internal fun editPhrase() {
+        val context = requireContext()
+        val input = EditText(context).apply {
+            setText(prefs.lockdownPhrase)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            maxLines = 6
+        }
+        AppDialog(context)
+            .setTitle(R.string.challenge_the_phrase)
+            .setView(LockdownGate.padded(context, input))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.okay) { _, _ ->
+                val phrase = input.text.toString().trim().replace(Regex("\\s+"), " ")
+                if (phrase.length < 4) return@setPositiveButton
+                val save = { prefs.lockdownPhrase = phrase; render() }
+                if (phrase.length < prefs.lockdownPhrase.length) gate.loosen(save) else save()
+            }
+            .show()
+    }
+
+    // --- Devices ---
+
+    /**
+     * A switch for one device: its icon and name, filled while [on]. Faded and untappable when the thing
+     * can't be blocked there ([enabled] false).
+     */
+    internal fun devicePill(device: Lockdown.Device, on: Boolean, enabled: Boolean, onTap: () -> Unit): TextView {
+        val context = requireContext()
+        val fill = if (darkPage) 0xFF8FB3FF.toInt() else 0xFF3D5AFE.toInt()
+        val text = when {
+            on -> if (darkPage) 0xFF0B1020.toInt() else 0xFFFFFFFF.toInt()
+            else -> faint(if (enabled) 200 else 70)
+        }
+        return TextView(context, null, 0, R.style.TextSmall).apply {
+            this.text = LockdownGate.deviceName(context, device.bit)
+            textSize = 12.5f
+            setTextColor(text)
+            val icon = StatIcons.drawable(if (device == Lockdown.Device.PHONE) StatIcons.PHONE_SMALL else StatIcons.LAPTOP, text, 13.dpToPx())
+            icon.setBounds(0, 0, 13.dpToPx(), 13.dpToPx())
+            setCompoundDrawablesRelative(icon, null, null, null)
+            compoundDrawablePadding = 5.dpToPx()
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadius = 14.dpToPx().toFloat()
+                if (on) setColor(fill) else setStroke(1.dpToPx(), faint(if (enabled) 90 else 30))
+            }
+            setPadding(10.dpToPx(), 5.dpToPx(), 11.dpToPx(), 5.dpToPx())
+            isEnabled = enabled
+            if (enabled) setOnClickListener { onTap() }
+            contentDescription = this.text.toString() + ", " + getString(if (on) R.string.on else R.string.off)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 6.dpToPx() }
+        }
+    }
+
+    /** Picks devices: the phone, the Mac or both; straight to [onPicked] with the phone when there's no Mac */
+    internal fun pickDevices(title: String, current: Int, onPicked: (Int) -> Unit) {
+        if (!Lockdown.macPaired(requireContext())) return onPicked(Lockdown.Device.PHONE.bit)
+        val options = listOf(Lockdown.BOTH, Lockdown.Device.PHONE.bit, Lockdown.Device.MAC.bit)
+        choose(title, options.map { LockdownGate.deviceName(requireContext(), it) }, options.indexOf(current).coerceAtLeast(0), suggested = true) { onPicked(options[it]) }
     }
 
     /** Grayscale needs a permission only a computer can give */

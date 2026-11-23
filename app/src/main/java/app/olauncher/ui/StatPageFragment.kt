@@ -253,7 +253,7 @@ class StatPageFragment : CardPageFragment() {
                 peopleMoodCard(days)
                 dailyCard()
             }
-            StatKind.LOCKDOWN -> lockdownTodayCard()
+            StatKind.LOCKDOWN -> lockdownCards()
             StatKind.LIBIDO -> {
                 if (app.olauncher.helper.DeviceTime.pornOn(context)) pornCard()
                 dailyCard()

@@ -123,8 +123,6 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
                 android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         }
         populateHomeScreen(false)
-        handler.removeCallbacks(lockdownTick)
-        handler.postDelayed(lockdownTick, 30_000)
         viewModel.isOlauncherDefault()
         if (prefs.showStatusBar) showStatusBar()
         else hideStatusBar()
@@ -451,35 +449,59 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             addView(lockdownWidgetIcon, LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { topMargin = 4.dpToPx() })
             // Its own width, not the column's: a column sized to its children leaves out ones that fill it, so the time was cut to the lock's width
             addView(lockdownWidgetText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            setOnClickListener { addLockdownTime() }
-            // Held without dragging, it opens the Lockdown page
+            setOnClickListener { onLockdownWidgetTap() }
+            // Held without dragging: a break, when breaks are on and lockdown is; otherwise the Lockdown page
             setOnLongClickListener {
-                runCatching { findNavController().navigate(R.id.lockdownFragment) }
+                if (Lockdown.breaks(prefs).on && Lockdown.isOn(requireContext(), prefs) && !Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) {
+                    buzz(requireContext())
+                    lockdownGate.takeBreak { populateLockdownWidget() }
+                } else runCatching { findNavController().navigate(R.id.lockdownFragment) }
                 true
             }
             setOnTouchListener(HoldToDrag { _, x, y -> startWidgetDrag(Arrangement.LOCKDOWN, x, y) })
         }
     }
 
-    /** Off: a faded lock and what a tap adds. On: how long until it opens. */
+    /** Asks for and starts breaks from the home screen */
+    private val lockdownGate by lazy { LockdownGate(this) { populateLockdownWidget() } }
+
+    /** Off: a faded lock and what a tap adds. On: how long until it opens. On a break: the lock open, counting down the break. */
     private fun populateLockdownWidget() {
         val context = requireContext()
         lockdownWidget.isVisible = prefs.lockdownHomeWidget
         if (!prefs.lockdownHomeWidget) return
-        val on = Lockdown.isActive(context, prefs)
+        val on = Lockdown.isOn(context, prefs)
+        val onBreak = on && Lockdown.onBreak(prefs, Lockdown.Device.PHONE)
+        lockdownWidgetIcon.background = StatIcons.drawable(if (onBreak) StatIcons.UNLOCK else StatIcons.LOCK, LOCKDOWN_BLUE, 24.dpToPx())
         lockdownWidgetText.text = when {
+            onBreak -> LockdownGate.clockText(Lockdown.breakUntil(prefs, Lockdown.Device.PHONE) - System.currentTimeMillis())
             !on -> "+" + LockdownGate.duration(context, prefs.lockdownWidgetMinutes * 60_000L)
             else -> Lockdown.activeUntil(context, prefs)?.let { LockdownGate.duration(context, it - System.currentTimeMillis()) }
                 ?: getString(R.string.on)
         }
-        lockdownWidget.alpha = if (on) 1f else 0.45f
-        lockdownWidget.contentDescription = getString(R.string.lockdown) + ", " + lockdownWidgetText.text
+        lockdownWidget.alpha = if (on && !onBreak) 1f else if (onBreak) 0.8f else 0.45f
+        lockdownWidget.contentDescription = getString(R.string.lockdown) + ", " +
+            (if (onBreak) getString(R.string.lockdown_on_break) + " " else "") + lockdownWidgetText.text
+        // A break counts down by the second
+        handler.removeCallbacks(lockdownTick)
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) handler.postDelayed(lockdownTick, if (onBreak) 1_000 else 30_000)
     }
 
-    /** A tap: the set amount more of timed lockdown, straight away */
+    /** A tap: during a break, the break ends at once; otherwise the set amount more of timed lockdown, straight away */
+    private fun onLockdownWidgetTap() {
+        val context = requireContext()
+        if (Lockdown.isOn(context, prefs) && Lockdown.onBreak(prefs, Lockdown.Device.PHONE)) {
+            buzz(context)
+            lockdownGate.endBreak()
+            return populateLockdownWidget()
+        }
+        addLockdownTime()
+    }
+
+    /** The set amount more of timed lockdown, on the devices Start uses */
     private fun addLockdownTime() {
         val context = requireContext()
-        Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs)
+        Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs, Lockdown.startDevices(context, prefs))
         buzz(context)
         Lockdown.timedEnd(context, prefs)?.let { context.showToast(getString(R.string.lockdown_locked_until, LockdownGate.time(context, it))) }
         app.olauncher.helper.LockdownSystem.sync(context)
@@ -500,8 +522,8 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private val lockdownTick = object : Runnable {
         override fun run() {
             if (_binding == null) return
+            // It schedules the next tick itself
             populateLockdownWidget()
-            handler.postDelayed(this, 30_000)
         }
     }
 

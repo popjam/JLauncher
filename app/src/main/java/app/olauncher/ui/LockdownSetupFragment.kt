@@ -148,7 +148,7 @@ class LockdownSetupFragment : LockdownBaseFragment() {
 
     private fun unlockStep() {
         val card = stepCard(R.string.lockdown_unlock)
-        card.add(row(card, getString(R.string.lockdown_unlock_with), unlockName(Lockdown.unlock(prefs)), R.string.info_lockdown_unlock_with) { pickUnlock() })
+        card.add(row(card, getString(R.string.lockdown_unlock_with), challengeName(Lockdown.challenge(prefs)), R.string.info_lockdown_unlock_with) { pickChallenge(getString(R.string.lockdown_unlock_with), Lockdown.challenge(prefs), app.olauncher.helper.Challenge.Type.values().toList()) { setEndChallenge(it) } })
     }
 
     // --- 4. Permissions ---
@@ -207,7 +207,7 @@ class LockdownSetupFragment : LockdownBaseFragment() {
         card.add(
             row(card, getString(R.string.lockdown_apps), getString(if (allow) R.string.lockdown_only_allow else R.string.lockdown_block_these) + " · " + chosen, null) { go(0) },
             row(card, getString(R.string.lockdown_when), times.joinToString(", ").ifEmpty { getString(R.string.lockdown_manual_only) }, null) { go(1) },
-            row(card, getString(R.string.lockdown_unlock_with), unlockName(Lockdown.unlock(prefs)), null) { go(2) },
+            row(card, getString(R.string.lockdown_unlock_with), challengeName(Lockdown.challenge(prefs)), null) { go(2) },
             row(card, getString(R.string.lockdown_permissions), if (off == 0) getString(R.string.lockdown_all_on) else getString(R.string.lockdown_n_off, off), null) { go(3) },
         )
     }

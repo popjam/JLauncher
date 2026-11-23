@@ -106,6 +106,36 @@ object StatIcons {
         ".XXXXXXXXX.",
         "...........",
     )
+
+    /** The lock open, its shackle lifted off on the right: lockdown on a break */
+    val UNLOCK = icon(
+        "...XXXXX...",
+        "..XX...XX..",
+        "..X.....X..",
+        "..X........",
+        ".XXXXXXXXX.",
+        ".XXXXXXXXX.",
+        ".XXXX.XXXX.",
+        ".XXXX.XXXX.",
+        ".XXXXXXXXX.",
+        ".XXXXXXXXX.",
+        "...........",
+    )
+
+    /** The devices, small, for lockdown's switches */
+    val PHONE_SMALL = icon(
+        "...XXXXX...",
+        "...X...X...",
+        "...X...X...",
+        "...X...X...",
+        "...X...X...",
+        "...X...X...",
+        "...X...X...",
+        "...X...X...",
+        "...XXXXX...",
+        "...XX.XX...",
+        "...XXXXX...",
+    )
     val GEAR = icon(
         ".....X.....",
         "..X.XXX.X..",

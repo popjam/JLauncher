@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.view.Gravity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
+import app.olauncher.helper.BlockItems
 
 class Prefs(context: Context) {
     companion object {
@@ -94,6 +95,7 @@ class Prefs(context: Context) {
     private val LOCKDOWN_ALLOWED_APPS = "LOCKDOWN_ALLOWED_APPS"
     private val LOCKDOWN_ESSENTIALS = "LOCKDOWN_ESSENTIALS"
     private val LOCKDOWN_SITES = "LOCKDOWN_SITES"
+    private val LOCKDOWN_ITEMS = "LOCKDOWN_ITEMS"
     private val LOCKDOWN_PLACES = "LOCKDOWN_PLACES"
     private val LOCKDOWN_GRAYSCALE = "LOCKDOWN_GRAYSCALE"
     private val LOCKDOWN_GRAYSCALE_APPLIED = "LOCKDOWN_GRAYSCALE_APPLIED"
@@ -404,8 +406,52 @@ class Prefs(context: Context) {
 
     /** Apps that can't be opened while lockdown is on. Copies, since the set SharedPreferences returns mustn't be changed. */
     var lockdownBlockedApps: Set<String>
-        get() = prefs.getStringSet(LOCKDOWN_BLOCKED_APPS, emptySet())!!.toSet()
-        set(value) = prefs.edit { putStringSet(LOCKDOWN_BLOCKED_APPS, value.toSet()) }
+        get() = BlockItems.phoneApps(lockdownItems)
+        set(value) {
+            val now = System.currentTimeMillis()
+            var items = lockdownItems
+            val old = BlockItems.phoneApps(items)
+            (value - old).forEach { pkg ->
+                // An item already known by this package keeps its name
+                val known = items.values.firstOrNull { it.kind == BlockItems.Kind.APP && it.pkg == pkg }
+                items = BlockItems.set(items, BlockItems.Kind.APP, known?.name ?: appName(pkg), phone = true, mac = null, now = now, pkg = pkg)
+            }
+            (old - value).forEach { pkg ->
+                items.values.filter { it.kind == BlockItems.Kind.APP && it.pkg == pkg }.forEach {
+                    items = BlockItems.set(items, it.kind, it.name, phone = false, mac = null, now = now)
+                }
+            }
+            lockdownItems = items
+        }
+
+    private val appContext = context.applicationContext
+
+    /** An app's name on the phone, for its item in the shared list */
+    fun appName(pkg: String): String = runCatching {
+        val pm = appContext.packageManager
+        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+    }.getOrDefault(pkg)
+
+    /**
+     * Apps and sites lockdown blocks on each device ([BlockItems]). The first time, it's made from the
+     * lists kept before: blocked apps on the phone, sites on both.
+     */
+    var lockdownItems: Map<String, BlockItems.Item>
+        get() {
+            if (!prefs.contains(LOCKDOWN_ITEMS)) {
+                var items = emptyMap<String, BlockItems.Item>()
+                prefs.getStringSet(LOCKDOWN_BLOCKED_APPS, emptySet())!!.forEach { pkg ->
+                    items = BlockItems.set(items, BlockItems.Kind.APP, appName(pkg), phone = true, mac = null, now = 1, pkg = pkg)
+                }
+                prefs.getStringSet(LOCKDOWN_SITES, emptySet())!!.forEach { site ->
+                    items = BlockItems.set(items, BlockItems.Kind.SITE, site, phone = true, mac = true, now = 1)
+                }
+                prefs.edit { putString(LOCKDOWN_ITEMS, BlockItems.encode(items)) }
+                return items
+            }
+            return BlockItems.decode(prefs.getString(LOCKDOWN_ITEMS, null))
+        }
+        set(value) = prefs.edit { putString(LOCKDOWN_ITEMS, BlockItems.encode(value)) }
 
     /** When lockdown turns on by itself, as written by [app.olauncher.helper.Lockdown.formatSchedules] */
     var lockdownSchedules: String
@@ -418,7 +464,7 @@ class Prefs(context: Context) {
      */
     var lockdownUnlock: Int
         get() = prefs.getInt(LOCKDOWN_UNLOCK, -1).takeIf { it >= 0 }
-            ?: (if (isLockdownPasswordSet) app.olauncher.helper.Lockdown.Unlock.PASSWORD else app.olauncher.helper.Lockdown.Unlock.NOTHING).ordinal
+            ?: (if (isLockdownPasswordSet) 1 else 0)
         set(value) = prefs.edit { putInt(LOCKDOWN_UNLOCK, value) }
 
     var lockdownWaitMinutes: Int
@@ -465,8 +511,93 @@ class Prefs(context: Context) {
 
     /** Websites blocked during lockdown, as hosts ("reddit.com") */
     var lockdownSites: Set<String>
-        get() = prefs.getStringSet(LOCKDOWN_SITES, emptySet())!!.toSet()
-        set(value) = prefs.edit { putStringSet(LOCKDOWN_SITES, value.toSet()) }
+        get() = BlockItems.phoneSites(lockdownItems)
+        set(value) {
+            val now = System.currentTimeMillis()
+            var items = lockdownItems
+            val old = BlockItems.phoneSites(items)
+            (value - old).forEach { items = BlockItems.set(items, BlockItems.Kind.SITE, it, phone = true, mac = null, now = now) }
+            (old - value).forEach { items = BlockItems.set(items, BlockItems.Kind.SITE, it, phone = false, mac = null, now = now) }
+            lockdownItems = items
+        }
+
+    // --- The Mac, breaks, screen time triggers, ending early ---
+
+    private fun str(key: String) = prefs.getString(key, "").orEmpty()
+    private fun putStr(key: String, value: String) = prefs.edit { putString(key, value) }
+
+    /** The Mac's own lockdown, kept here: on until turned off, and a timed end (wall clock) */
+    var lockdownMacModeOn: Boolean
+        get() = prefs.getBoolean("LOCKDOWN_MAC_MODE_ON", false)
+        set(value) = prefs.edit { putBoolean("LOCKDOWN_MAC_MODE_ON", value) }
+
+    var lockdownMacUntil: Long
+        get() = prefs.getLong("LOCKDOWN_MAC_UNTIL", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_MAC_UNTIL", value) }
+
+    /** Both devices take whichever lockdown is greater, and block the same things */
+    var lockdownMatchDevices: Boolean
+        get() = prefs.getBoolean("LOCKDOWN_MATCH_DEVICES", false)
+        set(value) = prefs.edit { putBoolean("LOCKDOWN_MATCH_DEVICES", value) }
+
+    /** Which devices Start, Add time and the home lock act on, as [app.olauncher.helper.Lockdown.Device] bits */
+    var lockdownStartDevices: Int
+        get() = prefs.getInt("LOCKDOWN_START_DEVICES", 3)
+        set(value) = prefs.edit { putInt("LOCKDOWN_START_DEVICES", value) }
+
+    /** Screen time that turns lockdown on, as written by [app.olauncher.helper.Lockdown.formatTriggers] */
+    var lockdownTriggers: String
+        get() = str("LOCKDOWN_TRIGGERS")
+        set(value) = putStr("LOCKDOWN_TRIGGERS", value)
+
+    /** The lockdowns screen time has started, as written by [app.olauncher.helper.Lockdown.formatWindows] */
+    var lockdownTriggerBlocks: String
+        get() = str("LOCKDOWN_TRIGGER_BLOCKS")
+        set(value) = putStr("LOCKDOWN_TRIGGER_BLOCKS", value)
+
+    /** Which triggers have gone off on which day, so each goes off once a day */
+    var lockdownTriggerFired: String
+        get() = str("LOCKDOWN_TRIGGER_FIRED")
+        set(value) = putStr("LOCKDOWN_TRIGGER_FIRED", value)
+
+    /** Breaks' settings ([app.olauncher.helper.Breaks.Config]) */
+    var lockdownBreaks: String
+        get() = str("LOCKDOWN_BREAKS")
+        set(value) = putStr("LOCKDOWN_BREAKS", value)
+
+    /** The breaks taken lately, on both devices */
+    var lockdownBreakLog: String
+        get() = str("LOCKDOWN_BREAK_LOG")
+        set(value) = putStr("LOCKDOWN_BREAK_LOG", value)
+
+    /** When the phone's break ends (wall clock), and the Mac's */
+    var lockdownBreakUntil: Long
+        get() = prefs.getLong("LOCKDOWN_BREAK_UNTIL", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_BREAK_UNTIL", value) }
+
+    var lockdownMacBreakUntil: Long
+        get() = prefs.getLong("LOCKDOWN_MAC_BREAK_UNTIL", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_MAC_BREAK_UNTIL", value) }
+
+    /** What ending lockdown early (and loosening it) needs, as [app.olauncher.helper.Challenge.encode]; made from the older choice the first time */
+    var lockdownChallenge: String
+        get() = prefs.getString("LOCKDOWN_CHALLENGE", null) ?: when (prefs.getInt(LOCKDOWN_UNLOCK, -1)) {
+            1 -> "PASSWORD:0"
+            2 -> "WAIT:$lockdownWaitMinutes"
+            0 -> "NONE:0"
+            else -> if (isLockdownPasswordSet) "PASSWORD:0" else "NONE:0"
+        }
+        set(value) = putStr("LOCKDOWN_CHALLENGE", value)
+
+    /** The phrase typed out to end lockdown early or take a break */
+    var lockdownPhrase: String
+        get() = prefs.getString("LOCKDOWN_PHRASE", null) ?: "I am choosing to give up on what I decided for myself"
+        set(value) = putStr("LOCKDOWN_PHRASE", value)
+
+    /** Time spent in lockdown, by day ([app.olauncher.helper.LockdownLog]) */
+    var lockdownLog: String
+        get() = str("LOCKDOWN_LOG")
+        set(value) = putStr("LOCKDOWN_LOG", value)
 
     /** Places (Social's ids) where lockdown is on */
     var lockdownPlaces: Set<Int>

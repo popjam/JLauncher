@@ -193,11 +193,16 @@ abstract class CardPageFragment : Fragment() {
             cornerRadius = 20.dpToPx().toFloat()
             setColor(panelColor)
         }
-        titleView.textSize = 12.5f
-        titleView.isAllCaps = true
-        titleView.letterSpacing = 0.12f
+        // A large heading, and room between one section and the next
+        titleView.textSize = 21f
+        titleView.isAllCaps = false
+        titleView.letterSpacing = 0.01f
         titleView.setTypeface(Typeface.DEFAULT_BOLD)
         titleView.setTextColor(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt())
+        (root.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+            it.topMargin = 24.dpToPx()
+            root.layoutParams = it
+        }
     }
 
     /** The thin line between two settings */
