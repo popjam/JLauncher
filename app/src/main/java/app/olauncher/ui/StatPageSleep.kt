@@ -7,6 +7,7 @@ import app.olauncher.R
 import app.olauncher.data.MoodStore
 import app.olauncher.helper.Music
 import app.olauncher.helper.Sleep
+import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.ui.CardPageFragment.Card
 import app.olauncher.ui.StatPageFragment.Companion.PHONE
 import app.olauncher.ui.StatPageFragment.Companion.SLEEP_DAYS
@@ -34,12 +35,15 @@ internal fun StatPageFragment.nightText(date: LocalDate, night: Sleep.Night) = l
 
 /** Last night: how long, from when to when, and the usual of the last [SLEEP_DAYS] nights under it. */
 internal fun StatPageFragment.sleepCard(nights: Map<LocalDate, Sleep.Night>) {
-    val card = Card(getString(R.string.sleep_last_night))
     val latest = nights.maxByOrNull { it.key }
     if (latest == null) {
-        card.showNote(getString(R.string.sleep_none))
+        // Sleep comes from when the screen was on: without usage access, a way to turn it on; otherwise no card yet
+        if (!requireContext().appUsagePermissionGranted()) Card(getString(R.string.sleep_last_night)).needs(getString(R.string.needs_usage_access)) {
+            runCatching { startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+        }
         return
     }
+    val card = Card(getString(R.string.sleep_last_night))
     val (date, night) = latest
     card.subtitle(dateText(date))
     card.headline(duration(night.asleepMs), listOfNotNull(
@@ -76,14 +80,14 @@ internal fun StatPageFragment.sleepCard(nights: Map<LocalDate, Sleep.Night>) {
  * with the usual bedtime and wake-up behind them.
  */
 internal fun StatPageFragment.sleepTimesCard(nights: Map<LocalDate, Sleep.Night>) {
-    val today = LocalDate.now()
-    val days = (SLEEP_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
-    val shown = days.mapNotNull { date -> nights[date]?.let { date to it } }
-    if (shown.size < 2) return
+    if (nights.size < 2) return
     val card = Card(getString(R.string.sleep_times))
-    card.subtitle(getString(R.string.last_days, SLEEP_DAYS))
     card.keyItem(faint(160), getString(R.string.sleep_usual_times))
     card.describe = { key -> nightText(key as LocalDate, nights.getValue(key)) }
+    fun draw() {
+    val days = stepDates(card, SLEEP_DAYS, nights.keys.minOrNull(), ::draw)
+    val shown = days.mapNotNull { date -> nights[date]?.let { date to it } }
+    if (shown.isEmpty()) return card.showNote(getString(R.string.no_data))
     val beds = shown.map { (d, n) -> offset(n.bedtime, d) }
     val wakes = shown.map { (d, n) -> offset(n.wake, d) }
     // Whole hours either side of the earliest bedtime and latest wake-up
@@ -122,6 +126,8 @@ internal fun StatPageFragment.sleepTimesCard(nights: Map<LocalDate, Sleep.Night>
         }
         s.height = bottom + s.dp(24f)
     }
+    }
+    draw()
 }
 
 /**
@@ -131,23 +137,8 @@ internal fun StatPageFragment.sleepTimesCard(nights: Map<LocalDate, Sleep.Night>
 internal fun StatPageFragment.sleepMoodCard(nights: Map<LocalDate, Sleep.Night>) {
     val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
     val energy = stats.firstOrNull { it.id != MoodStore.MOOD && it.name.contains("energy", ignoreCase = true) }
-    if (nights.count { (date, _) -> valueOf(mood, date) != null } < SLEEP_MIN_NIGHTS) return
-    val card = Card(getString(R.string.sleep_and_day))
-    card.keyItem(mood.color, mood.name)
-    energy?.let { card.keyItem(it.color, it.name) }
-    val bedBuckets = listOf(R.string.sleep_before_11, R.string.sleep_11_12, R.string.sleep_12_1, R.string.sleep_after_1)
-    val hourBuckets = listOf(R.string.sleep_under_6, R.string.sleep_6_7, R.string.sleep_7_8, R.string.sleep_8_plus)
-    var byHours = false
-    fun bucket(date: LocalDate, night: Sleep.Night): Int = if (byHours) {
-        val hours = night.asleepMs / 3_600_000.0
-        when {
-            hours < 6 -> 0
-            hours < 7 -> 1
-            hours < 8 -> 2
-            else -> 3
-        }
-    } else {
-        val bed = offset(night.bedtime, date)
+    val byBedtime = MoodGroups(listOf(R.string.sleep_before_11, R.string.sleep_11_12, R.string.sleep_12_1, R.string.sleep_after_1).map { getString(it) }) { date ->
+        val bed = offset((nights[date] ?: return@MoodGroups null).bedtime, date)
         when {
             bed < -60 -> 0
             bed < 0 -> 1
@@ -155,50 +146,17 @@ internal fun StatPageFragment.sleepMoodCard(nights: Map<LocalDate, Sleep.Night>)
             else -> 3
         }
     }
-    fun draw() {
-        card.segment(listOf(R.string.sleep_by_bedtime, R.string.sleep_by_hours), if (byHours) 1 else 0) {
-            byHours = it == 1
-            draw()
-        }
-        val names = (if (byHours) hourBuckets else bedBuckets).map { getString(it) }
-        val measured = listOfNotNull(mood, energy)
-        // Per bucket, per stat: the average and how many days
-        val averages = (0 until 4).map { b ->
-            measured.map { s ->
-                nights.filter { (date, night) -> bucket(date, night) == b }.keys.mapNotNull { valueOf(s, it) }
-                    .let { values -> values.takeIf { it.isNotEmpty() }?.average()?.toFloat() to values.size }
-            }
-        }
-        card.describe = { key ->
-            val b = key as Int
-            (listOf(names[b]) + measured.mapIndexed { i, s ->
-                val (average, count) = averages[b][i]
-                getString(R.string.stat_total, s.name, average?.let(::decimal) ?: "–") + " · " + resources.getQuantityString(R.plurals.day_count, count, count)
-            }).joinToString("\n")
-        }
-        card.draw { s ->
-            val top = s.dp(6f)
-            val bottom = top + s.dp(120f)
-            val column = s.width / 4
-            fun y(value: Float) = bottom - (value - 1f) / 4f * (bottom - top) - s.dp(2f)
-            listOf(1, 3, 5).forEach { g -> s.line(0f, y(g.toFloat()), s.width, y(g.toFloat()), faint(28), s.dp(1f)) }
-            val bar = minOf(column / (measured.size + 1), s.dp(22f))
-            (0 until 4).forEach { b ->
-                val center = b * column + column / 2
-                val start = center - bar * measured.size / 2
-                measured.forEachIndexed { i, st ->
-                    val (average, _) = averages[b][i]
-                    val x = start + i * bar
-                    if (average == null) s.rect(x + s.dp(2f), bottom - s.dp(2f), x + bar - s.dp(2f), bottom, faint(45), s.dp(1f))
-                    else s.rect(x + s.dp(2f), y(average), x + bar - s.dp(2f), bottom, st.color, s.dp(5f))
-                }
-                s.text(names[b], center, bottom + s.dp(18f), faint(160), s.sp(12f))
-                s.target(b, RectF(b * column, 0f, (b + 1) * column, bottom + s.dp(26f)))
-            }
-            s.height = bottom + s.dp(26f)
+    val byHours = MoodGroups(listOf(R.string.sleep_under_6, R.string.sleep_6_7, R.string.sleep_7_8, R.string.sleep_8_plus).map { getString(it) }) { date ->
+        val hours = (nights[date] ?: return@MoodGroups null).asleepMs / 3_600_000.0
+        when {
+            hours < 6 -> 0
+            hours < 7 -> 1
+            hours < 8 -> 2
+            else -> 3
         }
     }
-    draw()
+    moodByCard(getString(R.string.sleep_and_day), nights.keys, listOf(byBedtime, byHours), listOf(R.string.sleep_by_bedtime, R.string.sleep_by_hours),
+        measured = listOfNotNull(mood, energy))
 }
 
 // --- Sleep: the phone late at night and first thing ---

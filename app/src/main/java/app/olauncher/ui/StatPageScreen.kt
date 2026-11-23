@@ -12,7 +12,7 @@ import app.olauncher.helper.PhoneHabits
 import app.olauncher.helper.ScreenSpans
 import app.olauncher.helper.Steps
 import app.olauncher.ui.CardPageFragment.Card
-import app.olauncher.ui.StatPageFragment.Companion.APPS_SHOWN
+import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.ui.StatPageFragment.Companion.HABIT_DAYS
 import app.olauncher.ui.StatPageFragment.Companion.HOUR_MS
 import app.olauncher.ui.StatPageFragment.Companion.NOT_APPS
@@ -34,14 +34,17 @@ import kotlin.math.roundToInt
 // --- Screen time's pickups and doomscrolling, and Steps ---
 
 /**
- * A bar a day for the last [HABIT_DAYS] days, today on the right, in [color], with a dashed-looking
- * [goal] line if given. [label] is a bar's figure in words, for tapping.
+ * A bar a day, [HABIT_DAYS] at a time with today's on the right and ‹ › in the header stepping back
+ * through earlier days, in [color] (the stat's own by default), with a [goal] line if given. [label]
+ * is a bar's figure in words, for tapping.
  */
-internal fun StatPageFragment.dayBars(card: Card, values: Map<LocalDate, Float>, color: Int, goal: Float? = null, label: (LocalDate, Float) -> String) {
+internal fun StatPageFragment.dayBars(card: Card, values: Map<LocalDate, Float>, color: Int = stat.themeColor, goal: Float? = null, label: (LocalDate, Float) -> String) {
     val today = LocalDate.now()
-    val days = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
-    val max = maxOf(values.filterKeys { it in days }.values.maxOrNull() ?: 0f, goal ?: 0f, 1f)
+    val first = values.filterValues { it > 0f }.keys.minOrNull()
     card.describe = { key -> (key as LocalDate).let { d -> listOf(dateText(d), values[d]?.let { label(d, it) } ?: "–").joinToString(" · ") } }
+    fun draw() {
+    val days = stepDates(card, HABIT_DAYS, first, ::draw)
+    val max = maxOf(values.filterKeys { it in days }.values.maxOrNull() ?: 0f, goal ?: 0f, 1f)
     card.draw { s ->
         val top = s.dp(6f)
         val bottom = top + s.dp(110f)
@@ -62,17 +65,26 @@ internal fun StatPageFragment.dayBars(card: Card, values: Map<LocalDate, Float>,
         }
         s.height = bottom + s.dp(24f)
     }
+    }
+    draw()
 }
 
-/** Unlocks each day, today's against the usual. */
+/** Unlocks each day, today's vs the usual. Without usage access, a way to turn it on. */
 internal fun StatPageFragment.pickupsCard(days: Map<LocalDate, PhoneHabits.Day>) {
+    val context = requireContext()
+    if (!context.appUsagePermissionGranted()) {
+        return Card(getString(R.string.phone_pickups), icon = StatIcons.PHONE, iconColor = faint(200))
+            .needs(getString(R.string.needs_usage_access)) {
+                runCatching { startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+            }
+    }
     if (days.isEmpty()) return
     val card = Card(getString(R.string.phone_pickups), icon = StatIcons.PHONE, iconColor = faint(200))
     val today = LocalDate.now()
     val usual = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }.values.map { it.pickups }.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
     card.headline((days[today]?.pickups ?: 0).toString(),
         listOfNotNull(getString(R.string.pickups_today), usual?.let { getString(R.string.usually_n, it) }).joinToString(" · "))
-    dayBars(card, days.mapValues { it.value.pickups.toFloat() }, stat.color) { _, value ->
+    dayBars(card, days.mapValues { it.value.pickups.toFloat() }) { _, value ->
         resources.getQuantityString(R.plurals.pickup_count, value.toInt(), value.toInt())
     }
 }
@@ -80,26 +92,22 @@ internal fun StatPageFragment.pickupsCard(days: Map<LocalDate, PhoneHabits.Day>)
 /** Today's steps against the usual, a bar a day with the 10,000 line, and the last [HABIT_DAYS] days' figures. */
 internal fun StatPageFragment.stepsCard() {
     val context = requireContext()
-    val card = Card(getString(R.string.steps_title), icon = StatIcons.STEPS, iconColor = stat.themeColor)
     if (!Steps.hasPermission(context)) {
-        card.showNote(getString(R.string.steps_need_permission))
-        card.chipRow(listOf(getString(R.string.steps_allow) to ink), null) {
+        return Card(getString(R.string.steps_title), icon = StatIcons.STEPS, iconColor = stat.themeColor).needs(getString(R.string.steps_need_permission)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) askActivity.launch(Manifest.permission.ACTIVITY_RECOGNITION)
         }
-        return
     }
     val days = Steps.days(context)
+    // No steps yet: no card
+    if (days.isEmpty()) return
+    val card = Card(getString(R.string.steps_title), icon = StatIcons.STEPS, iconColor = stat.themeColor)
     val today = LocalDate.now()
     val past = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }.values
     val format = java.text.NumberFormat.getIntegerInstance(Locale.getDefault())
     card.headline(format.format(days[today] ?: 0), listOfNotNull(getString(R.string.steps_so_far),
         past.takeIf { it.isNotEmpty() }?.average()?.roundToInt()?.let { getString(R.string.usually_text, format.format(it)) }).joinToString(" · "))
-    if (days.isEmpty()) {
-        card.showNote(getString(R.string.steps_none))
-        return
-    }
     card.keyItem(faint(110), getString(R.string.steps_goal, format.format(Steps.goal(requireContext()))))
-    dayBars(card, days.mapValues { it.value.toFloat() }, stat.themeColor, Steps.goal(requireContext()).toFloat()) { _, value ->
+    dayBars(card, days.mapValues { it.value.toFloat() }, goal = Steps.goal(requireContext()).toFloat()) { _, value ->
         getString(R.string.steps_count, format.format(value.toInt()))
     }
     if (past.size >= 2) {
@@ -151,8 +159,9 @@ internal fun StatPageFragment.screenDailyCard() {
     val today = LocalDate.now()
     val byDay = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
         .associateWith { screenSpans(it, phone, others) }.filterValues { it.isNotEmpty() }
+    // Nothing yet: no card
+    if (byDay.isEmpty()) return
     val card = Card(getString(R.string.screen_when_on))
-    if (byDay.isEmpty()) return card.showNote(getString(R.string.screen_when_on_none))
     card.subtitle(getString(R.string.last_days, HABIT_DAYS))
     val one = ColorUtils.setAlphaComponent(stat.color, 150)
     val two = stat.color
@@ -254,19 +263,24 @@ internal fun StatPageFragment.devicePieCard() {
     }
 }
 
-/** The most used apps on every device together, today or over the last week, each with its device's icon. */
+/**
+ * The most used apps on every device together, today or over the last week or month, each with its
+ * device's icon. Not a year or all: the phone only keeps its apps for two months.
+ */
 internal fun StatPageFragment.appsCard() {
     val context = requireContext()
-    val card = Card(getString(R.string.apps))
     val phone = PhoneApps.days(context)
     val others = DeviceTime.Device.values().associateWith { DeviceTime.days(context, it) }
+    // No app time yet: no card
+    if (phone.values.all { it.isEmpty() } && others.values.all { days -> days.values.all { it.apps.isEmpty() } }) return
+    val card = Card(getString(R.string.apps))
     fun draw() {
-        card.segment(listOf(R.string.today, R.string.last_7_days), appsSpan) {
+        card.segment(listOf(R.string.today, R.string.period_week, R.string.period_month), appsSpan) {
             appsSpan = it
             draw()
         }
         val today = LocalDate.now()
-        val days = (0 until if (appsSpan == 0) 1 else 7).map { today.minusDays(it.toLong()) }
+        val days = (0 until listOf(1, 7, 30)[appsSpan.coerceIn(0, 2)]).map { today.minusDays(it.toLong()) }
         val sourceOf = sources.associateBy { it.key }
         val rows = mutableListOf<Triple<Source, String, Long>>()
         days.flatMap { d -> phone[d].orEmpty().entries }.groupBy({ it.key }, { it.value }).forEach { (app, times) ->
@@ -278,15 +292,18 @@ internal fun StatPageFragment.appsCard() {
             }
         }
         // Launchers and system screens aren't apps anyone chose to use
-        val top = rows.filter { it.second !in NOT_APPS }.sortedByDescending { it.third }.take(APPS_SHOWN)
-        if (top.isEmpty()) return card.showNote(getString(R.string.apps_none))
-        card.describe = { key ->
-            val (source, app, ms) = top[key as Int]
-            listOf(app, getString(R.string.stat_label, getString(R.string.device), source.name),
-                getString(R.string.stat_label, getString(R.string.time), duration(ms))).joinToString("\n")
-        }
-        horizontalBars(card, top.map { (source, app, ms) -> Triple(app, (ms / 60_000L).toInt(), source.color) }, top.map { it.first.icon }) {
-            duration(it * 60_000L)
+        val all = rows.filter { it.second !in NOT_APPS }.sortedByDescending { it.third }
+        if (all.isEmpty()) return card.showNote(getString(R.string.apps_none))
+        card.topList(all.size) { n ->
+            val top = all.take(n)
+            card.describe = { key ->
+                val (source, app, ms) = top[key as Int]
+                listOf(app, getString(R.string.stat_label, getString(R.string.device), source.name),
+                    getString(R.string.stat_label, getString(R.string.time), duration(ms))).joinToString("\n")
+            }
+            horizontalBars(card, top.map { (source, app, ms) -> Triple(app, (ms / 60_000L).toInt(), source.color) }, top.map { it.first.icon }) {
+                duration(it * 60_000L)
+            }
         }
     }
     draw()
@@ -301,8 +318,10 @@ internal fun StatPageFragment.appsCard() {
 internal fun StatPageFragment.pornCard() {
     val days = DeviceTime.days(requireContext(), DeviceTime.Device.MAC)
     val minutes = days.mapValues { (_, day) -> day.apps.entries.filter { it.key.contains("VLC", ignoreCase = true) }.sumOf { it.value } }
+    // Until the Drive folder the Mac writes to is chosen, a way to choose it; then, until the Mac's time comes in, no card
+    if (DeviceTime.folder(requireContext()).isEmpty()) return Card(getString(R.string.porn_usage)).needs(getString(R.string.needs_drive_folder)) { chooseDeviceFolder() }
+    if (days.isEmpty()) return
     val card = Card(getString(R.string.porn_usage))
-    if (days.isEmpty()) return card.showNote(getString(R.string.porn_needs_mac))
     val today = LocalDate.now()
     val watched = { date: LocalDate -> (minutes[date] ?: 0) >= PORN_MIN_MINUTES }
     val tracked = { date: LocalDate -> date >= (days.keys.minOrNull() ?: today) }
@@ -371,12 +390,14 @@ internal fun StatPageFragment.pornCard() {
     }
 }
 
-/** On Screen time, until a device's file has been found: where to look for it. */
+/** On Screen time, until the Drive folder the Mac and TV write to is chosen: a way to choose it. */
 internal fun StatPageFragment.macSetupCard() {
-    val card = Card(getString(R.string.mac_screen_time))
-    card.showNote(getString(R.string.mac_setup))
-    card.chipRow(listOf(getString(R.string.mac_choose_folder) to ink), null) {
-        androidx.lifecycle.ViewModelProvider(requireActivity())[app.olauncher.MainViewModel::class.java].isPickingFile = true
-        pickDeviceFolder.launch(null)
-    }
+    if (DeviceTime.folder(requireContext()).isNotEmpty()) return
+    Card(getString(R.string.mac_screen_time)).needs(getString(R.string.needs_drive_folder)) { chooseDeviceFolder() }
+}
+
+/** Asks for the Drive folder the Mac, the TV and vibecoding write their files to */
+internal fun StatPageFragment.chooseDeviceFolder() {
+    androidx.lifecycle.ViewModelProvider(requireActivity())[app.olauncher.MainViewModel::class.java].isPickingFile = true
+    pickDeviceFolder.launch(null)
 }

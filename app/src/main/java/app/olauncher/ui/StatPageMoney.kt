@@ -26,7 +26,7 @@ import app.olauncher.ui.StatPageFragment.Companion.CUP_DAYS
 import app.olauncher.ui.StatPageFragment.Companion.LIMIT_OVER_COLOR
 import app.olauncher.ui.StatPageFragment.Companion.LIMIT_WEEKS
 import app.olauncher.ui.StatPageFragment.Companion.RECENT_DAYS
-import app.olauncher.ui.StatPageFragment.Companion.SPENDING_SHOWN
+import app.olauncher.ui.StatPageFragment.Companion.SPENDING_MORE
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -102,15 +102,13 @@ internal fun StatPageFragment.cupsCard() {
  */
 internal fun StatPageFragment.spendingCard() {
     val context = requireContext()
-    val card = Card(getString(R.string.today))
     val on = Spending.isEnabled(context)
     spendingShownOn = on
-    if (!on) {
-        card.showNote(getString(R.string.spending_off))
-        card.chipRow(listOf(getString(R.string.spending_turn_on) to ink), null) { Spending.openSettings(context) }
-        return
-    }
+    if (!on) return Card(getString(R.string.today)).needs(getString(R.string.needs_notification_access)) { Spending.openSettings(context) }
     val purchases = Spending.purchases(context)
+    // No purchases yet: no card
+    if (purchases.isEmpty()) return
+    val card = Card(getString(R.string.today))
     val today = LocalDate.now()
     val todays = purchases.filter { it.date == today }
     val spent = todays.filter { !it.essential }
@@ -119,15 +117,18 @@ internal fun StatPageFragment.spendingCard() {
         resources.getQuantityString(R.plurals.spending_today, spent.size, spent.size),
         essentials.takeIf { it > 0 }?.let { getString(R.string.plus_essentials, money(it)) },
     ).joinToString(" · "))
-    if (purchases.isEmpty()) {
-        card.showNote(getString(R.string.spending_none))
-        return
-    }
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    purchaseList.attach(list, pageScroll())
     val subscriptions = Subscriptions.all(context)
     fun isSubscription(p: Spending.Purchase) = subscriptions.any { it.merchant == p.merchant && abs(it.cents - p.cents) <= maxOf(50L, it.cents / 4) }
-    purchases.take(SPENDING_SHOWN).forEach { purchase ->
+    // The latest few, and more of them with "Show more"
+    fun fill() {
+    list.removeAllViews()
+    purchaseList.attach(list, pageScroll())
+    card.showMore(purchases.size > purchasesShown) {
+        purchasesShown += SPENDING_MORE
+        fill()
+    }
+    purchases.take(purchasesShown).forEach { purchase ->
         val `when` = if (purchase.date == today) Formats.time(context, purchase.time) else dateText(purchase.date)
         list.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -162,6 +163,8 @@ internal fun StatPageFragment.spendingCard() {
             })
         })
     }
+    }
+    fill()
     card.addBody(list)
 }
 
@@ -310,11 +313,9 @@ internal fun StatPageFragment.subscriptionsCard() {
     val context = requireContext()
     if (!Spending.isEnabled(context) || Spending.purchases(context).isEmpty()) return
     val subscriptions = Subscriptions.all(context)
+    // None found yet: no card
+    if (subscriptions.isEmpty()) return
     val card = Card(getString(R.string.subscriptions))
-    if (subscriptions.isEmpty()) {
-        card.showNote(getString(R.string.subscriptions_none))
-        return
-    }
     card.headline(money(subscriptions.sumOf { it.monthlyCents }),
         resources.getQuantityString(R.plurals.subscriptions_a_month, subscriptions.size, subscriptions.size))
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -451,17 +452,20 @@ internal fun StatPageFragment.moneyCategoriesCard(essential: Boolean) {
     if (purchases.isEmpty()) return
     val card = Card(getString(if (essential) R.string.essentials else R.string.where_it_went))
     card.subtitle(getString(R.string.last_days, RECENT_DAYS))
-    val groups = purchases.groupBy { it.category ?: getString(R.string.other) }.mapValues { (_, list) -> list.sumOf { it.cents } }
-        .entries.sortedByDescending { it.value }.take(6)
+    val all = purchases.groupBy { it.category ?: getString(R.string.other) }.mapValues { (_, list) -> list.sumOf { it.cents } }
+        .entries.sortedByDescending { it.value }
     if (essential) card.headline(money(purchases.sumOf { it.cents }), getString(R.string.essentials_note))
     val color = if (essential) faint(150) else moneyGold
-    card.describe = { key ->
-        val (name, cents) = groups[key as Int]
-        val count = purchases.count { (it.category ?: getString(R.string.other)) == name }
-        listOf(name, getString(R.string.stat_label, getString(R.string.spent), money(cents)),
-            getString(R.string.stat_label, getString(R.string.purchases), count.toString())).joinToString("\n")
+    card.topList(all.size) { n ->
+        val groups = all.take(n)
+        card.describe = { key ->
+            val (name, cents) = groups[key as Int]
+            val count = purchases.count { (it.category ?: getString(R.string.other)) == name }
+            listOf(name, getString(R.string.stat_label, getString(R.string.spent), money(cents)),
+                getString(R.string.stat_label, getString(R.string.purchases), count.toString())).joinToString("\n")
+        }
+        horizontalBars(card, groups.map { (name, cents) -> Triple(name, (cents / 100).toInt().coerceAtLeast(1), color) }) { "$$it" }
     }
-    horizontalBars(card, groups.map { (name, cents) -> Triple(name, (cents / 100).toInt().coerceAtLeast(1), color) }) { "$$it" }
 }
 
 /** The shops spent at most over the last 30 days, leaving out essentials */
@@ -471,12 +475,15 @@ internal fun StatPageFragment.moneyShopsCard() {
     if (purchases.size < 2) return
     val card = Card(getString(R.string.top_shops))
     card.subtitle(getString(R.string.last_days, RECENT_DAYS))
-    val shops = purchases.groupBy { it.merchant }.entries.sortedByDescending { (_, list) -> list.sumOf { it.cents } }.take(5)
-    card.describe = { key ->
-        val (shop, list) = shops[key as Int]
-        listOf(shop, getString(R.string.stat_label, getString(R.string.spent), money(list.sumOf { it.cents })),
-            getString(R.string.stat_label, getString(R.string.purchases), list.size.toString()),
-            getString(R.string.stat_label, getString(R.string.last_time), dateText(list.maxOf { it.date }))).joinToString("\n")
+    val all = purchases.groupBy { it.merchant }.entries.sortedByDescending { (_, list) -> list.sumOf { it.cents } }
+    card.topList(all.size) { n ->
+        val shops = all.take(n)
+        card.describe = { key ->
+            val (shop, list) = shops[key as Int]
+            listOf(shop, getString(R.string.stat_label, getString(R.string.spent), money(list.sumOf { it.cents })),
+                getString(R.string.stat_label, getString(R.string.purchases), list.size.toString()),
+                getString(R.string.stat_label, getString(R.string.last_time), dateText(list.maxOf { it.date }))).joinToString("\n")
+        }
+        horizontalBars(card, shops.map { (shop, list) -> Triple(shop, (list.sumOf { it.cents } / 100).toInt().coerceAtLeast(1), moneyGold) }) { "$$it" }
     }
-    horizontalBars(card, shops.map { (shop, list) -> Triple(shop, (list.sumOf { it.cents } / 100).toInt().coerceAtLeast(1), moneyGold) }) { "$$it" }
 }

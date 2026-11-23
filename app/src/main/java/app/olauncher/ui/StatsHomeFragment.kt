@@ -232,10 +232,7 @@ class StatsHomeFragment : CardPageFragment() {
                 arrangement.TRENDS -> trendCard()
                 arrangement.REMEMBER -> rememberCard()
                 // Insights and Compare need every stat side by side, worked out off the main thread
-                arrangement.INSIGHTS -> insights = Card(getString(R.string.insights)).apply {
-                    subtitle(getString(R.string.insights_note))
-                    showNote(getString(R.string.insights_working))
-                }
+                arrangement.INSIGHTS -> insights = Card(getString(R.string.insights)).apply { showNote(getString(R.string.insights_working)) }
                 arrangement.THIS_WEEK -> thisWeekCard()
                 arrangement.COMPARE -> compare = Card(getString(R.string.compare_two)).apply { showNote(getString(R.string.insights_working)) }
             }
@@ -450,18 +447,13 @@ class StatsHomeFragment : CardPageFragment() {
 
     /**
      * Each picked stat's average by week, month or year, chosen at the top; weeks and months a year at a
-     * time, stepped under the chart when there's more than one.
+     * time, stepped in the header when there's more than one.
      */
     private fun trendCard() {
         val context = requireContext()
         val card = Card(getString(R.string.graph_trends))
         val chart = StatChartView(context)
         card.addBody(chart)
-        val years = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        card.addBody(years)
         fun draw(clear: Boolean) {
             val mode = trendMode
             val weekly = mode == TREND_WEEKS
@@ -479,29 +471,12 @@ class StatsHomeFragment : CardPageFragment() {
             val firstDate = dates().firstOrNull() ?: today
             val firstYear = minOf(if (weekly) firstDate.get(WEEKS.weekBasedYear()) else firstDate.year, thisYear)
             val year = (if (weekly) weeklyYear else monthlyYear).coerceIn(firstYear, thisYear)
-            // ‹ 2026 › under the chart, for weeks and months, once there's more than one year
-            years.removeAllViews()
-            years.isVisible = mode != TREND_YEARS && firstYear < thisYear
-            if (years.isVisible) {
-                fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
-                    text = symbol
-                    textSize = Style.TEXT_TITLE
-                    setTextColor(card.titleView.currentTextColor)
-                    alpha = if (enabled) 0.8f else 0.2f
-                    isEnabled = enabled
-                    contentDescription = getString(description, 365)
-                    setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 0)
-                    setOnClickListener {
-                        if (weekly) weeklyYear = year + by else monthlyYear = year + by
-                        draw(true)
-                    }
+            // ‹ 2026 › in the header after the choices, for weeks and months, once there's more than one year
+            if (mode != TREND_YEARS && firstYear < thisYear) {
+                card.stepper(year.toString(), year > firstYear, year < thisYear, 365, after = true) { by ->
+                    if (weekly) weeklyYear = year + by else monthlyYear = year + by
+                    draw(true)
                 }
-                years.addView(arrow("‹", year > firstYear, -1, R.string.previous_days))
-                years.addView(card.textView(Style.TEXT_SMALL, 150).apply {
-                    text = year.toString()
-                    updatePadding(top = 6.dpToPx())
-                })
-                years.addView(arrow("›", year < thisYear, 1, R.string.next_days))
             }
             val all = shown.associate { stat ->
                 stat.id to scores[stat.id].orEmpty().entries.mapNotNull { (date, score) -> pointOf(date, year)?.let { it to score } }

@@ -20,11 +20,9 @@ import app.olauncher.ui.CardPageFragment.Card
 import app.olauncher.ui.StatPageFragment.Companion.HABIT_DAYS
 import app.olauncher.ui.StatPageFragment.Companion.KNOWN_PLAYERS
 import app.olauncher.ui.StatPageFragment.Companion.MIN_TAKEN_DAYS
-import app.olauncher.ui.StatPageFragment.Companion.MUSIC_ARTISTS
 import app.olauncher.ui.StatPageFragment.Companion.MUSIC_BLOCK_MINUTES
 import app.olauncher.ui.StatPageFragment.Companion.MUSIC_DAYS
 import app.olauncher.ui.StatPageFragment.Companion.MUSIC_NEW_AFTER
-import app.olauncher.ui.StatPageFragment.Companion.MUSIC_TRACKS
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -41,10 +39,11 @@ import kotlin.math.roundToInt
 internal fun StatPageFragment.musicDaysCard() {
     val days = Music.days(requireContext())
     if (days.isEmpty()) return
-    val today = LocalDate.now()
-    val shown = (HABIT_DAYS - 1 downTo 0).map { today.minusDays(it.toLong()) }
     val card = Card(getString(R.string.music_each_day))
     val shades = StatKind.MUSIC.shades!!
+    card.keyItem(ColorUtils.blendARGB(shades.first, shades.second, 0.5f), getString(R.string.music_block, MUSIC_BLOCK_MINUTES))
+    fun draw() {
+    val shown = stepDates(card, HABIT_DAYS, days.keys.minOrNull(), ::draw)
     val blocks = shown.map { date -> ((days[date]?.ms ?: 0L) / 60_000L / MUSIC_BLOCK_MINUTES).toInt() }
     val most = maxOf(blocks.maxOrNull() ?: 0, 6)
     card.describe = { key ->
@@ -74,7 +73,8 @@ internal fun StatPageFragment.musicDaysCard() {
         }
         s.height = bottom + s.dp(24f)
     }
-    card.keyItem(ColorUtils.blendARGB(shades.first, shades.second, 0.5f), getString(R.string.music_block, MUSIC_BLOCK_MINUTES))
+    }
+    draw()
 }
 
 /** The last [MUSIC_DAYS] days of listening, days without any included as none */
@@ -87,28 +87,21 @@ internal fun StatPageFragment.recentMusic(): Map<LocalDate, Music.Day> {
 internal fun StatPageFragment.musicShade(place: Float): Int = StatKind.MUSIC.shades!!.let { ColorUtils.blendARGB(it.second, it.first, place.coerceIn(0f, 1f)) }
 
 /**
- * Today's listening, then this week's, the usual day and the days in a row with music. False when
- * there's nothing to show (no access, or nothing played yet), leaving the other music cards out.
+ * Today's listening, then this week's, the usual day and the days in a row with music. Without
+ * notification access, a way to turn it on; with nothing played yet, no card.
  */
-internal fun StatPageFragment.musicCard(): Boolean {
+internal fun StatPageFragment.musicCard() {
     val context = requireContext()
-    val card = Card(getString(R.string.music_listening))
-    if (!Spending.isEnabled(context)) {
-        spendingShownOn = false
-        card.showNote(getString(R.string.music_off))
-        card.chipRow(listOf(getString(R.string.spending_turn_on) to ink), null) { Spending.openSettings(context) }
-        return false
-    }
-    spendingShownOn = true
+    val on = Spending.isEnabled(context)
+    spendingShownOn = on
+    if (!on) return Card(getString(R.string.music_listening)).needs(getString(R.string.needs_notification_access)) { Spending.openSettings(context) }
     val days = Music.days(context)
+    if (days.isEmpty()) return
+    val card = Card(getString(R.string.music_listening))
     val today = LocalDate.now()
     val todays = days[today]
     card.headline(duration(todays?.ms ?: 0), todays?.artists?.maxByOrNull { it.value }?.key
         ?.let { getString(R.string.music_today_top, it) } ?: getString(R.string.music_today))
-    if (days.isEmpty()) {
-        card.showNote(getString(R.string.music_none))
-        return false
-    }
     val first = days.keys.min()
     val monday = app.olauncher.helper.Week.start(today)
     val week = days.filterKeys { it >= monday }.values.sumOf { it.ms }
@@ -126,7 +119,6 @@ internal fun StatPageFragment.musicCard(): Boolean {
         duration(usual) to getString(R.string.a_usual_day),
         streak.toString() to getString(R.string.music_streak),
     ))
-    return true
 }
 
 /** The hours of the day listened in over the last [MUSIC_DAYS] days, round a clock, and when most of it is */
@@ -146,7 +138,7 @@ internal fun StatPageFragment.musicHoursCard() {
         val h = key as Int
         listOf(getString(R.string.music_hour, hourText(h), hourText((h + 1) % 24)),
             getString(R.string.stat_label, getString(R.string.time), duration(hours[h])),
-            getString(R.string.stat_label, getString(R.string.share), "${(hours[h] * 100 / total)}%")).joinToString("\n")
+            getString(R.string.stat_label, getString(R.string.share), Formats.percent(hours[h] * 100f / total))).joinToString("\n")
     }
     card.draw { s ->
         val size = minOf(s.width, s.dp(240f))
@@ -189,22 +181,24 @@ internal fun StatPageFragment.musicArtistsCard() {
         .mapValues { (_, times) -> times.sum() }.entries.sortedByDescending { it.value }
     if (totals.isEmpty()) return
     val all = totals.sumOf { it.value }
-    val top = totals.take(MUSIC_ARTISTS)
     val card = Card(getString(R.string.music_top_artists))
     card.subtitle(getString(R.string.last_days, MUSIC_DAYS))
     val mood = stats.firstOrNull { it.id == MoodStore.MOOD }
-    card.describe = { key ->
-        val (artist, ms) = top[key as Int]
-        val playedOn = recent.filterValues { it.artists.containsKey(artist) }.keys
-        val moodOn = mood?.let { m -> playedOn.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
-        listOfNotNull(artist, getString(R.string.stat_label, getString(R.string.time), duration(ms)),
-            getString(R.string.stat_label, getString(R.string.share), "${ms * 100 / all}%"),
-            getString(R.string.stat_label, getString(R.string.days), playedOn.size.toString()),
-            moodOn?.let { getString(R.string.stat_label, getString(R.string.mood), decimal(it)) }).joinToString("\n")
+    card.topList(totals.size) { n ->
+        val top = totals.take(n)
+        card.describe = { key ->
+            val (artist, ms) = top[key as Int]
+            val playedOn = recent.filterValues { it.artists.containsKey(artist) }.keys
+            val moodOn = mood?.let { m -> playedOn.mapNotNull { valueOf(m, it) }.takeIf { it.size >= 2 }?.average()?.toFloat() }
+            listOfNotNull(artist, getString(R.string.stat_label, getString(R.string.time), duration(ms)),
+                getString(R.string.stat_label, getString(R.string.share), Formats.percent(ms * 100f / all)),
+                getString(R.string.stat_label, getString(R.string.days), playedOn.size.toString()),
+                moodOn?.let { getString(R.string.stat_label, getString(R.string.mood), decimal(it)) }).joinToString("\n")
+        }
+        horizontalBars(card, top.mapIndexed { i, (artist, ms) ->
+            Triple(artist, (ms / 60_000).toInt().coerceAtLeast(1), musicShade(i / maxOf(n, TOP_SHOWN).toFloat()))
+        }) { duration(it * 60_000L) }
     }
-    horizontalBars(card, top.mapIndexed { i, (artist, ms) ->
-        Triple(artist, (ms / 60_000).toInt().coerceAtLeast(1), musicShade(i / MUSIC_ARTISTS.toFloat()))
-    }) { duration(it * 60_000L) }
 }
 
 /** The tracks played most over the last [MUSIC_DAYS] days, by plays */
@@ -212,15 +206,17 @@ internal fun StatPageFragment.musicTracksCard() {
     val recent = recentMusic().values
     val plays = recent.flatMap { it.plays.entries }.groupBy({ it.key }, { it.value }).mapValues { (_, n) -> n.sum() }
     val times = recent.flatMap { it.tracks.entries }.groupBy({ it.key }, { it.value }).mapValues { (_, t) -> t.sum() }
-    val top = plays.entries.filter { it.value >= 2 }.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenByDescending { times[it.key] ?: 0 })
-        .take(MUSIC_TRACKS)
-    if (top.isEmpty()) return
+    val all = plays.entries.filter { it.value >= 2 }.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenByDescending { times[it.key] ?: 0 })
+    if (all.isEmpty()) return
     val context = requireContext()
     val card = Card(getString(R.string.music_on_repeat))
     card.subtitle(getString(R.string.last_days, MUSIC_DAYS))
     card.scene.isVisible = false
     val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    top.forEachIndexed { i, (key, count) ->
+    card.root.addView(list, card.root.indexOfChild(card.scene))
+    card.topList(all.size) { n ->
+    list.removeAllViews()
+    all.take(n).forEachIndexed { i, (key, count) ->
         val (title, artist) = Music.splitTrack(key)
         list.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -229,7 +225,7 @@ internal fun StatPageFragment.musicTracksCard() {
             addView(card.textView(Style.TEXT_TITLE, 255).apply {
                 text = (i + 1).toString()
                 setTypeface(null, Typeface.BOLD)
-                setTextColor(musicShade(i / MUSIC_TRACKS.toFloat()))
+                setTextColor(musicShade(i / maxOf(n, TOP_SHOWN).toFloat()))
             }, LinearLayout.LayoutParams(34.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -250,7 +246,7 @@ internal fun StatPageFragment.musicTracksCard() {
             })
         })
     }
-    card.root.addView(list, card.root.indexOfChild(card.scene))
+    }
 }
 
 /** Artists first heard in the last [MUSIC_DAYS] days, once there's been a while of listening before them */
@@ -264,51 +260,38 @@ internal fun StatPageFragment.musicNewCard() {
     val recent = recentMusic()
     val found = firstHeard.filterValues { it > since }.keys
         .associateWith { artist -> recent.values.sumOf { it.artists[artist] ?: 0L } }
-        .entries.sortedByDescending { it.value }.take(5)
+        .entries.sortedByDescending { it.value }
     if (found.isEmpty()) return
     val card = Card(getString(R.string.music_new))
     card.subtitle(resources.getQuantityString(R.plurals.music_new_count, found.size, found.size))
-    card.describe = { key ->
-        val (artist, ms) = found[key as Int]
-        listOf(artist, getString(R.string.stat_label, getString(R.string.music_first_heard), dateText(firstHeard.getValue(artist))),
-            getString(R.string.stat_label, getString(R.string.time), duration(ms))).joinToString("\n")
+    card.topList(found.size) { n ->
+        val top = found.take(n)
+        card.describe = { key ->
+            val (artist, ms) = top[key as Int]
+            listOf(artist, getString(R.string.stat_label, getString(R.string.music_first_heard), dateText(firstHeard.getValue(artist))),
+                getString(R.string.stat_label, getString(R.string.time), duration(ms))).joinToString("\n")
+        }
+        horizontalBars(card, top.map { (artist, ms) -> Triple(artist, (ms / 60_000).toInt().coerceAtLeast(1), musicShade(0.25f)) }) { duration(it * 60_000L) }
     }
-    horizontalBars(card, found.map { (artist, ms) -> Triple(artist, (ms / 60_000).toInt().coerceAtLeast(1), musicShade(0.25f)) }) { duration(it * 60_000L) }
 }
 
 /** Mood on days with no music, some and a lot, so it's clear whether listening goes with a better day */
 internal fun StatPageFragment.musicMoodCard() {
-    val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
     val days = Music.days(requireContext())
     if (days.isEmpty()) return
     val first = days.keys.min()
     val today = LocalDate.now()
-    val groups = Array(3) { mutableListOf<Float>() }
-    var date = first
-    while (date <= today) {
-        val m = valueOf(mood, date)
-        if (m != null) {
-            val ms = days[date]?.ms ?: 0L
-            groups[when {
-                ms < 60_000 -> 0
-                ms < 3_600_000 -> 1
-                else -> 2
-            }].add(m)
+    // Every day since music was first heard, days without any counting as none
+    val dates = generateSequence(first) { it.plusDays(1) }.takeWhile { it <= today }.toList()
+    moodByCard(getString(R.string.music_and_mood), dates, listOf(MoodGroups(
+        listOf(R.string.music_none_day, R.string.music_some, R.string.music_lots).map { getString(it) }) { date ->
+        val ms = days[date]?.ms ?: 0L
+        when {
+            ms < 60_000 -> 0
+            ms < 3_600_000 -> 1
+            else -> 2
         }
-        date = date.plusDays(1)
-    }
-    if (groups.count { it.size >= MIN_TAKEN_DAYS } < 2) return
-    val card = Card(getString(R.string.music_and_mood))
-    val averages = groups.map { g -> g.takeIf { it.size >= MIN_TAKEN_DAYS }?.average()?.toFloat() }
-    val none = averages[0]
-    val most = averages[2] ?: averages[1]
-    if (none != null && most != null && abs(most - none) >= 0.1f)
-        card.headline((if (most > none) "+" else "−") + decimal(abs(most - none)),
-            getString(if (most > none) R.string.music_mood_better else R.string.music_mood_worse, getString(if (averages[2] != null) R.string.music_lots else R.string.music_some)))
-    val labels = listOf(R.string.music_none_day, R.string.music_some, R.string.music_lots)
-    tiles(card, getString(R.string.music_mood_caption), averages.indices.mapNotNull { i ->
-        averages[i]?.let { decimal(it) to getString(labels[i]) }
-    })
+    }), minDays = MIN_TAKEN_DAYS)
 }
 
 /** Which apps the listening came from over the last [MUSIC_DAYS] days */
@@ -326,7 +309,7 @@ internal fun StatPageFragment.musicAppsCard() {
     val card = Card(getString(R.string.music_apps))
     card.subtitle(getString(R.string.last_days, MUSIC_DAYS))
     val colors = apps.indices.map { musicShade(it / maxOf(apps.size - 1, 1).toFloat() * 0.8f) }
-    apps.forEachIndexed { i, (_, ms) -> card.keyItem(colors[i], "${names[i]} · ${(ms * 100 / total).roundToInt()}%") }
+    apps.forEachIndexed { i, (_, ms) -> card.keyItem(colors[i], "${names[i]} · ${Formats.percent(ms * 100 / total)}") }
     card.describe = { key ->
         val i = key as Int
         listOf(names[i], getString(R.string.stat_label, getString(R.string.time), duration(apps[i].value))).joinToString("\n")

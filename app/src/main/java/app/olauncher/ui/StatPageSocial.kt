@@ -73,11 +73,7 @@ internal fun StatPageFragment.socialHomesCard(days: Map<LocalDate, Social.Day>) 
     val context = requireContext()
     val card = Card(getString(R.string.social_homes))
     socialShownState = socialState()
-    if (!Social.hasLocation(context)) {
-        card.showNote(getString(R.string.social_need_location))
-        card.chipRow(listOf(getString(R.string.social_allow_location) to ink), null) { askLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
-        return
-    }
+    if (!Social.hasLocation(context)) return card.needs(getString(R.string.social_need_location)) { askLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
     card.scene.isVisible = false
     val homes = Social.homes(context)
     val today = LocalDate.now()
@@ -187,7 +183,7 @@ internal fun StatPageFragment.socialHomesCard(days: Map<LocalDate, Social.Day>) 
         })
     }
     if (!Social.hasBackgroundLocation(context)) {
-        card.chipRow(listOf(getString(R.string.social_allow_always) to ink), null) {
+        card.chipRow(listOf(getString(R.string.tracking_fix) to ink), null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) askLocation.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         }
         card.note.isVisible = true
@@ -212,9 +208,9 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
     val colors = places.map { placeColor(it) }
     val unknown = places.lastIndex
     fun draw() {
-        val spanDays = listOf(7L, 30L, 365L)[placesPeriod]
         val now = System.currentTimeMillis()
-        val wanted = now - spanDays * 24 * 3_600_000L
+        // All: from the first change on
+        val wanted = SPAN_DAYS.getOrNull(placesPeriod)?.let { now - it * 24 * 3_600_000L } ?: first
         val start = maxOf(wanted, first)
         val totals = LongArray(places.size)
         days.values.forEach { day ->
@@ -227,7 +223,7 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
         val known = totals.sum() - totals[unknown]
         totals[unknown] = maxOf(0L, now - start - known)
         val all = totals.sum().toFloat()
-        card.segment(listOf(R.string.period_week, R.string.period_month, R.string.period_year), placesPeriod) {
+        card.segment(SPAN_NAMES, placesPeriod) {
             placesPeriod = it
             draw()
         }
@@ -280,12 +276,16 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
  */
 internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) {
     val context = requireContext()
-    if (!Social.hasLocation(context)) return
-    val card = Card(getString(R.string.places_title))
-    if (!Places.enabled(context)) return card.showNote(getString(R.string.places_off))
+    if (!Social.hasLocation(context)) return Card(getString(R.string.places_title)).needs(getString(R.string.social_need_location)) {
+        askLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+    // Finding places turned off in Settings: no card
+    if (!Places.enabled(context)) return
     val suggestions = Places.suggestions(context)
     val named = Places.places(context)
-    if (suggestions.isEmpty() && named.isEmpty()) return card.showNote(getString(R.string.places_none_yet))
+    // None found yet: no card
+    if (suggestions.isEmpty() && named.isEmpty()) return
+    val card = Card(getString(R.string.places_title))
     // Suggestions and named places are separate lists, so selecting several only takes in one kind
     val suggestionRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     val namedRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -625,59 +625,24 @@ internal fun StatPageFragment.socialStayInCard(days: Map<LocalDate, Social.Day>)
 
 /** Mood by how long you were out that day. */
 internal fun StatPageFragment.socialMoodCard(days: Map<LocalDate, Social.Day>) {
-    val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
-    val today = LocalDate.now()
-    val past = days.filterKeys { it < today }
-    if (past.count { (date, _) -> valueOf(mood, date) != null } < SLEEP_MIN_NIGHTS) return
-    val card = Card(getString(R.string.social_and_mood))
-    card.keyItem(mood.color, mood.name)
-    val names = listOf(R.string.social_under_1, R.string.social_1_3, R.string.social_3_6, R.string.social_6_plus).map { getString(it) }
-    fun bucket(day: Social.Day): Int {
-        val hours = day.outMs / 3_600_000.0
-        return when {
+    moodByCard(getString(R.string.social_and_mood), days.keys, listOf(MoodGroups(
+        listOf(R.string.social_under_1, R.string.social_1_3, R.string.social_3_6, R.string.social_6_plus).map { getString(it) }) { date ->
+        val hours = (days[date] ?: return@MoodGroups null).outMs / 3_600_000.0
+        when {
             hours < 1 -> 0
             hours < 3 -> 1
             hours < 6 -> 2
             else -> 3
         }
-    }
-    val averages = (0 until 4).map { b ->
-        past.filter { bucket(it.value) == b }.keys.mapNotNull { valueOf(mood, it) }
-            .let { values -> values.takeIf { it.isNotEmpty() }?.average()?.toFloat() to values.size }
-    }
-    card.describe = { key ->
-        val (average, count) = averages[key as Int]
-        listOf(names[key], getString(R.string.stat_total, mood.name, average?.let(::decimal) ?: "–"),
-            resources.getQuantityString(R.plurals.day_count, count, count)).joinToString(" · ")
-    }
-    card.draw { s ->
-        val top = s.dp(6f)
-        val bottom = top + s.dp(120f)
-        val column = s.width / 4
-        fun y(value: Float) = bottom - (value - 1f) / 4f * (bottom - top) - s.dp(2f)
-        listOf(1, 3, 5).forEach { g -> s.line(0f, y(g.toFloat()), s.width, y(g.toFloat()), faint(28), s.dp(1f)) }
-        val bar = minOf(column * 0.5f, s.dp(30f))
-        averages.forEachIndexed { b, (average, _) ->
-            val center = b * column + column / 2
-            if (average == null) s.rect(center - bar / 2, bottom - s.dp(2f), center + bar / 2, bottom, faint(45), s.dp(1f))
-            else s.rect(center - bar / 2, y(average), center + bar / 2, bottom, mood.faceColor(requireContext(), faceFor(mood, average)), s.dp(6f))
-            s.text(names[b], center, bottom + s.dp(18f), faint(160), s.sp(12f))
-            s.target(b, RectF(b * column, 0f, (b + 1) * column, bottom + s.dp(26f)))
-        }
-        s.height = bottom + s.dp(26f)
-    }
+    }))
 }
 
-/**
- * The average by week (the last 13), month (the last 12) or year, from the stat's first: real values
- * (Money's as each period's total) where it has them. The point still going is a ring.
- */
 /** Work's trend: days worked each week, as bars, with the hours there on tapping one */
 internal fun StatPageFragment.workTrendCard() {
+    val first = firstDate ?: return
     val card = Card(getString(R.string.stat_trend))
     val today = LocalDate.now()
     val monday = app.olauncher.helper.Week.start(today)
-    val first = firstDate ?: return card.showNote(getString(R.string.no_data))
     val count = minOf(WORK_TREND_WEEKS.toLong(), ChronoUnit.WEEKS.between(app.olauncher.helper.Week.start(first), monday) + 1).toInt()
     val weeks = (count - 1 downTo 0).map { monday.minusWeeks(it.toLong()) }
     val social = Social.days(requireContext())

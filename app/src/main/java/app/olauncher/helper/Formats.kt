@@ -62,4 +62,7 @@ object Formats {
 
     /** [minutes] as a duration: "1h 30m" */
     fun minutes(minutes: Int) = duration(minutes * 60_000L)
+
+    /** A share in whole percent: "<1%" for one above nothing but under 1%, else rounded, "25%" */
+    fun percent(share: Float): String = if (share > 0f && share < 1f) "<1%" else "${Math.round(share)}%"
 }

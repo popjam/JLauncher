@@ -501,9 +501,12 @@ abstract class CardPageFragment : Fragment() {
             }
         }
 
-        /** ‹ [text] ›, stepping with [onStep] (-1 back, 1 on) where [canGoBack] and [canGoForward]. */
-        fun stepper(text: String, canGoBack: Boolean, canGoForward: Boolean, days: Int, onStep: (Int) -> Unit) {
-            headerEnd.removeAllViews()
+        /**
+         * ‹ [text] ›, stepping with [onStep] (-1 back, 1 on) where [canGoBack] and [canGoForward]. With
+         * [after] it goes after what's already on the right (a [segment]) instead of replacing it.
+         */
+        fun stepper(text: String, canGoBack: Boolean, canGoForward: Boolean, days: Int, after: Boolean = false, onStep: (Int) -> Unit) {
+            if (!after) headerEnd.removeAllViews()
             fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
                 this.text = symbol
                 textSize = Style.TEXT_TITLE
@@ -573,8 +576,33 @@ abstract class CardPageFragment : Fragment() {
             scene.isVisible = false
             chips.isVisible = false
             details.isVisible = false
+            moreButton?.isVisible = false
             note.isVisible = true
             note.text = text
+        }
+
+        private var moreButton: TextView? = null
+
+        /**
+         * A "Show more" button under a list cut off at a few, while [visible]; tapping it does [onTap],
+         * which shows the next batch and calls this again. As the Journal does.
+         */
+        fun showMore(visible: Boolean, onTap: () -> Unit) {
+            val button = moreButton ?: pillButton(context, ink, getString(R.string.journal_more), null) {}.also {
+                moreButton = it
+                root.addView(it, root.indexOfChild(note) + 1, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    topMargin = 12.dpToPx()
+                })
+            }
+            button.isVisible = visible
+            button.setOnClickListener { onTap() }
+        }
+
+        /** A short note on what's missing (a permission, say) with a Fix button doing [fix], in place of the drawing */
+        fun needs(text: String, fix: () -> Unit) {
+            showNote(text)
+            chipRow(listOf(getString(R.string.tracking_fix) to ink), null) { fix() }
         }
 
         /** A view of its own under the title, in place of the drawing */
@@ -582,6 +610,22 @@ abstract class CardPageFragment : Fragment() {
             scene.isVisible = false
             root.addView(view, root.indexOfChild(scene), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
+    }
+
+    /**
+     * A list cut off at [batch] of its [count] rows, drawn by [draw] with how many to show, and a
+     * "Show more" under it that shows the next [batch]. Top lists start at [TOP_SHOWN].
+     */
+    internal fun Card.topList(count: Int, batch: Int = TOP_SHOWN, draw: (Int) -> Unit) {
+        var shown = batch
+        fun show() {
+            draw(minOf(shown, count))
+            showMore(count > shown) {
+                shown += batch
+                show()
+            }
+        }
+        show()
     }
 
     /** Three (or so) figures side by side under [caption] */
@@ -641,6 +685,9 @@ abstract class CardPageFragment : Fragment() {
         return indices
     }
 }
+
+/** How many rows a top list (top apps, artists, shops…) shows before "Show more" */
+internal const val TOP_SHOWN = 5
 
 /**
  * Which of a page's collapsible sections ([CardPageFragment.collapsibleSection]) and rows

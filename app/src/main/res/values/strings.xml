@@ -74,8 +74,8 @@
     <string name="edit">Edit</string>
     <string name="stat_daily">Daily</string>
     <string name="stat_taken">Taken</string>
-    <string name="stat_trend">Trend</string>
-    <string name="stat_over_time">Over time</string>
+    <string name="stat_trend">Trends</string>
+    <string name="stat_over_time">All time</string>
     <string name="stat_how_often">How often</string>
     <string name="stat_by_weekday">By weekday</string>
     <string name="stat_dose">Dose</string>
@@ -89,10 +89,7 @@
         <item>Terrible</item>
     </string-array>
     <string name="spending_listener">JLauncher stats (Money spent, Music)</string>
-    <string name="spending_off">Fill this in from CommBank\'s purchase notifications. Turn on notification access for JLauncher; nothing leaves your phone.</string>
-    <string name="spending_turn_on">Turn on</string>
     <string name="sleep_last_night">Last night</string>
-    <string name="sleep_none">Sleep fills in by itself from when your screen was on. It shows here after your first night.</string>
     <string name="sleep_span">%1$s–%2$s</string>
     <string name="sleep_asleep">%1$s asleep</string>
     <plurals name="sleep_checks">
@@ -105,7 +102,7 @@
     <string name="sleep_usual_wake">up</string>
     <string name="sleep_times">Bed and wake times</string>
     <string name="sleep_usual_times">usual bedtime and wake-up</string>
-    <string name="sleep_and_day">Sleep and the next day</string>
+    <string name="sleep_and_day">Mood vs sleep</string>
     <string name="sleep_by_bedtime">Bedtime</string>
     <string name="sleep_by_hours">Hours</string>
     <string name="sleep_before_11">Before 11</string>
@@ -118,12 +115,10 @@
     <string name="sleep_8_plus">8h+</string>
     <string name="music_listening">Listening</string>
     <string name="social_homes">Homes</string>
-    <string name="mac_screen_time">MacBook and TV</string>
-    <string name="mac_setup">Your MacBook, TV and coding time are written to Google Drive. Choose the folder they\'re in (My Drive › JLauncher) to add them to Screen time.</string>
+    <string name="mac_screen_time">Mac and TV</string>
     <string name="device_phone">Phone</string>
-    <string name="device_mac">MacBook</string>
+    <string name="device_mac">Mac</string>
     <string name="device_tv">TV</string>
-    <string name="mac_choose_folder">Choose folder</string>
     <string name="mac_today">Today</string>
     <string name="mac_updated">updated %1$s</string>
     <plurals name="vibe_prompts">
@@ -140,13 +135,12 @@
     <string name="vibe_late">11 pm – 5 am</string>
     <string name="vibe_late_share">of your time is late at night</string>
     <string name="vibe_cost">Spend</string>
-    <string name="vibe_cost_note">estimated, at list prices</string>
     <string name="vibe_cost_caption">over the last %1$d days · %2$sM tokens</string>
     <string name="vibe_cost_day">%1$s · %2$sM tokens</string>
-    <string name="vibe_and_you">Vibecoding and you</string>
+    <string name="vibe_and_you">Mood vs vibecoding</string>
     <string name="vibe_none">None</string>
     <string name="vibe_3_plus">3h+</string>
-    <string name="vibe_late_sleep">After %1$d late nights (past 11 pm) you slept %2$s, against %3$s on other nights</string>
+    <string name="vibe_late_sleep">After %1$d late nights (past 11 pm) you slept %2$s, vs %3$s on other nights</string>
     <string name="pickups_today">unlocks today</string>
     <string name="usually_n">usually %1$d</string>
     <string name="usually_text">usually %1$s</string>
@@ -155,10 +149,8 @@
         <item quantity="other">%1$d pickups</item>
     </plurals>
     <string name="doom_mostly">mostly %1$s</string>
-    <string name="steps_need_permission">Steps fill in by themselves from your phone\'s step counter, at next to no battery. Android asks before sharing it. Nothing leaves your phone.</string>
-    <string name="steps_allow">Allow physical activity</string>
+    <string name="steps_need_permission">Needs physical activity access</string>
     <string name="steps_so_far">steps so far</string>
-    <string name="steps_none">Steps show up here as you walk</string>
     <string name="steps_goal">%1$s steps</string>
     <string name="steps_count">%1$s steps</string>
     <string name="steps_usual_title">Usually</string>
@@ -166,10 +158,8 @@
     <string name="steps_tile_best">best day</string>
     <string name="steps_tile_goal">days over 10k</string>
     <string name="social_home_n">Home %1$d</string>
-    <string name="social_need_location">Social fills in by itself from your home Wi-Fi: on it you\'re home, off it you\'re out. Android only shares the Wi-Fi\'s name with location access. Nothing leaves your phone.</string>
-    <string name="social_allow_location">Allow location</string>
-    <string name="social_need_always">To keep track while JLauncher isn\'t open, location needs to be allowed all the time.</string>
-    <string name="social_allow_always">Allow all the time</string>
+    <string name="social_need_location">Needs location access</string>
+    <string name="social_need_always">Needs location access all the time</string>
     <string name="social_not_set">Not set · tap Set while on its Wi-Fi</string>
     <string name="social_set">Set</string>
     <string name="social_remove">Remove</string>
@@ -196,17 +186,14 @@
     <string name="social_stayed_in">Stayed in</string>
     <string name="social_longest_in">longest stay in</string>
     <string name="social_longest_out">days out in a row</string>
-    <string name="social_and_mood">Time out and your mood</string>
+    <string name="social_and_mood">Mood vs time out</string>
     <string name="social_under_1">Under 1h</string>
     <string name="social_1_3">1–3h</string>
     <string name="social_3_6">3–6h</string>
     <string name="social_6_plus">6h+</string>
-    <string name="music_off">Music fills in by itself from what\'s playing. Turn on notification access for JLauncher; nothing leaves your phone.</string>
     <string name="music_today">listened today</string>
     <string name="music_today_top">listened today · mostly %1$s</string>
-    <string name="music_none">Artists you listen to show up here</string>
     <string name="music_mood">mood %1$s</string>
-    <string name="spending_none">Purchases show up here as their notifications come in</string>
     <plurals name="spending_today">
         <item quantity="one">spent today · %1$d purchase</item>
         <item quantity="other">spent today · %1$d purchases</item>
@@ -217,7 +204,7 @@
         <item quantity="one">%1$d cup</item>
         <item quantity="other">%1$d cups</item>
     </plurals>
-    <string name="stat_taken_vs_not">On days taken vs not</string>
+    <string name="stat_taken_vs_not">Taken vs skipped</string>
     <string name="last_days">last %1$d days</string>
     <string name="trend_weeks">Week</string>
     <string name="trend_months">Month</string>
@@ -229,14 +216,13 @@
     <string name="average_hours">average hours</string>
     <string name="hours">hours</string>
     <string name="seven_day_average">7-day average</string>
-    <string name="days_not_taken">days not taken</string>
+    <string name="days_not_taken">days skipped</string>
     <string name="days_taken">days taken</string>
-    <string name="none_taken">None</string>
+    <string name="none_taken">Skipped</string>
     <string name="taken">Taken</string>
     <string name="dose_number">Dose %1$d</string>
     <string name="hours_short">%1$dh</string>
-    <string name="needs_more_days">Needs a few more days</string>
-    <string name="needs_taken_and_not">Shows once there are 3 days taken and 3 not</string>
+    <string name="needs_more_days">Not enough days yet</string>
     <string name="filter_days">%1$s on %2$d of %3$d days</string>
     <string-array name="usage_faces">
         <item>Under 2h</item>
@@ -247,7 +233,7 @@
     </string-array>
     <string name="taken_of_days">taken %1$d of %2$d days</string>
     <string name="a_day">%1$s a day</string>
-    <string name="taken_vs_not_detail">%1$s: %2$s on %3$d days taken, %4$s on %5$d not</string>
+    <string name="taken_vs_not_detail">%1$s: %2$s on %3$d days taken, %4$s on %5$d skipped</string>
     <plurals name="day_count">
         <item quantity="one">%d day</item>
         <item quantity="other">%d days</item>
@@ -296,9 +282,9 @@
     <string name="quoted">“%1$s”</string>
     <string name="this_week">This week</string>
     <string name="last_week">Last week</string>
-    <string name="vs_last_week">against last week</string>
+    <string name="vs_last_week">vs last week</string>
     <string name="compare_two">Compare</string>
-    <string name="compare_against">against</string>
+    <string name="compare_against">vs</string>
     <string name="bubble_default">Default</string>
     <string name="bubble_all">All</string>
     <string name="bubble_none">None</string>
@@ -312,15 +298,13 @@
     <string name="average_spent">average spent</string>
     <string name="phone_pickups">Phone pickups</string>
     <string name="total">Total</string>
-    <string name="across_devices">on your phone, MacBook and TV</string>
+    <string name="across_devices">on your phone, Mac and TV</string>
     <string name="time">Time</string>
     <string name="share_of">Share</string>
     <string name="apps">Apps</string>
-    <string name="last_7_days">7 days</string>
     <string name="apps_none">No app time yet</string>
     <string name="device">Device</string>
     <string name="porn_usage">Porn usage</string>
-    <string name="porn_needs_mac">Shows once the MacBook’s screen time comes through</string>
     <string name="porn_time_this_week">watched this week</string>
     <string name="porn_watched">Watched</string>
     <string name="porn_not">Didn’t</string>
@@ -394,10 +378,7 @@
         <item quantity="other">%d artists new to you</item>
     </plurals>
     <string name="music_first_heard">First heard</string>
-    <string name="music_and_mood">Music and mood</string>
-    <string name="music_mood_better">higher mood on days with %1$s of music than with none</string>
-    <string name="music_mood_worse">lower mood on days with %1$s of music than with none</string>
-    <string name="music_mood_caption">Average mood</string>
+    <string name="music_and_mood">Mood vs music</string>
     <string name="music_none_day">no music</string>
     <string name="music_some">under 1h</string>
     <string name="music_lots">1h or more</string>
@@ -425,7 +406,7 @@
     <string name="work_leave">leave</string>
     <string name="compare_off">off</string>
     <string name="compare_worked">worked</string>
-    <string name="compare_not_taken">not taken</string>
+    <string name="compare_not_taken">skipped</string>
     <string name="compare_taken_short">taken</string>
     <string name="compare_none">none</string>
     <string name="compare_some">some</string>
@@ -446,8 +427,7 @@
     <string name="essential_reset_group">All %1$s: back to automatic</string>
     <string name="work_days_a_week">days worked each week</string>
     <string name="insights">Insights</string>
-    <string name="insights_note">from your own days</string>
-    <string name="insights_none">Links between your stats show here once there are enough days to tell</string>
+    <string name="insights_none">Not enough days yet</string>
     <string name="journal">Journal</string>
     <string name="journal_search">Search your notes</string>
     <string name="journal_empty">Notes you write each day show here</string>
@@ -470,7 +450,7 @@
     <string name="day_music">Music</string>
     <string name="day_mostly">mostly %1$s</string>
     <string name="day_vibecoding">Vibecoding</string>
-    <string name="day_mac_from">On the MacBook</string>
+    <string name="day_mac_from">On the Mac</string>
     <string name="day_more">And</string>
     <string name="yesterday">Yesterday</string>
     <plurals name="day_prompts">
@@ -483,6 +463,9 @@
     <string name="tracking_all_ok">all working</string>
     <string name="tracking_since">since %1$s</string>
     <string name="tracking_paused">Not filling in</string>
+    <string name="needs_usage_access">Needs usage access</string>
+    <string name="needs_notification_access">Needs notification access</string>
+    <string name="needs_drive_folder">Needs the Drive folder</string>
     <string name="tracking_fix">Fix</string>
     <string name="tracking_usage">Usage access</string>
     <string name="tracking_usage_ok">Screen time and sleep</string>
@@ -526,10 +509,10 @@
     <string name="report_changes">Dose changes:</string>
     <string name="report_stats">Other stats</string>
     <string name="report_scale">Averages out of 5, where 5 is best</string>
-    <string name="report_vs_before">against the period before</string>
+    <string name="report_vs_before">vs the period before</string>
     <string name="report_daily_life">Sleep and screen time</string>
     <string name="report_sleep">Asleep %1$s a night on average (%2$d nights)</string>
-    <string name="report_screen">Screen time %1$s a day on average, across phone, laptop and TV</string>
+    <string name="report_screen">Screen time %1$s a day on average, across phone, Mac and TV</string>
     <string name="report_low_days">Hardest days</string>
     <string name="report_high_days">Best days</string>
     <string name="report_footer">Made by JLauncher on %1$s from what was logged on the phone.</string>
@@ -693,8 +676,6 @@
     <string name="graph_years">Year</string>
     <string name="social_elsewhere">Elsewhere</string>
     <string name="places_title">Places you go</string>
-    <string name="places_off">Finding places is off in Settings &amp; tracking</string>
-    <string name="places_none_yet">Places you spend time at show up here after a few days</string>
     <string name="places_new">New place</string>
     <string name="places_new_near">New place near %1$s</string>
     <string name="places_name">Name</string>
@@ -746,24 +727,23 @@
     <string name="weather_sun_hours">%1$s sun</string>
     <string name="weather_rain_mm">%1$s mm rain</string>
     <string name="weather_daylight">%1$s daylight</string>
-    <string name="weather_and_mood">Weather and mood</string>
+    <string name="weather_and_mood">Mood vs weather</string>
     <string name="weather_group_sunny">Sunny</string>
     <string name="weather_group_mixed">Mixed</string>
     <string name="weather_group_grey">Grey</string>
     <string name="weather_group_rainy">Rainy</string>
-    <string name="weather_daylight_and_mood">Daylight and mood</string>
+    <string name="weather_daylight_and_mood">Mood vs daylight</string>
     <string name="weather_daylight_short">Under %1$s</string>
     <string name="weather_daylight_middle">Middle</string>
     <string name="weather_daylight_long">%1$s+</string>
-    <string name="people_waiting">Calls and messages show here as they come in</string>
     <string name="people_talking">%1$s talking</string>
-    <string name="people_need_calls">Calls aren’t counted until the call log is allowed</string>
-    <string name="people_need_notifications">Messages aren’t counted until notification access is on</string>
+    <string name="people_need_calls">Needs call log access</string>
+    <string name="people_need_notifications">Needs notification access for messages</string>
     <string name="people_count_calls">Count calls</string>
     <string name="people_tile_people">people a day</string>
     <string name="people_tile_messages">messages a day</string>
     <string name="people_tile_talking">on calls a day</string>
-        <string name="people_and_mood">Messages and mood</string>
+        <string name="people_and_mood">Mood vs messages</string>
     <string name="people_group_none">None</string>
         <string name="people_group_few">1–9</string>
     <string name="people_group_some">10–29</string>
@@ -1103,7 +1083,7 @@
     <string name="battery_at">%1$s · %2$d%%</string>
     <string name="battery_on_battery">On battery</string>
     <string name="battery_drain">Drain</string>
-    <string name="battery_drain_note">an hour, over the last week</string>
+    <string name="battery_drain_note">Per hour, last 7 days</string>
     <string name="battery_screen_on">screen on</string>
     <string name="battery_screen_off">screen off</string>
     <string name="battery_full_lasts">a full charge, in use</string>
@@ -1124,7 +1104,7 @@
     <string name="battery_own_summary_all">About %1$s of the battery in the last 24 hours, while the phone lost %2$d%%</string>
     <string name="battery_own_small">That\'s %1$s of the drain, so most of it is something else</string>
     <string name="battery_own_big">That\'s about %1$s of the drain: the top part below is the one to turn off</string>
-    <string name="battery_under_one">under 1%</string>
+    <string name="battery_under_one">&lt;1%</string>
     <string name="battery_own_note">Estimated from how long each part ran and what it asked the phone for</string>
     <string name="battery_part_places">Places</string>
     <string name="battery_part_wifi">Home and work (Wi-Fi)</string>
@@ -1154,7 +1134,6 @@
     </plurals>
     <string name="subscription">Subscription</string>
     <string name="subscriptions">Subscriptions</string>
-    <string name="subscriptions_none">None found yet. They show once a charge repeats, or hold a purchase to mark one.</string>
     <plurals name="subscriptions_a_month">
         <item quantity="one">a month, 1 subscription</item>
         <item quantity="other">a month, %1$d subscriptions</item>
@@ -1172,7 +1151,6 @@
 
     <!-- Screen time's timeline -->
     <string name="screen_when_on">When you were on screens</string>
-    <string name="screen_when_on_none">Shows when your screens were on through each day, once there’s a day of it.</string>
     <string name="screen_one_screen">One screen</string>
     <string name="screen_two_screens">Two at once</string>
     <string name="screen_three_screens">Three at once</string>
@@ -1236,7 +1214,6 @@
     <string name="reset_layout_ask">Home, Overview and every stat page go back the way they first were. Hidden cards come back too.</string>
     <string name="layout_reset_done">Layout reset</string>
     <string name="people_who_messages">Who messages you most</string>
-    <string name="people_who_none">Shows who messages you most once messages come in. Names are only kept from this update on.</string>
     <string name="people_calls_title">Phone calls</string>
     <string name="people_calls_none">No calls answered or made in this time</string>
     <string name="people_calls_total">%1$s on calls · %2$s</string>
@@ -1395,7 +1372,7 @@
     <string name="supplement_stopped">Stopped</string>
     <string name="supplement_taken_vs_not">Taken vs not</string>
     <string name="supplement_taken_count">%1$d taken · %2$d not</string>
-    <string name="supplement_not_taken">Not taken</string>
+    <string name="supplement_not_taken">Skipped</string>
     <string name="supplement_before_since">Before vs since</string>
     <string name="supplement_started_seg">Started %1$s</string>
     <string name="supplement_change_seg">%1$s %2$s</string>

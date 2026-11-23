@@ -135,7 +135,7 @@ private fun StatPageFragment.lockdownTimeCard() {
     val week = (1..7L).map { days[today.minusDays(it)]?.phoneMs ?: 0L }
     card.headline(Formats.duration(days[today]?.phoneMs ?: 0L),
         getString(R.string.lockdown_time_caption, Formats.duration(week.average().roundToLong())))
-    dayBars(card, days.mapValues { it.value.phoneMs / 3_600_000f }, stat.color) { date, _ ->
+    dayBars(card, days.mapValues { it.value.phoneMs / 3_600_000f }) { date, _ ->
         Formats.duration(days[date]?.phoneMs ?: 0L)
     }
 }

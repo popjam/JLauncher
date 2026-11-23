@@ -56,4 +56,11 @@ class FormatsTest {
         assertEquals("1h 59m", Formats.duration(2 * 3_600_000L - 1))
         assertEquals("1h 30m", Formats.minutes(90))
     }
+
+    @Test fun percents() {
+        assertEquals("<1%", Formats.percent(0.4f))
+        assertEquals("0%", Formats.percent(0f))
+        assertEquals("1%", Formats.percent(1f))
+        assertEquals("25%", Formats.percent(24.6f))
+    }
 }

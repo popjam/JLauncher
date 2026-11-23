@@ -32,6 +32,7 @@ import app.olauncher.helper.StatInfo
 import app.olauncher.helper.StatKind
 import app.olauncher.helper.allStats
 import app.olauncher.helper.dpToPx
+import app.olauncher.helper.appUsagePermissionGranted
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.Month
@@ -66,8 +67,8 @@ class StatPageFragment : CardPageFragment() {
     /** Every day with something saved, oldest first */
     internal var dates = emptyList<LocalDate>()
 
-    /** How many stretches of its days back from today the Daily, Taken or Cups card is */
-    internal var stretchesBack = 0
+    /** How many stretches of its days back from today each card of a bar a day is, by its title */
+    internal val stretchesBack = mutableMapOf<String, Int>()
 
     /** The face Over time is showing only the days of, picked from the chips under it */
     internal var overTimeFilter: Int? = null
@@ -119,8 +120,9 @@ class StatPageFragment : CardPageFragment() {
     override fun onResume() {
         super.onResume()
         // Also after coming back from turning on notification access for Money spent
+        // And after usage access, for Pickups and Sleep
         if (renderedWith != choices || (spendingShownOn != null && spendingShownOn != Spending.isEnabled(requireContext())) ||
-            (socialShownState != null && socialShownState != socialState())) render()
+            (socialShownState != null && socialShownState != socialState()) || usageShownOn != requireContext().appUsagePermissionGranted()) render()
     }
 
     internal val choices get() = trendPeriod to overTimeSpan
@@ -132,6 +134,9 @@ class StatPageFragment : CardPageFragment() {
     /** Whether notification access was on when the Money spent card was drawn; null without the card */
     internal var spendingShownOn: Boolean? = null
 
+    /** Whether usage access was on when the page was drawn */
+    internal var usageShownOn: Boolean? = null
+
     /** Location access and homes when the Social cards were drawn; null without them */
     internal var socialShownState: String? = null
 
@@ -141,6 +146,9 @@ class StatPageFragment : CardPageFragment() {
     internal val homeList = HoldList<Int>(tapOpensMenu = true)
     internal val purchaseList = HoldList<Spending.Purchase>(tapOpensMenu = true)
     internal val subscriptionList = HoldList<String>(tapOpensMenu = true)
+
+    /** How many of the latest purchases are listed, more after each "Show more"; kept as the page redraws */
+    internal var purchasesShown = SPENDING_SHOWN
 
     override fun onPause() {
         listOf(placeList, suggestionList, homeList, purchaseList, subscriptionList).forEach { it.end() }
@@ -176,6 +184,7 @@ class StatPageFragment : CardPageFragment() {
         spendingShownOn = null
         socialShownState = null
         val context = requireContext()
+        usageShownOn = context.appUsagePermissionGranted()
         // Each kind's own cards come first, then the ones every stat gets
         when (stat.kind) {
             StatKind.SCREEN -> {
@@ -213,7 +222,9 @@ class StatPageFragment : CardPageFragment() {
                 streakCard()
                 dailyCard()
             }
-            StatKind.MUSIC -> if (musicCard()) {
+            // Without notification access only the listening card says so; the rest show what's been kept, or hide
+            StatKind.MUSIC -> {
+                musicCard()
                 musicDaysCard()
                 musicHoursCard()
                 musicArtistsCard()
@@ -506,19 +517,28 @@ class StatPageFragment : CardPageFragment() {
     // --- Cards ---
 
     /** The [count] days the Daily, Taken or Cups card shows, stepping back to the stat's first day. */
-    internal fun dailyDates(card: Card, count: Int = DAILY_DAYS, redraw: () -> Unit): List<LocalDate> {
+    internal fun dailyDates(card: Card, count: Int = DAILY_DAYS, redraw: () -> Unit): List<LocalDate> =
+        stepDates(card, count, firstDate, redraw)
+
+    /**
+     * The [count] days a card of a bar (or square) a day shows, today's stretch first, with ‹ › in its
+     * header stepping back a stretch at a time as far as [first]. Each card keeps its own place.
+     */
+    internal fun stepDates(card: Card, count: Int, first: LocalDate?, redraw: () -> Unit): List<LocalDate> {
+        val key = card.titleView.text.toString()
         val today = LocalDate.now()
-        val furthestBack = firstDate?.let { (ChronoUnit.DAYS.between(it, today) / count).toInt() } ?: 0
-        stretchesBack = stretchesBack.coerceIn(0, furthestBack)
-        val end = today.minusDays(count.toLong() * stretchesBack)
+        val furthestBack = first?.let { (ChronoUnit.DAYS.between(it, today) / count).toInt().coerceAtLeast(0) } ?: 0
+        val back = (stretchesBack[key] ?: 0).coerceIn(0, furthestBack)
+        stretchesBack[key] = back
+        val end = today.minusDays(count.toLong() * back)
         val start = end.minusDays(count - 1L)
-        val title = if (stretchesBack == 0) getString(R.string.last_days, count)
+        val title = if (back == 0) getString(R.string.last_days, count)
         else {
             val format = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
             getString(R.string.graph_month_range, start.format(format), end.format(format))
         }
-        card.stepper(title, canGoBack = (stretchesBack < furthestBack), canGoForward = (stretchesBack > 0), days = count) { by ->
-            stretchesBack -= by
+        card.stepper(title, canGoBack = (back < furthestBack), canGoForward = (back > 0), days = count) { by ->
+            stretchesBack[key] = back - by
             redraw()
         }
         return (0 until count).map { start.plusDays(it.toLong()) }
@@ -697,6 +717,8 @@ class StatPageFragment : CardPageFragment() {
 
     internal fun trendCard() {
         if (stat.kind == StatKind.WORK) return workTrendCard()
+        // Nothing yet: no card
+        val start = firstDate ?: return
         val card = Card(getString(R.string.stat_trend))
         val color = if (stat.isMedicine) medicineColor else stat.themeColor
         val totals = stat.kind == StatKind.MONEY && unit == Measure.DOLLARS
@@ -706,7 +728,6 @@ class StatPageFragment : CardPageFragment() {
                 trendPeriod = it
                 draw()
             }
-            val start = firstDate ?: return card.showNote(getString(R.string.no_data))
             val today = LocalDate.now()
             val current = periodOf(period, today)
             val first = when (period) {
@@ -797,6 +818,8 @@ class StatPageFragment : CardPageFragment() {
      * colour. A chip per face under it shows only that face's days, and a month's block how many it had.
      */
     internal fun overTimeCard() {
+        // Days with only real values (spending read before Money had a face that day, say) have no face to show
+        val start = (dates.firstOrNull { scoreOf(stat, it) != null } ?: firstDate) ?: return
         val card = Card(getString(R.string.stat_over_time))
         // Screen time's faces from least time to most, otherwise as they are left to right
         val faces = if (usage) MoodStore.facesFor(5).sorted() else stat.faces
@@ -809,8 +832,6 @@ class StatPageFragment : CardPageFragment() {
         fun describeDay(date: LocalDate) = listOf(dateText(date), dayText(stat, date) ?: "–").joinToString(" · ")
         fun draw() {
             val span = Span.entries[overTimeSpan]
-            // Days with only real values (spending read before Money had a face that day, say) have no face to show
-            val start = (dates.firstOrNull { scoreOf(stat, it) != null } ?: firstDate) ?: return card.showNote(getString(R.string.no_data))
             card.segment(listOf(R.string.over_3_months, R.string.over_year, R.string.over_all), overTimeSpan) {
                 overTimeSpan = it
                 draw()
@@ -1030,7 +1051,7 @@ class StatPageFragment : CardPageFragment() {
             val other = if (stat.isMedicine) measured else med
             Row(other.name, other.color, taken.average().toFloat(), taken.size, notTaken.average().toFloat(), notTaken.size)
         }.sortedByDescending { abs(it.taken - it.notTaken) }
-        if (rows.isEmpty()) return card.showNote(getString(R.string.needs_taken_and_not))
+        if (rows.isEmpty()) return card.showNote(getString(R.string.needs_more_days))
 
         val measuredStat = if (stat.isMedicine) null else stat
         card.describe = { key ->
@@ -1102,10 +1123,8 @@ class StatPageFragment : CardPageFragment() {
         internal const val SLEEP_DAYS = 14
         internal const val SLEEP_MIN_NIGHTS = 3
 
-        /** How far back Music's artists go, and how many are listed */
+        /** How far back Music's artists go */
         internal const val MUSIC_DAYS = 30
-        internal const val MUSIC_ARTISTS = 6
-        internal const val MUSIC_TRACKS = 5
 
         /** Names for players that may since have been uninstalled */
         internal val KNOWN_PLAYERS = mapOf(
@@ -1125,12 +1144,10 @@ class StatPageFragment : CardPageFragment() {
         /** How many days pickups, doomscrolling and Steps show */
         internal const val HABIT_DAYS = 14
 
-        /** How far back Vibecoding's projects, hours and spend go, and how many projects are listed */
+        /** How far back Vibecoding's hours and spend go */
         internal const val VIBE_DAYS = 30
-        internal const val VIBE_PROJECTS = 8
 
-        /** How many apps Screen time lists */
-        internal const val APPS_SHOWN = 10
+        /** What Screen time's apps leave out */
         internal val NOT_APPS = setOf("Unknown", "Home screen", "Pixel Launcher", "JLauncher", "Permission controller", "System UI",
             "Android System", "Settings", "Quickstep", "One UI Home", "Finder", "loginwindow", "Dock")
 
@@ -1138,8 +1155,9 @@ class StatPageFragment : CardPageFragment() {
         internal const val SOCIAL_DAYS = 14
         internal const val SOCIAL_LONG_DAYS = 30
 
-        /** How many of the latest purchases Money spent lists */
+        /** How many of the latest purchases Money spent lists, and how many more each "Show more" adds */
         internal const val SPENDING_SHOWN = 3
+        internal const val SPENDING_MORE = 10
 
         /** How many days Meditation's streak dots cover */
         internal const val STREAK_DAYS = 30
