@@ -154,13 +154,17 @@ enum BrowserAddress {
 }
 
 enum Format {
+    /// "9:30 pm", or "21:30" when the Mac uses 24-hour time; with the day when it isn't today
     static func time(_ ms: Ms) -> String {
         let date = Date(ms: ms)
         let f = DateFormatter()
-        f.dateFormat = Calendar.current.isDateInToday(date) ? "h:mm a" : "EEE h:mm a"
+        let clock = uses24Hour ? "H:mm" : "h:mm a"
+        f.dateFormat = Calendar.current.isDateInToday(date) ? clock : "EEE " + clock
         f.amSymbol = "am"; f.pmSymbol = "pm"
         return f.string(from: date)
     }
+
+    static var uses24Hour: Bool { !(DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? "").contains("a") }
 
     /// "4:05" or "1:05:00", for a countdown
     static func clock(_ ms: Ms) -> String {

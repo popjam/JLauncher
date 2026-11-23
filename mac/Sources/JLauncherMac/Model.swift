@@ -64,10 +64,10 @@ final class Model: ObservableObject {
     var onBreak: Bool { paired && Lockdown.onBreak(state, now: now.ms) }
     /// Whether the Mac blocks things now: in lockdown, and not on a break
     var blocking: Bool { status.on && !onBreak }
-    /// The list as it applies, matched when the devices are
-    var effectiveItems: [String: BlockItem] { state.matched ? BlockItems.matched(items) : items }
+    /// The list as it applies: one list, each item blocked on every device where it can be
+    var effectiveItems: [String: BlockItem] { BlockItems.matched(items) }
     var macApps: Set<String> { BlockItems.macApps(effectiveItems) }
-    /// The Mac's sites, and the sites the phone adds for its own blocked apps when matched
+    /// The Mac's sites, and the sites the phone adds for its own blocked apps
     var sites: [String] {
         let listed = Set(items.values.filter { $0.kind == .site }.map(\.name))
         return Array(BlockItems.macSites(effectiveItems).union(state.sites.filter { !listed.contains($0) })).sorted()
@@ -248,21 +248,20 @@ final class Model: ObservableObject {
 
     // --- Lockdown ---
 
-    func start(for ms: Ms?, devices: Int) {
+    // One lockdown: requests are for every device (the phone acts on every switched-on device anyway)
+
+    func start(for ms: Ms?) {
         let at = Date().ms
-        request(Command(type: .start, devices: devices, until: ms.map { at + $0 } ?? 0, at: at))
+        request(Command(type: .start, devices: Devices.both, until: ms.map { at + $0 } ?? 0, at: at))
     }
 
-    func add(_ ms: Ms, devices: Int) { request(Command(type: .add, devices: devices, ms: ms, at: Date().ms)) }
+    func add(_ ms: Ms) { request(Command(type: .add, devices: Devices.both, ms: ms, at: Date().ms)) }
 
     /// Ends lockdown (on until turned off, and the timer). Only after what ending early needs.
-    func end(devices: Int) {
-        request(Command(type: .end, devices: devices, at: Date().ms))
+    func end() {
+        request(Command(type: .end, devices: Devices.both, at: Date().ms))
         cancelWait()
     }
-
-    /// The devices Start and Add time act on from here: both while matched
-    var startDevices: Int { state.matched ? Devices.both : Devices.mac }
 
     // --- Breaks ---
 
@@ -282,16 +281,9 @@ final class Model: ObservableObject {
 
     // --- The shared list ---
 
-    /// Blocks or unblocks an app or site on the phone and/or the Mac, from here
-    func setItem(kind: BlockItem.Kind, name: String, phone: Bool?, mac: Bool?, pkg: String? = nil, bundle: String? = nil) {
-        var phone = phone, mac = mac
-        // Matched: both together, where it can be
-        if state.matched, let on = phone ?? mac {
-            let probe = items[BlockItem.id(kind, name)] ?? BlockItem(kind: kind, name: name, pkg: pkg, bundle: bundle)
-            phone = on && (probe.onPhone || pkg != nil)
-            mac = on && (probe.onMac || bundle != nil)
-        }
-        items = BlockItems.set(items, kind: kind, name: name, phone: phone, mac: mac, now: Date().ms, pkg: pkg, bundle: bundle)
+    /// Blocks or unblocks an app or site everywhere, from here
+    func block(kind: BlockItem.Kind, name: String, on: Bool, pkg: String? = nil, bundle: String? = nil) {
+        items = BlockItems.block(items, kind: kind, name: name, on: on, now: Date().ms, pkg: pkg, bundle: bundle)
         saveItems()
         pushItems()
     }

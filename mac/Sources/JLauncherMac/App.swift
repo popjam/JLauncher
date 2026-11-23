@@ -83,31 +83,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
         menu.addItem(label(headline(status)))
-        if let phone = model.phone, phone.updatedAt > 0 {
+        // One lockdown: the phone's own line only when it differs (this Mac is switched off on the phone)
+        if let phone = model.phone, phone.updatedAt > 0, phone.phoneOn != status.on {
             menu.addItem(label("Phone · " + phoneLine(phone)))
         }
         if model.waitingForPhone { menu.addItem(label("Waiting for phone")) }
         if let error = model.syncError { menu.addItem(label(error)) }
         menu.addItem(.separator())
 
-        let matched = model.state.matched
-        func lengths(_ devices: Int, add: Bool) -> [NSMenuItem] {
-            Self.lengths.prefix(add ? 5 : 7).map { (title, ms) in
-                action((add ? "+" : "") + title) { [model] in add ? model.add(ms, devices: devices) : model.start(for: ms, devices: devices) }
-            } + (add ? [NSMenuItem]() : [NSMenuItem.separator(), action("Until turned off") { [model] in model.start(for: nil, devices: devices) }])
-        }
         let add = status.on
-        let title = add ? "Add time" : "Start"
-        if matched {
-            menu.addItem(submenu(title, items: lengths(Devices.both, add: add)))
-        } else {
-            menu.addItem(submenu(title, items: lengths(Devices.mac, add: add)))
-            menu.addItem(submenu(title + " on phone and Mac", items: lengths(Devices.both, add: model.phone?.phoneOn == true || add)))
-        }
+        let lengths = Self.lengths.prefix(add ? 5 : 7).map { (title, ms) in
+            action((add ? "+" : "") + title) { [model] in add ? model.add(ms) : model.start(for: ms) }
+        } + (add ? [NSMenuItem]() : [NSMenuItem.separator(), action("Until turned off") { [model] in model.start(for: nil) }])
+        menu.addItem(submenu(add ? "Add time" : "Start", items: lengths))
         if status.on && Lockdown.endable(model.state, now: Date().ms) {
             menu.addItem(action(endTitle(status)) { [model] in
                 Unlocking.run(title: status.why == .manual ? "Turn off lockdown?" : "End lockdown now?", action: "End now") {
-                    model.end(devices: matched ? Devices.both : Devices.mac)
+                    model.end()
                 }
             })
         }
@@ -125,8 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        let count = model.macApps.count + model.sites.count
-        menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count) on this Mac…") { Dialog.show(width: 460) { ItemsView() } })
+        let count = model.items.values.filter(\.blocked).count
+        menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count)…") { Dialog.show(width: 460) { ItemsView() } })
         if !Blocker.accessibilityOn {
             menu.addItem(action("Allow Accessibility (needed for websites)…") { Blocker.askForAccessibility() })
         }

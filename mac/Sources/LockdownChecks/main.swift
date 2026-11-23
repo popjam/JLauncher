@@ -170,6 +170,16 @@ let roundTrip = BlockItems.decode(BlockItems.encode(both))
 eq(roundTrip, both)
 let matchedItems = BlockItems.matched(BlockItems.set([:], kind: .site, name: "x.com", phone: true, mac: false, now: 1))
 eq(BlockItems.macSites(matchedItems), ["x.com"])
+// One list: blocking or unblocking from the Mac sets every switch, and the most recent change wins
+var tvItem = BlockItem(kind: .app, name: "YouTube", pkg: "com.google.youtube")
+tvItem.tv = true; tvItem.tvAt = 5; tvItem.phone = true; tvItem.phoneAt = 5
+let unblocked = BlockItems.block([tvItem.id: tvItem], kind: .app, name: "YouTube", on: false, now: 9)
+check(unblocked[tvItem.id].map { !$0.phone && !$0.mac && !$0.tv && !$0.blocked && $0.phoneAt == 9 && $0.tvAt == 9 } ?? false, "unblock everywhere")
+var olderTv = tvItem; olderTv.tv = true; olderTv.tvAt = 3; olderTv.phone = false; olderTv.phoneAt = 8
+check(!olderTv.blocked, "an older TV switch doesn't keep it blocked")
+let reblocked = BlockItems.block(unblocked, kind: .app, name: "YouTube", on: true, now: 12, bundle: "com.google.yt")
+check(reblocked[tvItem.id].map { $0.phone && $0.mac && $0.tv && $0.blocked && $0.bundle == "com.google.yt" } ?? false, "block everywhere")
+eq(BlockItems.decode(BlockItems.encode(reblocked)), reblocked)
 
 // --- Wait unlock ---
 eq(Wait.state(requestedAt: 0, waitMinutes: 15, now: now), .none)

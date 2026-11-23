@@ -273,10 +273,10 @@ struct WaitView: View {
     }
 }
 
-// --- What's blocked, on each device ---
+// --- What's blocked ---
 
-/// The shared list: each app and site with a switch for the phone and the Mac. Adding is done at
-/// once; taking anything off during lockdown needs what ending early needs.
+/// The one list: each app and site, blocked on every device where it can be. Adding is done at once;
+/// taking anything off during lockdown needs what ending early needs.
 struct ItemsView: View {
     @ObservedObject private var model = Model.shared
     @State private var search = ""
@@ -288,41 +288,39 @@ struct ItemsView: View {
         let name: String
         let pkg: String?
         let bundle: String?
-        let phone: Bool
-        let mac: Bool
+        let blocked: Bool
         let icon: NSImage?
+
+        func with(pkg: String? = nil, bundle: String? = nil, icon: NSImage? = nil) -> Row {
+            Row(id: id, kind: kind, name: name, pkg: self.pkg ?? pkg, bundle: self.bundle ?? bundle, blocked: blocked, icon: self.icon ?? icon)
+        }
     }
 
     private var rows: [Row] {
-        let items = model.effectiveItems
         var rows: [String: Row] = [:]
-        for item in items.values where item.shown || matchesSearch(item.name) {
-            if !item.shown && search.isEmpty { continue }
-            rows[item.id] = Row(id: item.id, kind: item.kind, name: item.name, pkg: item.pkg, bundle: item.bundle, phone: item.phone, mac: item.mac,
+        for item in model.items.values where item.blocked || (!search.isEmpty && matchesSearch(item.name)) {
+            guard matchesSearch(item.name) else { continue }
+            rows[item.id] = Row(id: item.id, kind: item.kind, name: item.name, pkg: item.pkg, bundle: item.bundle, blocked: item.blocked,
                                 icon: item.bundle.flatMap { b in macApps.first { $0.id == b }?.icon })
         }
         guard !search.isEmpty else { return sorted(rows) }
-        // Apps not on the list yet, from both devices, one per name
+        // Apps not on the list yet, from the Mac and the phone, one per name
         for app in macApps where matchesSearch(app.name) {
             let id = BlockItem.id(.app, app.name)
-            if rows[id] == nil { rows[id] = Row(id: id, kind: .app, name: app.name, pkg: nil, bundle: app.id, phone: false, mac: false, icon: app.icon) }
-            else if rows[id]?.bundle == nil, let r = rows[id] {
-                rows[id] = Row(id: id, kind: .app, name: r.name, pkg: r.pkg, bundle: app.id, phone: r.phone, mac: r.mac, icon: app.icon)
-            }
+            rows[id] = rows[id]?.with(bundle: app.id, icon: app.icon)
+                ?? Row(id: id, kind: .app, name: app.name, pkg: nil, bundle: app.id, blocked: false, icon: app.icon)
         }
         for (pkg, name) in model.phoneApps where matchesSearch(name) {
             let id = BlockItem.id(.app, name)
-            if let r = rows[id] {
-                if r.pkg == nil { rows[id] = Row(id: id, kind: .app, name: r.name, pkg: pkg, bundle: r.bundle, phone: r.phone, mac: r.mac, icon: r.icon) }
-            } else { rows[id] = Row(id: id, kind: .app, name: name, pkg: pkg, bundle: nil, phone: false, mac: false, icon: nil) }
+            rows[id] = rows[id]?.with(pkg: pkg) ?? Row(id: id, kind: .app, name: name, pkg: pkg, bundle: nil, blocked: false, icon: nil)
         }
         return sorted(rows)
     }
 
     private func sorted(_ rows: [String: Row]) -> [Row] {
         rows.values.sorted { a, b in
-            let ka = (a.phone || a.mac ? 0 : 1, a.kind == .site ? 0 : 1, a.name.lowercased())
-            let kb = (b.phone || b.mac ? 0 : 1, b.kind == .site ? 0 : 1, b.name.lowercased())
+            let ka = (a.blocked ? 0 : 1, a.kind == .site ? 0 : 1, a.name.lowercased())
+            let kb = (b.blocked ? 0 : 1, b.kind == .site ? 0 : 1, b.name.lowercased())
             return ka < kb
         }
     }
@@ -332,7 +330,6 @@ struct ItemsView: View {
     var body: some View {
         Card {
             Title(text: "Apps and websites")
-            if model.state.matched { Line(text: "Devices are matched: blocked on one is blocked on both where it can be.").padding(.bottom, 10) }
             BoxField(placeholder: "Search apps, or type a site and press Return", text: $search, onSubmit: addSite).padding(.bottom, 8)
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -342,8 +339,7 @@ struct ItemsView: View {
                             else { Image(systemName: row.kind == .site ? "globe" : "iphone").frame(width: 20, height: 20).foregroundStyle(Style.faint) }
                             Text(row.name).font(.system(size: 15)).foregroundStyle(.white).lineLimit(1)
                             Spacer()
-                            DevicePill(title: "Phone", on: row.phone, enabled: row.kind == .site || row.pkg != nil) { toggle(row, phone: true) }
-                            DevicePill(title: "Mac", on: row.mac, enabled: row.kind == .site || row.bundle != nil) { toggle(row, phone: false) }
+                            BlockPill(on: row.blocked) { toggle(row) }
                         }
                         .padding(.vertical, 7)
                         Divider().overlay(Color.white.opacity(0.12))
@@ -356,11 +352,9 @@ struct ItemsView: View {
         .onAppear { model.loadPhoneApps() }
     }
 
-    private func toggle(_ row: Row, phone: Bool) {
-        let on = phone ? row.phone : row.mac
-        let change = {
-            Model.shared.setItem(kind: row.kind, name: row.name, phone: phone ? !on : nil, mac: phone ? nil : !on, pkg: row.pkg, bundle: row.bundle)
-        }
+    private func toggle(_ row: Row) {
+        let on = row.blocked
+        let change = { Model.shared.block(kind: row.kind, name: row.name, on: !on, pkg: row.pkg, bundle: row.bundle) }
         // Taking something off during lockdown loosens it; not at all while a timer runs on any device
         if on && (Model.shared.status.on || Model.shared.phone?.phoneOn == true) {
             if let until = Lockdown.lockedUntil(Model.shared.state, now: Date().ms) {
@@ -380,26 +374,23 @@ struct ItemsView: View {
 
     private func addSite() {
         guard let host = Sites.host(search) else { return }
-        let devices = model.startDevices
-        model.setItem(kind: .site, name: host, phone: devices & Devices.phone != 0 ? true : nil, mac: true)
+        model.block(kind: .site, name: host, on: true)
         search = ""
     }
 }
 
-/// A device's switch: filled while on, faded when the app isn't on that device.
-struct DevicePill: View {
-    let title: String
+/// An item's switch: "Blocked", filled, while it's blocked; "Block" otherwise.
+struct BlockPill: View {
     let on: Bool
-    let enabled: Bool
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 12.5)).foregroundStyle(on ? Color.black : .white.opacity(enabled ? 0.8 : 0.3))
+            Text(on ? "Blocked" : "Block").font(.system(size: 12.5)).foregroundStyle(on ? Color.black : .white.opacity(0.8))
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill(on ? Color(red: 0x8F / 255, green: 0xB3 / 255, blue: 1) : Color.clear))
-                .overlay(Capsule().strokeBorder(on ? Color.clear : Color.white.opacity(enabled ? 0.4 : 0.15), lineWidth: 1))
+                .overlay(Capsule().strokeBorder(on ? Color.clear : Color.white.opacity(0.4), lineWidth: 1))
         }
-        .buttonStyle(.plain).disabled(!enabled)
+        .buttonStyle(.plain)
     }
 }
 

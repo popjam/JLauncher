@@ -150,7 +150,8 @@ public enum Breaks {
     }
 }
 
-/// An app or site lockdown blocks, on the phone and/or the Mac (BlockItems.kt).
+/// An app or site lockdown blocks (BlockItems.kt). It keeps a switch for each device, but it's one
+/// list: an item is blocked as its most recent change left it, on every device where it can be.
 public struct BlockItem: Equatable {
     public enum Kind: String { case app, site }
     public var kind: Kind
@@ -161,13 +162,22 @@ public struct BlockItem: Equatable {
     public var phoneAt: Ms = 0
     public var mac = false
     public var macAt: Ms = 0
+    /// The TV's name for the app and its switch, kept as the phone wrote them
+    public var tvName: String?
+    public var tv = false
+    public var tvAt: Ms = 0
 
     public init(kind: Kind, name: String, pkg: String? = nil, bundle: String? = nil) {
         (self.kind, self.name, self.pkg, self.bundle) = (kind, name, pkg, bundle)
     }
 
     public var id: String { Self.id(kind, name) }
-    public var shown: Bool { phone || mac }
+    public var shown: Bool { blocked }
+    /// Blocked as its most recent change left it: switches changed at the same time count if any is on
+    public var blocked: Bool {
+        let latest = max(phoneAt, macAt, tvAt)
+        return (phone && phoneAt == latest) || (mac && macAt == latest) || (tv && tvAt == latest)
+    }
     public var onPhone: Bool { kind == .site || pkg != nil }
     public var onMac: Bool { kind == .site || bundle != nil }
 
@@ -190,7 +200,8 @@ public struct BlockItem: Equatable {
     }
 
     public var json: [String: Any] {
-        ["k": kind.rawValue, "n": name, "p": pkg ?? "", "m": bundle ?? "", "ph": phone, "tph": phoneAt, "mc": mac, "tmc": macAt]
+        ["k": kind.rawValue, "n": name, "p": pkg ?? "", "m": bundle ?? "", "ph": phone, "tph": phoneAt, "mc": mac, "tmc": macAt,
+         "t": tvName ?? "", "tv": tv, "ttv": tvAt]
     }
 
     public init?(json: Any?) {
@@ -203,6 +214,9 @@ public struct BlockItem: Equatable {
         phoneAt = (o["tph"] as? NSNumber)?.int64Value ?? 0
         mac = o["mc"] as? Bool ?? false
         macAt = (o["tmc"] as? NSNumber)?.int64Value ?? 0
+        tvName = (o["t"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        tv = o["tv"] as? Bool ?? false
+        tvAt = (o["ttv"] as? NSNumber)?.int64Value ?? 0
     }
 
     /// Two copies together: each switch from the later change, and whatever's known of the app on each device.
@@ -211,6 +225,8 @@ public struct BlockItem: Equatable {
         if a.kind == .app && b.name.count > a.name.count && a.pkg == nil { item.name = b.name }
         item.pkg = a.pkg ?? b.pkg
         item.bundle = a.bundle ?? b.bundle
+        item.tvName = a.tvName ?? b.tvName
+        if b.tvAt > a.tvAt { item.tv = b.tv; item.tvAt = b.tvAt }
         if b.phoneAt > a.phoneAt { item.phone = b.phone; item.phoneAt = b.phoneAt }
         if b.macAt > a.macAt { item.mac = b.mac; item.macAt = b.macAt }
         return item
@@ -248,11 +264,20 @@ public enum BlockItems {
         return out
     }
 
-    /// Matched devices: blocked on one is blocked on the other where it can be.
+    /// `items` with `name` blocked or not everywhere at `now`, as the phone's `block`: every device's switch together.
+    public static func block(_ items: [String: BlockItem], kind: BlockItem.Kind, name: String, on: Bool, now: Ms,
+                             pkg: String? = nil, bundle: String? = nil) -> [String: BlockItem] {
+        var out = set(items, kind: kind, name: name, phone: on, mac: on, now: now, pkg: pkg, bundle: bundle)
+        let id = BlockItem.id(kind, name)
+        if var item = out[id], item.tv != on { item.tv = on; item.tvAt = now; out[id] = item }
+        return out
+    }
+
+    /// What each device blocks: anything blocked is blocked on every device where it can be.
     public static func matched(_ items: [String: BlockItem]) -> [String: BlockItem] {
         items.mapValues { it in
             var it = it
-            let on = it.phone || it.mac
+            let on = it.blocked
             it.phone = on && it.onPhone
             it.mac = on && it.onMac
             return it

@@ -47,7 +47,7 @@ enum Updater {
     /// Only reached when this copy wasn't replaced: already up to date, or something went wrong
     private static func finished(_ status: Int32) {
         running = false
-        if status == 10 { return Dialog.show { message("Up to date", "Version \(commit) is the latest.") } }
+        if status == 10 { return Dialog.show { message("Up to date", "Version \(commit) is the latest") } }
         if status == 0 { return }
         let tail = ((try? String(contentsOfFile: log, encoding: .utf8)) ?? "").split(separator: "\n").suffix(8).joined(separator: "\n")
         Dialog.show(width: 460) { message("Update failed", tail.isEmpty ? "See \(log)" : tail) }
