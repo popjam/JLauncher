@@ -1201,32 +1201,44 @@ class SettingsFragment : CardPageFragment() {
     /** What the build on Drive is, once looked at; null while looking */
     private var update: AppUpdate.State? = null
 
-    private fun checkUpdate() {
+    private var checking = false
+
+    /** Looks at the build on Drive; [thenInstall] opens the installer straight away if it's newer */
+    private fun checkUpdate(thenInstall: Boolean = false) {
+        if (checking) return
+        checking = true
         val context = requireContext().applicationContext
         Thread {
             val state = AppUpdate.check(context)
             view?.post {
+                checking = false
                 update = state
+                if (thenInstall) {
+                    if (state is AppUpdate.State.Newer) runCatching { AppUpdate.install(context, state.uri) }
+                    else context.showToast(updateValue(state))
+                }
                 if (isAdded) render()
             }
         }.start()
     }
 
-    /** Tappable only when the build on Drive is newer than this one */
+    private fun updateValue(state: AppUpdate.State?): String = when (state) {
+        null -> getString(R.string.app_update_checking)
+        AppUpdate.State.NoFolder, AppUpdate.State.NotFound -> getString(R.string.app_update_not_found)
+        is AppUpdate.State.Latest -> getString(R.string.app_update_latest, LockdownGate.time(requireContext(), state.modified))
+        is AppUpdate.State.Newer -> getString(R.string.app_update_newer, LockdownGate.time(requireContext(), state.modified))
+    }
+
+    /** A newer build installs; otherwise a tap looks on Drive again */
     private fun updateRow(card: Card): View? {
         val context = requireContext()
-        val state = update
-        val value = when (state) {
-            null -> getString(R.string.app_update_checking)
-            AppUpdate.State.NoFolder, AppUpdate.State.NotFound -> getString(R.string.app_update_not_found)
-            AppUpdate.State.Latest -> getString(R.string.app_update_latest)
-            is AppUpdate.State.Newer -> getString(R.string.app_update_newer, LockdownGate.time(context, state.modified))
-        }
-        val onTap: (() -> Unit)? = (state as? AppUpdate.State.Newer)?.let { newer ->
-            { runCatching { AppUpdate.install(context, newer.uri) } }
-        }
-        return row(card, getString(R.string.app_update), value, R.string.info_app_update, onTap = onTap).apply {
-            if (onTap == null) alpha = 0.5f
+        val state = update.takeIf { !checking }
+        return row(card, getString(R.string.app_update), updateValue(state), R.string.info_app_update) {
+            when (state) {
+                null -> {}
+                is AppUpdate.State.Newer -> runCatching { AppUpdate.install(context, state.uri) }
+                else -> { checkUpdate(thenInstall = true); render() }
+            }
         }
     }
 

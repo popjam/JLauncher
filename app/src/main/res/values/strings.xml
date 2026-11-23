@@ -1584,8 +1584,8 @@
     <!-- Updating from the build on Drive -->
     <string name="app_update">Update</string>
     <string name="app_update_checking">Checking…</string>
-    <string name="app_update_latest">Latest</string>
+    <string name="app_update_latest">Latest · %1$s</string>
     <string name="app_update_newer">New build, %1$s</string>
     <string name="app_update_not_found">No build on Drive</string>
-    <string name="info_app_update">Installs JLauncher-debug.apk from the Drive folder picked for other devices\' screen time. It can be tapped when the build there is newer than this one.</string>
+    <string name="info_app_update">Installs JLauncher-debug.apk from the Drive folder picked for other devices\' screen time. Tapping installs it when it\'s newer than this one, or looks on Drive again.</string>
 </resources>
