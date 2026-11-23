@@ -146,7 +146,7 @@ class StatsHomeFragment : CardPageFragment() {
         // Over the cards while the bubble's open: touching anywhere outside it closes it
         scrim = View(context).apply {
             isVisible = false
-            setBackgroundColor(0x33000000)
+            setBackgroundColor(Style.SCRIM)
             setOnTouchListener { _, event ->
                 if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) closeBubble()
                 true
@@ -349,13 +349,13 @@ class StatsHomeFragment : CardPageFragment() {
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = if (selectedDate == today) getString(R.string.today) else dateText(selectedDate)
-                textSize = 15f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setTypeface(null, Typeface.BOLD)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (selectedDate != today) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = getString(R.string.today)
-                textSize = 13f
+                textSize = Style.TEXT_SMALL
                 setTextColor(ink)
                 setBackgroundResource(R.drawable.bg_stat_chip)
                 setPadding(12.dpToPx(), 5.dpToPx(), 12.dpToPx(), 5.dpToPx())
@@ -392,11 +392,11 @@ class StatsHomeFragment : CardPageFragment() {
         val input = EditText(context, null, 0, R.style.TextSmall).apply {
             setText(day?.note.orEmpty())
             hint = getString(R.string.thoughts_hint)
-            textSize = 15f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
             setHintTextColor(faint(110))
             background = GradientDrawable().apply {
-                cornerRadius = 16.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 setColor(faint(14))
             }
             gravity = Gravity.TOP or Gravity.START
@@ -507,7 +507,7 @@ class StatsHomeFragment : CardPageFragment() {
             if (years.isVisible) {
                 fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
                     text = symbol
-                    textSize = 18f
+                    textSize = Style.TEXT_TITLE
                     setTextColor(card.titleView.currentTextColor)
                     alpha = if (enabled) 0.8f else 0.2f
                     isEnabled = enabled
@@ -519,7 +519,7 @@ class StatsHomeFragment : CardPageFragment() {
                     }
                 }
                 years.addView(arrow("‹", year > firstYear, -1, R.string.previous_days))
-                years.addView(card.textView(13f, 150).apply {
+                years.addView(card.textView(Style.TEXT_SMALL, 150).apply {
                     text = year.toString()
                     updatePadding(top = 6.dpToPx())
                 })
@@ -593,7 +593,7 @@ class StatsHomeFragment : CardPageFragment() {
                     color = mood.faceColor(context, face)
                 }, LinearLayout.LayoutParams(34.dpToPx(), 34.dpToPx()).apply { marginEnd = 14.dpToPx() })
             }
-            addView(card.textView(15f, 235).apply {
+            addView(card.textView(Style.TEXT_BODY, 235).apply {
                 text = getString(R.string.quoted, app.olauncher.helper.JournalText.preview(note, 400))
                 setLineSpacing(3.dpToPx().toFloat(), 1f)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -768,7 +768,7 @@ class StatsHomeFragment : CardPageFragment() {
         list.forEach { phrase(it) }
         supplementComparables(list)
         val steps = app.olauncher.helper.Steps.days(context)
-        if (steps.isNotEmpty()) list.add(Measured(STEPS_KEY, getString(R.string.steps_title), 0xFF4DB6AC.toInt(), StatIcons.STEPS, ValueKind.AMOUNT,
+        if (steps.isNotEmpty()) list.add(Measured(STEPS_KEY, getString(R.string.steps_title), Style.Palette.TEAL, StatIcons.STEPS, ValueKind.AMOUNT,
             steps.mapValues { it.value.toFloat() }, { v -> if (v >= 1000) String.format(Locale.getDefault(), "%.1fk", v / 1000) else Math.round(v).toString() }).also {
             it.cond = { label, short -> if (short) getString(R.string.cond_short_with, label) else getString(R.string.cond_steps, label) }
             it.outcome = { amount, up -> getString(R.string.out_steps, amount, getString(if (up) R.string.word_more else R.string.word_fewer)) }
@@ -1426,8 +1426,8 @@ class StatsHomeFragment : CardPageFragment() {
                     LinearLayout.LayoutParams(18.dpToPx(), 18.dpToPx()).apply { marginEnd = 14.dpToPx() })
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(card.textView(15f, 240).apply { text = insight.text })
-                    addView(card.textView(12.5f, 140).apply {
+                    addView(card.textView(Style.TEXT_BODY, 240).apply { text = insight.text })
+                    addView(card.textView(Style.TEXT_SMALL, 140).apply {
                         text = insight.detail
                         updatePadding(top = 2.dpToPx())
                     })
@@ -1461,7 +1461,7 @@ class StatsHomeFragment : CardPageFragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val summary = card.textView(14f, 230).apply { updatePadding(bottom = 12.dpToPx()) }
+        val summary = card.textView(Style.TEXT_BODY, 230).apply { updatePadding(bottom = 12.dpToPx()) }
         card.root.addView(pickers, card.root.indexOfChild(card.scene), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = 14.dpToPx()
         })
@@ -1476,7 +1476,7 @@ class StatsHomeFragment : CardPageFragment() {
                 draw()
             }
             pickers.removeAllViews()
-            fun chip(c: Measured, onTap: () -> Unit) = card.textView(14f, 255).apply {
+            fun chip(c: Measured, onTap: () -> Unit) = card.textView(Style.TEXT_BODY, 255).apply {
                 text = c.name
                 isSingleLine = true
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -1491,7 +1491,7 @@ class StatsHomeFragment : CardPageFragment() {
                 }
             }
             pickers.addView(chip(x) { pick { compareX = it; draw() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            pickers.addView(card.textView(13f, 150).apply {
+            pickers.addView(card.textView(Style.TEXT_SMALL, 150).apply {
                 text = getString(R.string.compare_against)
                 setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
             })
@@ -1557,8 +1557,8 @@ class StatsHomeFragment : CardPageFragment() {
         bubble.removeAllViews()
         val dark = ColorUtils.calculateLuminance(ink) > 0.5
         bubble.background = GradientDrawable().apply {
-            cornerRadius = 26.dpToPx().toFloat()
-            setColor(if (dark) 0xFF202024.toInt() else 0xFFF4F4F6.toInt())
+            cornerRadius = Style.radiusLarge
+            setColor(if (dark) Style.PANEL_RAISED_DARK else Style.PANEL_LIGHT)
             setStroke(1.dpToPx(), faint(40))
         }
         bubble.elevation = 8.dpToPx().toFloat()
@@ -1582,7 +1582,7 @@ class StatsHomeFragment : CardPageFragment() {
                 }
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     text = resources.getQuantityString(R.plurals.stats_shown, picked.size, picked.size) + if (spot.top) "  ▾" else "  ▴"
-                    textSize = 13f
+                    textSize = Style.TEXT_SMALL
                     setTextColor(ink)
                     setPadding(4.dpToPx(), 0, 0, 0)
                 })
@@ -1606,7 +1606,7 @@ class StatsHomeFragment : CardPageFragment() {
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = getString(R.string.show)
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setTypeface(null, Typeface.BOLD)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1617,7 +1617,7 @@ class StatsHomeFragment : CardPageFragment() {
             ).forEach { (label, action) ->
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     setText(label)
-                    textSize = 13f
+                    textSize = Style.TEXT_SMALL
                     setTextColor(ink)
                     alpha = 0.75f
                     setPadding(8.dpToPx(), 6.dpToPx(), 8.dpToPx(), 6.dpToPx())
@@ -1626,7 +1626,7 @@ class StatsHomeFragment : CardPageFragment() {
             }
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = if (spot.top) "▴" else "▾"
-                textSize = 16f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setPadding(12.dpToPx(), 2.dpToPx(), 6.dpToPx(), 2.dpToPx())
                 contentDescription = getString(R.string.close)
@@ -1638,7 +1638,7 @@ class StatsHomeFragment : CardPageFragment() {
                 val on = stat.id !in data.hiddenInGraph
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     text = stat.name
-                    textSize = 13f
+                    textSize = Style.TEXT_SMALL
                     setTextColor(ink)
                     setBackgroundResource(R.drawable.bg_stat_chip)
                     setPadding(10.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())

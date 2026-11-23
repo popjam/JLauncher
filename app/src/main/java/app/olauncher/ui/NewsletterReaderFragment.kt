@@ -195,7 +195,7 @@ class NewsletterReaderFragment : CardPageFragment() {
 
     // --- Contents ---
 
-    private val teal get() = if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt()
+    private val teal get() = Style.accent(darkPage)
 
     private fun readSet(): Set<Int> = prefs.getString("read_$file", "").orEmpty().split(',').mapNotNull { it.toIntOrNull() }.toSet()
 
@@ -274,8 +274,8 @@ class NewsletterReaderFragment : CardPageFragment() {
         updateBars()
     }
 
-    private val bg get() = if (dark) 0xFF000000.toInt() else 0xFFF6F4EF.toInt()
-    private val fg get() = if (dark) 0xFFE6E6E6.toInt() else 0xFF1A1A1A.toInt()
+    private val bg get() = if (dark) android.graphics.Color.BLACK else Style.PAPER_LIGHT
+    private val fg get() = if (dark) Style.PAPER_INK_DARK else Style.INK_ON_LIGHT
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun buildReader() {
@@ -308,13 +308,13 @@ class NewsletterReaderFragment : CardPageFragment() {
         }
         topTitle = TextView(context, null, 0, R.style.TextSmall).apply {
             text = getString(R.string.newsletter_contents_back)
-            textSize = 14f
+            textSize = Style.TEXT_BODY
             setTextColor(fg)
             setPadding(12.dpToPx(), 8.dpToPx(), 12.dpToPx(), 8.dpToPx())
             setOnClickListener { showContents() }
         }
         topWhere = TextView(context, null, 0, R.style.TextSmall).apply {
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setTextColor(fg)
             alpha = 0.6f
             gravity = Gravity.END
@@ -327,7 +327,7 @@ class NewsletterReaderFragment : CardPageFragment() {
         controls = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(if (dark) 0xFF151716.toInt() else 0xFFE9E5DC.toInt())
+            setBackgroundColor(if (dark) Style.PANEL_DARK else Style.PAPER_BAR_LIGHT)
             setPadding(8.dpToPx(), 10.dpToPx(), 8.dpToPx(), 28.dpToPx())
             isVisible = false
         }
@@ -339,7 +339,7 @@ class NewsletterReaderFragment : CardPageFragment() {
         controls.removeAllViews()
         fun control(text: String, onTap: () -> Unit) = controls.addView(TextView(requireContext(), null, 0, R.style.TextSmall).apply {
             this.text = text
-            textSize = 14f
+            textSize = Style.TEXT_BODY
             setTextColor(fg)
             gravity = Gravity.CENTER
             setPadding(0, 10.dpToPx(), 0, 10.dpToPx())
@@ -453,7 +453,7 @@ class NewsletterReaderFragment : CardPageFragment() {
     private fun css(): String {
         fun hex(color: Int) = String.format("#%06X", color and 0xFFFFFF)
         val faint = if (dark) "rgba(255,255,255,.18)" else "rgba(0,0,0,.15)"
-        val link = hex(teal.let { if (dark) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt() })
+        val link = hex(teal.let { Style.accent(dark) })
         val base = """
             html, body { background: ${hex(bg)} !important; color: ${hex(fg)} !important; }
             body { font-family: Georgia, 'Times New Roman', serif; font-size: ${textSize}px; line-height: 1.55; margin: 0;
@@ -552,7 +552,7 @@ class NewsletterReaderFragment : CardPageFragment() {
 
     private fun line(text: String) = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
         this.text = text
-        textSize = 14f
+        textSize = Style.TEXT_BODY
         setTextColor(faint(170))
         setLineSpacing(0f, 1.15f)
         setPadding(4.dpToPx(), 12.dpToPx(), 4.dpToPx(), 12.dpToPx())
@@ -569,7 +569,7 @@ class NewsletterReaderFragment : CardPageFragment() {
             alpha = if (faded) 0.4f else 1f
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = title
-                textSize = if (indent) 14f else 16f
+                textSize = if (indent) Style.TEXT_BODY else Style.TEXT_BODY
                 setTextColor(color ?: ink)
                 if (!indent) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 maxLines = if (indent) 2 else 1
@@ -578,7 +578,7 @@ class NewsletterReaderFragment : CardPageFragment() {
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (value != null) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = value
-                textSize = 15f
+                textSize = Style.TEXT_BODY
                 setTextColor(color ?: faint(215))
                 updatePadding(left = 12.dpToPx())
             })

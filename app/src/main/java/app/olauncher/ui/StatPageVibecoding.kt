@@ -85,7 +85,7 @@ internal fun StatPageFragment.vibeProjectsCard(days: Map<LocalDate, Vibecoding.D
             .mapValues { (_, p) -> Vibecoding.Project(p.sumOf { it.minutes }, p.sumOf { it.prompts }) }
             .entries.sortedByDescending { it.value.minutes }.take(VIBE_PROJECTS)
         if (projects.isEmpty()) {
-            list.addView(card.textView(13f, 150).apply {
+            list.addView(card.textView(Style.TEXT_SMALL, 150).apply {
                 setText(R.string.no_data)
                 gravity = Gravity.CENTER
                 updatePadding(top = 16.dpToPx(), bottom = 16.dpToPx())
@@ -100,12 +100,12 @@ internal fun StatPageFragment.vibeProjectsCard(days: Map<LocalDate, Vibecoding.D
                 updatePadding(top = 6.dpToPx(), bottom = 6.dpToPx())
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(card.textView(14f, 255).apply {
+                    addView(card.textView(Style.TEXT_BODY, 255).apply {
                         text = name
                         isSingleLine = true
                         ellipsize = TextUtils.TruncateAt.END
                     })
-                    addView(card.textView(12f, 140).apply {
+                    addView(card.textView(Style.TEXT_SMALL, 140).apply {
                         text = resources.getQuantityString(R.plurals.vibe_prompts, project.prompts, project.prompts)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -117,7 +117,7 @@ internal fun StatPageFragment.vibeProjectsCard(days: Map<LocalDate, Vibecoding.D
                 }, LinearLayout.LayoutParams((80.dpToPx() * project.minutes / most).toInt().coerceAtLeast(3.dpToPx()), 6.dpToPx()).apply {
                     marginStart = 10.dpToPx()
                 })
-                addView(card.textView(13f, 150).apply {
+                addView(card.textView(Style.TEXT_SMALL, 150).apply {
                     text = duration(project.minutes * 60_000L)
                     gravity = Gravity.END
                 }, LinearLayout.LayoutParams(64.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))

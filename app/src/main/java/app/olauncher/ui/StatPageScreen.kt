@@ -156,7 +156,7 @@ internal fun StatPageFragment.screenDailyCard() {
     card.subtitle(getString(R.string.last_days, HABIT_DAYS))
     val one = ColorUtils.setAlphaComponent(stat.color, 150)
     val two = stat.color
-    val more = ColorUtils.blendARGB(stat.color, 0xFF000000.toInt(), 0.45f)
+    val more = ColorUtils.blendARGB(stat.color, android.graphics.Color.BLACK, 0.45f)
     fun colorOf(segment: ScreenSpans.Segment) = when (segment.devices.size) {
         1 -> one
         2 -> two

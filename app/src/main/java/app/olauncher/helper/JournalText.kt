@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import java.util.Locale
 
 /** Showing long journal notes in short spaces: the start of one, or the parts around a search's words */
@@ -36,7 +37,7 @@ object JournalText {
     }
 
     /** The colour search matches are marked with */
-    const val MARK = 0x6EFFD54F
+    const val MARK = Style.HIGHLIGHT
 
     /** About the first [max] characters of [text], on one flow (line breaks as spaces), cut at a word with "…" */
     fun preview(text: String, max: Int = 280): String {

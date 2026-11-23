@@ -52,7 +52,7 @@
                         android:layout_weight="1"
                         android:text="@string/stats_title"
                         android:textColor="?attr/primaryColor"
-                        android:textSize="28sp" />
+                        android:textSize="@dimen/size_large" />
                 </LinearLayout>
 
                 <!-- Home, a row per stat in its order, and a new stat -->

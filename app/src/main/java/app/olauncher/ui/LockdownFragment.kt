@@ -124,18 +124,18 @@ class LockdownFragment : LockdownBaseFragment() {
             else LockdownGate.status(context)
         card.add(TextView(context, null, 0, R.style.TextLarge).apply {
             text = big
-            textSize = 26f
+            textSize = Style.TEXT_LARGE
             setTextColor(ink)
         })
-        LockdownGate.whyText(context)?.takeIf { phoneOn }?.let { card.add(card.textView(14f, 165).apply { text = it; updatePadding(top = 4.dpToPx()) }) }
+        LockdownGate.whyText(context)?.takeIf { phoneOn }?.let { card.add(card.textView(Style.TEXT_BODY, 165).apply { text = it; updatePadding(top = 4.dpToPx()) }) }
         // Each device on its own line, when there's more than the phone
-        if (several) card.add(card.textView(14.5f, 215).apply {
+        if (several) card.add(card.textView(Style.TEXT_BODY, 215).apply {
             text = Lockdown.deviceList(context).joinToString("\n") { LockdownGate.deviceName(context, it.bit) + " · " + LockdownGate.deviceStatus(context, it) }
             setLineSpacing(0f, 1.25f)
             updatePadding(top = 10.dpToPx())
         })
         LockdownGate.screenTimeLine(context)?.let { (line, _) ->
-            card.add(card.textView(14f, 165).apply { text = line; updatePadding(top = 10.dpToPx()) })
+            card.add(card.textView(Style.TEXT_BODY, 165).apply { text = line; updatePadding(top = 10.dpToPx()) })
             card.add(StageBar(context, stages, used, ink, labels = true), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 64.dpToPx()))
         }
         val targets = Lockdown.startDevices(context, prefs)
@@ -207,7 +207,7 @@ class LockdownFragment : LockdownBaseFragment() {
         val needsService = items.values.any { it.phone } || prefs.lockdownProtect || prefs.lockdownSystemSettings || limits > 0 || allow
         card.add(
             row(card, getString(R.string.lockdown_apps_and_sites), value, R.string.info_lockdown_blocks) { open(LockdownPageFragment.BLOCKS) }
-                .also { if (!allow && items.values.none { it.shown }) it.valueColor(0xFFEF5350.toInt()) },
+                .also { if (!allow && items.values.none { it.shown }) it.valueColor(Style.DANGER) },
             row(card, getString(R.string.lockdown_settings_changes), getString(R.string.lockdown_n_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size),
                 R.string.info_lockdown_settings_changes) { open(LockdownPageFragment.PROTECTION) },
             // Only when it's needed and off, since nothing outside the launcher is blocked without it

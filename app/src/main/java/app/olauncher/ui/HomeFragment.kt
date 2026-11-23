@@ -1479,6 +1479,6 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             R.id.homeApp5, R.id.homeApp6, R.id.homeApp7, R.id.homeApp8)
 
         /** The lockdown widget's lock, the Lockdown stat's colour */
-        val LOCKDOWN_BLUE = 0xFF8FB3FF.toInt()
+        val LOCKDOWN_BLUE = Style.LOCKDOWN_ON_DARK
     }
 }

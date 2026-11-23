@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.content.ComponentName
 import android.content.Context
 import android.media.MediaMetadata
@@ -165,7 +166,7 @@ object Music {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     const val NAME = "Music"
-    private val COLOR = 0xFF4DD0E1.toInt()
+    private val COLOR = Style.Palette.CYAN
     private val LABELS = listOf("None", "Under 30m", "30m–1h", "1–2h", "2h+")
 
     private val LOCK = Any()

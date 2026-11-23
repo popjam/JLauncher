@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -184,7 +185,7 @@ object Sleep {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     const val NAME = "Sleep"
-    private val COLOR = 0xFF7986CB.toInt()
+    private val COLOR = Style.Palette.INDIGO
     private val LABELS = listOf("Under 5h", "5–6h", "6–7h", "7–8h", "8h+")
 
     private val LOCK = Any()

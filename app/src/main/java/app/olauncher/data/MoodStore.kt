@@ -1,5 +1,6 @@
 package app.olauncher.data
 
+import app.olauncher.ui.Style
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
@@ -754,20 +755,20 @@ class MoodStore(context: Context) {
         const val SUPPLEMENTS = "supplements"
         const val SUPPLEMENT_CHANGES = "supplementChanges"
         /** Supplements' colour in the stats list and the check-in */
-        const val SUPPLEMENTS_COLOR = 0xFF26A69A.toInt()
+        const val SUPPLEMENTS_COLOR = Style.Palette.TEAL_DEEP
 
         val SCALES = listOf(2, 3, 5)
-        const val DEFAULT_MOOD_COLOR = 0xFFF2B33D.toInt()
-        const val DEFAULT_USAGE_COLOR = 0xFFB388FF.toInt()
+        const val DEFAULT_MOOD_COLOR = Style.Palette.GOLD
+        const val DEFAULT_USAGE_COLOR = Style.Palette.LAVENDER
 
         /** New stats start with the next of these; any colour can be picked */
         val NEW_STAT_COLORS = intArrayOf(
-            0xFF5B8DEF.toInt(), 0xFF4FC3A1.toInt(), 0xFFE05FA8.toInt(),
-            0xFF4DD0E1.toInt(), 0xFFFF8A65.toInt(), 0xFFAED581.toInt(),
+            Style.Palette.BLUE_DEEP, Style.Palette.MINT, Style.Palette.MAGENTA,
+            Style.Palette.CYAN, Style.Palette.CORAL, Style.Palette.LIME,
         )
 
         /** New supplements take the next of these */
-        val SUPPLEMENT_COLORS = listOf(0xFFFFB74D, 0xFF4DB6AC, 0xFF64B5F6, 0xFFAED581, 0xFFF06292, 0xFF9575CD).map { it.toInt() }
+        val SUPPLEMENT_COLORS = listOf(Style.Palette.ORANGE, Style.Palette.TEAL, Style.Palette.BLUE, Style.Palette.LIME, Style.Palette.PINK, Style.Palette.DEEP_PURPLE)
         const val MAX_UNIT_LENGTH = 12
 
         /** One line, capped at [MAX_UNIT_LENGTH]. */

@@ -36,7 +36,7 @@ private fun StatPageFragment.lockdownNowCard() {
     val prefs = Prefs(context)
     val on = Lockdown.isOn(context, prefs)
     val card = Card(getString(R.string.lockdown_now))
-    card.headerEnd.addView(card.textView(13f, 200).apply {
+    card.headerEnd.addView(card.textView(Style.TEXT_SMALL, 200).apply {
         text = getString(R.string.settings)
         setPadding(12.dpToPx(), 4.dpToPx(), 0, 4.dpToPx())
         setOnClickListener { openLockdown() }
@@ -54,19 +54,19 @@ private fun StatPageFragment.lockdownNowCard() {
             orientation = LinearLayout.VERTICAL
             addView(TextView(context, null, 0, R.style.TextLarge).apply {
                 text = LockdownGate.status(context)
-                textSize = 24f
+                textSize = Style.TEXT_LARGE
                 setTextColor(ink)
             })
             val left = Lockdown.activeUntil(context, prefs)?.takeIf { on }?.let { it - System.currentTimeMillis() }
             val why = LockdownGate.whyText(context)?.takeIf { on }
             listOfNotNull(left?.let { getString(R.string.lockdown_left, LockdownGate.duration(context, it)) }, why).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
-                addView(card.textView(14f, 165).apply { text = it })
+                addView(card.textView(Style.TEXT_BODY, 165).apply { text = it })
             }
         })
     })
     // Each device, when there's more than the phone
     if (Lockdown.several(context)) {
-        body.addView(card.textView(14f, 200).apply {
+        body.addView(card.textView(Style.TEXT_BODY, 200).apply {
             text = Lockdown.deviceList(context).joinToString("\n") {
                 LockdownGate.deviceName(context, it.bit) + " · " + LockdownGate.deviceStatus(context, it)
             }
@@ -87,7 +87,7 @@ private fun StatPageFragment.lockdownNowCard() {
     if (Lockdown.macPaired(context)) lines += LockdownGate.deviceName(context, Lockdown.Device.MAC.bit) to
         counts(BlockItems.macApps(items).size, BlockItems.macSites(items).size)
     if (Lockdown.tvPaired(context)) lines += LockdownGate.deviceName(context, Lockdown.Device.TV.bit) to counts(BlockItems.tvApps(items).size, 0)
-    body.addView(card.textView(12.5f, 140).apply {
+    body.addView(card.textView(Style.TEXT_SMALL, 140).apply {
         text = getString(R.string.lockdown_what_it_blocks).uppercase()
         letterSpacing = 0.1f
         updatePadding(top = 16.dpToPx(), bottom = 4.dpToPx())
@@ -95,8 +95,8 @@ private fun StatPageFragment.lockdownNowCard() {
     lines.forEach { (device, text) ->
         body.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(card.textView(14.5f, 230).apply { this.text = device }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(card.textView(14.5f, 190).apply { this.text = text })
+            addView(card.textView(Style.TEXT_BODY, 230).apply { this.text = device }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(card.textView(Style.TEXT_BODY, 190).apply { this.text = text })
             updatePadding(top = 3.dpToPx(), bottom = 3.dpToPx())
             setOnClickListener {
                 runCatching {
@@ -111,10 +111,10 @@ private fun StatPageFragment.lockdownNowCard() {
         updatePadding(top = 14.dpToPx())
         fun pill(text: String, onTap: () -> Unit) = TextView(context, null, 0, R.style.TextSmall).apply {
             this.text = text
-            textSize = 14.5f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
             background = GradientDrawable().apply {
-                cornerRadius = 20.dpToPx().toFloat()
+                cornerRadius = Style.radiusLarge
                 setColor(faint(36))
             }
             setPadding(18.dpToPx(), 9.dpToPx(), 18.dpToPx(), 9.dpToPx())
@@ -165,7 +165,7 @@ private fun StatPageFragment.lockdownWeekCard() {
         Lockdown.streak(context, prefs)?.let { getString(R.string.lockdown_streak_line, resources.getQuantityString(R.plurals.lockdown_days, it, it)) },
         usualHours(days)?.let { getString(R.string.lockdown_usually, it) },
     )
-    if (lines.isNotEmpty()) card.root.addView(card.textView(14f, 190).apply {
+    if (lines.isNotEmpty()) card.root.addView(card.textView(Style.TEXT_BODY, 190).apply {
         text = lines.joinToString("\n")
         setLineSpacing(0f, 1.3f)
         updatePadding(top = 12.dpToPx())

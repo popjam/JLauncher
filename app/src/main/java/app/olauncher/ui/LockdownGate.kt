@@ -149,7 +149,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     /** A countdown that has to stay open on screen; leaving it starts it again */
     private fun hold(seconds: Int, title: String, onPass: () -> Unit) {
         val text = TextView(context, null, 0, R.style.TextLarge).apply {
-            textSize = 40f
+            textSize = Style.TEXT_FIGURE
             gravity = android.view.Gravity.CENTER
         }
         var left = seconds
@@ -183,13 +183,13 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         var done = 0
         lateinit var dialog: AlertDialog
         val counter = TextView(context, null, 0, R.style.TextLarge).apply {
-            textSize = 22f
+            textSize = Style.TEXT_TITLE
             gravity = android.view.Gravity.CENTER
             text = context.getString(R.string.lockdown_taps_left, count)
         }
         val button = TextView(context, null, 0, R.style.TextLarge).apply {
             text = context.getString(R.string.lockdown_tap)
-            textSize = 20f
+            textSize = Style.TEXT_TITLE
             gravity = android.view.Gravity.CENTER
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -219,13 +219,13 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
     private fun type(title: String, texts: List<String>, ignoreSpaces: Boolean, onPass: () -> Unit) {
         var index = 0
         val shown = TextView(context, null, 0, R.style.TextSmall).apply {
-            textSize = 16f
+            textSize = Style.TEXT_BODY
             setLineSpacing(0f, 1.2f)
             // Not selectable, so it can't be copied
             setTextIsSelectable(false)
         }
         val progress = TextView(context, null, 0, R.style.TextSmall).apply {
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             alpha = 0.6f
             setPadding(0, 6.dpToPx(), 0, 0)
         }
@@ -448,7 +448,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             .setTitle(R.string.your_password_is)
             .setView(padded(context, TextView(context).apply {
                 text = password
-                textSize = 20f
+                textSize = Style.TEXT_TITLE
                 setTextIsSelectable(true)
             }))
             .setPositiveButton(R.string.okay, null)

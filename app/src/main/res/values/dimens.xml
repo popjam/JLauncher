@@ -3,4 +3,13 @@
     <dimen name="alphabet_recycler_margin_bottom">16dp</dimen>
     <dimen name="alphabet_recycler_margin_end">10dp</dimen>
     <dimen name="alphabet_recycler_margin_start">320dp</dimen>
+    <!-- The two corner radii, the same as Style.RADIUS_SMALL_DP and Style.RADIUS_LARGE_DP -->
+    <dimen name="radius_small">14dp</dimen>
+    <dimen name="radius_large">24dp</dimen>
+    <!-- The text sizes, the same as Style.TEXT_SMALL … Style.TEXT_FIGURE -->
+    <dimen name="size_small">13sp</dimen>
+    <dimen name="size_body">15sp</dimen>
+    <dimen name="size_title">20sp</dimen>
+    <dimen name="size_large">26sp</dimen>
+    <dimen name="size_figure">40sp</dimen>
 </resources>

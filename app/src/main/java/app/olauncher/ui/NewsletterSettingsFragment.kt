@@ -394,14 +394,14 @@ class NewsletterSettingsFragment : CardPageFragment() {
             setOnClickListener { onTap() }
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = title
-                textSize = 16f
+                textSize = Style.TEXT_BODY
                 setTextColor(faint(if (faded) 170 else 255))
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (value != null) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = value
-                textSize = 15f
+                textSize = Style.TEXT_BODY
                 setTextColor(faint(if (faded) 150 else 215))
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END

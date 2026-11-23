@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.LocationManager
@@ -135,7 +136,7 @@ object WeatherHistory {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     const val NAME = "Weather"
-    private val COLOR = 0xFFFFCA28.toInt()
+    private val COLOR = Style.Palette.AMBER
     private val LABELS = listOf("Grey", "1–3h sun", "3–6h sun", "6–9h sun", "9h+ sun")
     private const val FIELDS = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,sunshine_duration,daylight_duration"
     private const val PREFS = "weather_days"

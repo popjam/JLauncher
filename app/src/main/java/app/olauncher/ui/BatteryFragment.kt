@@ -65,7 +65,7 @@ class BatteryFragment : CardPageFragment() {
         render()
     }
 
-    private val green = 0xFF81C784.toInt()
+    private val green = Style.Palette.GREEN
 
     private fun render() {
         cardList.removeAllViews()
@@ -99,17 +99,17 @@ class BatteryFragment : CardPageFragment() {
             val since = System.currentTimeMillis() - Battery.DAY_MS
             val uses = Workload.since(context, since, screenOffOnly)
             if (uses.isEmpty()) {
-                body.addView(card.textView(14f, 170).apply { text = getString(R.string.battery_own_waiting) })
+                body.addView(card.textView(Style.TEXT_BODY, 170).apply { text = getString(R.string.battery_own_waiting) })
                 return
             }
             val capacity = Workload.capacityMah(context)
             fun percent(mAh: Double) = mAh * 100 / capacity
             val total = percent(uses.values.sumOf { it.mAh })
             val lost = Battery.lost(samples, since, screenOffOnly)
-            body.addView(card.textView(14f, 230).apply {
+            body.addView(card.textView(Style.TEXT_BODY, 230).apply {
                 text = getString(if (screenOffOnly) R.string.battery_own_summary_off else R.string.battery_own_summary_all, share(total), lost)
             })
-            if (lost > 0) body.addView(card.textView(12.5f, 150).apply {
+            if (lost > 0) body.addView(card.textView(Style.TEXT_SMALL, 150).apply {
                 val ofDrain = total * 100 / lost
                 val shown = if (ofDrain < 1) getString(R.string.battery_under_one) else "${ofDrain.roundToInt().coerceAtMost(100)}%"
                 text = getString(if (ofDrain >= 25) R.string.battery_own_big else R.string.battery_own_small, shown)
@@ -122,8 +122,8 @@ class BatteryFragment : CardPageFragment() {
                     setPadding(0, 7.dpToPx(), 0, 7.dpToPx())
                     addView(LinearLayout(context).apply {
                         orientation = LinearLayout.HORIZONTAL
-                        addView(card.textView(15f, 240).apply { text = partName(part) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                        addView(card.textView(14f, 200).apply { text = share(percent(use.mAh)) })
+                        addView(card.textView(Style.TEXT_BODY, 240).apply { text = partName(part) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(card.textView(Style.TEXT_BODY, 200).apply { text = share(percent(use.mAh)) })
                     })
                     addView(View(context).apply {
                         background = android.graphics.drawable.GradientDrawable().apply {
@@ -133,13 +133,13 @@ class BatteryFragment : CardPageFragment() {
                     }, LinearLayout.LayoutParams(((resources.displayMetrics.widthPixels - 80.dpToPx()) * (use.mAh / most)).toInt().coerceAtLeast(3.dpToPx()), 4.dpToPx()).apply {
                         topMargin = 5.dpToPx()
                     })
-                    addView(card.textView(12.5f, 140).apply {
+                    addView(card.textView(Style.TEXT_SMALL, 140).apply {
                         text = partDetails(use)
                         updatePadding(top = 4.dpToPx())
                     })
                 })
             }
-            body.addView(card.textView(12f, 110).apply {
+            body.addView(card.textView(Style.TEXT_SMALL, 110).apply {
                 text = getString(R.string.battery_own_note)
                 updatePadding(top = 8.dpToPx())
             })
@@ -336,8 +336,8 @@ class BatteryFragment : CardPageFragment() {
                 setPadding(0, 7.dpToPx(), 0, 7.dpToPx())
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    addView(card.textView(15f, 240).apply { text = label }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(card.textView(14f, 160).apply { text = listOf(duration(ms), "${(ms * 100 / total)}%").joinToString(" · ") })
+                    addView(card.textView(Style.TEXT_BODY, 240).apply { text = label }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(card.textView(Style.TEXT_BODY, 160).apply { text = listOf(duration(ms), "${(ms * 100 / total)}%").joinToString(" · ") })
                 })
                 // A bar for its share of the screen's time
                 addView(View(context).apply {
@@ -349,7 +349,7 @@ class BatteryFragment : CardPageFragment() {
                     topMargin = 5.dpToPx()
                     width = ((resources.displayMetrics.widthPixels - 80.dpToPx()) * ms / total).toInt().coerceAtLeast(3.dpToPx())
                 })
-                if (extra != null) addView(card.textView(12.5f, 140).apply {
+                if (extra != null) addView(card.textView(Style.TEXT_SMALL, 140).apply {
                     text = extra
                     updatePadding(top = 4.dpToPx())
                 })

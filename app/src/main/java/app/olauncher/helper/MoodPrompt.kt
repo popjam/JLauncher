@@ -16,6 +16,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import app.olauncher.R
+import app.olauncher.ui.Style
 import app.olauncher.data.MoodStore
 import app.olauncher.data.Supplements
 import app.olauncher.ui.PixelFaceView
@@ -120,13 +121,13 @@ object MoodPrompt {
                     }
                     alpha = if (stopped) 0.4f else 1f
                 }, LinearLayout.LayoutParams(10.dpToPx(), 10.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                line.addView(text(15.5f, if (stopped) 0.5f else 1f, s.name).apply {
+                line.addView(text(Style.TEXT_BODY, if (stopped) 0.5f else 1f, s.name).apply {
                     isSingleLine = true
                     ellipsize = android.text.TextUtils.TruncateAt.END
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 if (stopped) {
-                    line.addView(text(13.5f, 0.6f, context.getString(R.string.supplement_stopped) + " · "))
-                    line.addView(text(13.5f, 1f, context.getString(R.string.supplement_undo)).apply {
+                    line.addView(text(Style.TEXT_SMALL, 0.6f, context.getString(R.string.supplement_stopped) + " · "))
+                    line.addView(text(Style.TEXT_SMALL, 1f, context.getString(R.string.supplement_undo)).apply {
                         setPadding(4.dpToPx(), 6.dpToPx(), 4.dpToPx(), 6.dpToPx())
                         setOnClickListener {
                             store.editSupplement(s.id) { Supplements.undoStop(it, day) }
@@ -134,12 +135,12 @@ object MoodPrompt {
                         }
                     })
                 } else {
-                    line.addView(text(13.5f, 1f, SupplementDialog.amountText(s, s.changeOn(day)!!.amount)).apply {
+                    line.addView(text(Style.TEXT_SMALL, 1f, SupplementDialog.amountText(s, s.changeOn(day)!!.amount)).apply {
                         setBackgroundResource(R.drawable.bg_stat_chip)
                         setPadding(12.dpToPx(), 5.dpToPx(), 12.dpToPx(), 5.dpToPx())
                         setOnClickListener { SupplementDialog.askAmount(context, store, s, day) { render() } }
                     })
-                    line.addView(text(13.5f, 0.6f, context.getString(R.string.supplement_stop)).apply {
+                    line.addView(text(Style.TEXT_SMALL, 0.6f, context.getString(R.string.supplement_stop)).apply {
                         setPadding(16.dpToPx(), 6.dpToPx(), 4.dpToPx(), 6.dpToPx())
                         setOnClickListener {
                             store.editSupplement(s.id) { Supplements.stop(it, day) }
@@ -153,8 +154,8 @@ object MoodPrompt {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 8.dpToPx(), 0, 8.dpToPx())
-                addView(text(16f, 0.6f, "+").apply { setPadding(0, 0, 12.dpToPx(), 0) })
-                addView(text(15.5f, 0.7f, context.getString(R.string.supplement_add)))
+                addView(text(Style.TEXT_BODY, 0.6f, "+").apply { setPadding(0, 0, 12.dpToPx(), 0) })
+                addView(text(Style.TEXT_BODY, 0.7f, context.getString(R.string.supplement_add)))
                 setOnClickListener { SupplementDialog.show(context, store, null, day) { render() } }
             })
         }

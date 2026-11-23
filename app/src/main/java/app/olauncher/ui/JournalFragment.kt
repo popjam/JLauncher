@@ -63,19 +63,19 @@ class JournalFragment : Fragment() {
         val ink = ink
         list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         count = TextView(context, null, 0, R.style.TextSmall).apply {
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setTextColor(ink)
             alpha = 0.55f
         }
         search = EditText(context).apply {
             hint = getString(R.string.journal_search)
-            textSize = 15f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
             setHintTextColor(ColorUtils.setAlphaComponent(ink, 110))
             isSingleLine = true
             inputType = InputType.TYPE_CLASS_TEXT
             background = GradientDrawable().apply {
-                cornerRadius = 22.dpToPx().toFloat()
+                cornerRadius = Style.radiusLarge
                 setColor(ColorUtils.setAlphaComponent(ink, 22))
             }
             setPadding(18.dpToPx(), 12.dpToPx(), 18.dpToPx(), 12.dpToPx())
@@ -183,7 +183,7 @@ class JournalFragment : Fragment() {
         today.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 18.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 setColor(ColorUtils.setAlphaComponent(ink, 18))
             }
             foreground = context.getDrawable(android.R.drawable.list_selector_background)
@@ -195,7 +195,7 @@ class JournalFragment : Fragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     text = listOfNotNull(getString(R.string.today) + " · " + dateText(date), wordsText(note)).joinToString(" · ")
-                    textSize = 13f
+                    textSize = Style.TEXT_SMALL
                     setTextColor(ink)
                     alpha = 0.6f
                     setTypeface(null, Typeface.BOLD)
@@ -204,7 +204,7 @@ class JournalFragment : Fragment() {
             })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = if (note.isBlank()) getString(R.string.journal_today_hint) else gist(date, note, 400)
-                textSize = 15f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 alpha = if (note.isBlank()) 0.45f else 1f
                 setLineSpacing(0f, 1.15f)
@@ -241,7 +241,7 @@ class JournalFragment : Fragment() {
                 lastMonth = month
                 list.addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     text = month
-                    textSize = 13f
+                    textSize = Style.TEXT_SMALL
                     setTextColor(ink)
                     alpha = 0.5f
                     setTypeface(null, Typeface.BOLD)
@@ -261,14 +261,14 @@ class JournalFragment : Fragment() {
                     orientation = LinearLayout.VERTICAL
                     addView(TextView(context, null, 0, R.style.TextSmall).apply {
                         text = listOfNotNull(dateText(date), wordsText(note)).joinToString(" · ")
-                        textSize = 13f
+                        textSize = Style.TEXT_SMALL
                         setTextColor(ink)
                         alpha = 0.6f
                     })
                     addView(TextView(context, null, 0, R.style.TextSmall).apply {
                         // The start of it; while searching, the parts around the words searched for
                         text = if (words.isEmpty()) gist(date, note, 280) else marked(JournalText.snippet(note, words), words)
-                        textSize = 15f
+                        textSize = Style.TEXT_BODY
                         setTextColor(ink)
                         setPadding(0, 3.dpToPx(), 0, 0)
                         setLineSpacing(0f, 1.15f)

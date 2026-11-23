@@ -163,7 +163,7 @@ class SupplementsFragment : CardPageFragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(10.dpToPx(), 9.dpToPx(), 4.dpToPx(), 9.dpToPx())
                 if (s.id == selected) background = GradientDrawable().apply {
-                    cornerRadius = 12.dpToPx().toFloat()
+                    cornerRadius = Style.radiusSmall
                     setColor(faint(22))
                 } else setBackgroundResource(ripple)
                 alpha = if (stopped) 0.5f else 1f
@@ -172,12 +172,12 @@ class SupplementsFragment : CardPageFragment() {
             row.addView(dot(if (stopped) faint(90) else s.color))
             row.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(card.textView(15.5f, 255).apply {
+                addView(card.textView(Style.TEXT_BODY, 255).apply {
                     text = s.name
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
-                addView(card.textView(13f, 150).apply {
+                addView(card.textView(Style.TEXT_SMALL, 150).apply {
                     text = if (stopped) getString(R.string.supplement_stopped_on, shortDate(stoppedOn(s)))
                     else getString(R.string.supplement_line, SupplementDialog.amountText(s, change.amount), SupplementDialog.scheduleText(context, change.schedule))
                     isSingleLine = true
@@ -185,11 +185,11 @@ class SupplementsFragment : CardPageFragment() {
                     updatePadding(top = 2.dpToPx())
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (!stopped) row.addView(card.textView(13.5f, 160).apply {
+            if (!stopped) row.addView(card.textView(Style.TEXT_SMALL, 160).apply {
                 text = todayText(s)
                 setPadding(8.dpToPx(), 0, 0, 0)
             })
-            row.addView(card.textView(17f, 160).apply {
+            row.addView(card.textView(Style.TEXT_TITLE, 160).apply {
                 text = "✎"
                 contentDescription = getString(R.string.edit)
                 setPadding(14.dpToPx(), 6.dpToPx(), 8.dpToPx(), 6.dpToPx())
@@ -202,11 +202,11 @@ class SupplementsFragment : CardPageFragment() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(10.dpToPx(), 11.dpToPx(), 4.dpToPx(), 11.dpToPx())
             setBackgroundResource(ripple)
-            addView(card.textView(16f, 150).apply {
+            addView(card.textView(Style.TEXT_BODY, 150).apply {
                 text = "+"
                 setPadding(0, 0, 14.dpToPx(), 0)
             })
-            addView(card.textView(15.5f, 170).apply { setText(R.string.supplement_add) })
+            addView(card.textView(Style.TEXT_BODY, 170).apply { setText(R.string.supplement_add) })
             setOnClickListener { edit(null) }
         })
         card.addBody(rows)
@@ -249,7 +249,7 @@ class SupplementsFragment : CardPageFragment() {
         grid.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             java.time.DayOfWeek.values().forEach { d ->
-                addView(card.textView(11f, 130).apply {
+                addView(card.textView(Style.TEXT_SMALL, 130).apply {
                     text = d.getDisplayName(TextStyle.NARROW, Locale.getDefault())
                     gravity = Gravity.CENTER
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -267,7 +267,7 @@ class SupplementsFragment : CardPageFragment() {
             val date = firstDay.plusDays((i - blanks).toLong()).takeIf { i >= blanks && i < cells }
             val cell = TextView(context, null, 0, R.style.TextSmall).apply {
                 gravity = Gravity.CENTER
-                textSize = 11f
+                textSize = Style.TEXT_SMALL
             }
             if (date != null) {
                 cell.text = date.dayOfMonth.toString()
@@ -291,7 +291,7 @@ class SupplementsFragment : CardPageFragment() {
                         setColor(faint(16))
                     }
                 }
-                cell.setTextColor(if (taken && !missed) 0xFF111111.toInt() else faint(if (started) 170 else 70))
+                cell.setTextColor(if (taken && !missed) Style.INK_ON_LIGHT else faint(if (started) 170 else 70))
                 if (future) cell.alpha = 0.35f
                 if (date == today) cell.setTypeface(null, android.graphics.Typeface.BOLD)
                 cell.contentDescription = listOf(dateText(date), getString(when {
@@ -342,9 +342,9 @@ class SupplementsFragment : CardPageFragment() {
             rows.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
-                addView(card.textView(13f, 140).apply { this.text = shortDate(change.from) },
+                addView(card.textView(Style.TEXT_SMALL, 140).apply { this.text = shortDate(change.from) },
                     LinearLayout.LayoutParams(78.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-                addView(card.textView(14f, 235).apply { this.text = text }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(card.textView(Style.TEXT_BODY, 235).apply { this.text = text }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             })
         }
         card.addBody(rows)
@@ -475,7 +475,7 @@ class SupplementsFragment : CardPageFragment() {
         if (choices.isEmpty()) return
         val stat = choices.firstOrNull { it.id == amountStat } ?: choices.first()
         val card = Card(getString(R.string.supplement_by_amount))
-        card.headerEnd.addView(card.textView(13f, 170).apply {
+        card.headerEnd.addView(card.textView(Style.TEXT_SMALL, 170).apply {
             text = stat.name + " ▾"
             setPadding(8.dpToPx(), 4.dpToPx(), 0, 4.dpToPx())
             setOnClickListener {

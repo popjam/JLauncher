@@ -202,7 +202,7 @@ class SettingsFragment : CardPageFragment() {
             })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 setText(R.string.settings_hold_hint)
-                textSize = 13f
+                textSize = Style.TEXT_SMALL
                 setTextColor(context.getColorFromAttr(R.attr.primaryColor))
                 alpha = 0.45f
                 setPadding(28.dpToPx(), 0, 28.dpToPx(), 4.dpToPx())
@@ -281,7 +281,7 @@ class SettingsFragment : CardPageFragment() {
     private val searchText = java.util.WeakHashMap<View, String>()
     private val noMatches by lazy {
         TextView(requireContext(), null, 0, R.style.TextSmall).apply {
-            textSize = 14f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
             alpha = 0.55f
             gravity = Gravity.CENTER
@@ -292,14 +292,14 @@ class SettingsFragment : CardPageFragment() {
 
     private fun searchBox(context: Context) = EditText(context, null, 0, R.style.TextSmall).apply {
         hint = getString(R.string.settings_search_hint)
-        textSize = 15f
+        textSize = Style.TEXT_BODY
         setTextColor(ink)
         setHintTextColor(faint(110))
         isSingleLine = true
         imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_FILTER
         background = GradientDrawable().apply {
-            cornerRadius = 22.dpToPx().toFloat()
+            cornerRadius = Style.radiusLarge
             // Solid like the sections, so it reads over a light wallpaper
             setColor(panelColor)
         }
@@ -383,7 +383,7 @@ class SettingsFragment : CardPageFragment() {
                 if (level == 0) typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(card.textView(15f, 215).apply {
+            if (value != null) addView(card.textView(Style.TEXT_BODY, 215).apply {
                 text = value
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -403,7 +403,7 @@ class SettingsFragment : CardPageFragment() {
         val box = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 18.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 // Solid, so the rows under it don't show through
                 setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryShadeDarkColor), 255))
                 setStroke(1.dpToPx(), faint(60))
@@ -411,13 +411,13 @@ class SettingsFragment : CardPageFragment() {
             setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 14.dpToPx())
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 this.text = title
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 this.text = text
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 alpha = 0.8f
                 setLineSpacing(0f, 1.15f)
@@ -839,7 +839,7 @@ class SettingsFragment : CardPageFragment() {
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     fun arrow(symbol: String, enabled: Boolean, by: Int) = TextView(context).apply {
                         text = symbol
-                        textSize = 20f
+                        textSize = Style.TEXT_TITLE
                         alpha = if (enabled) 0.85f else 0.2f
                         setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
                         if (enabled) setOnClickListener {
@@ -897,11 +897,11 @@ class SettingsFragment : CardPageFragment() {
                 addView(View(context).apply {
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
-                        setColor(if (item.ok) 0xFF66BB6A.toInt() else 0xFFFFB300.toInt())
+                        setColor(if (item.ok) Style.GOOD else Style.WARNING)
                     }
                 }, LinearLayout.LayoutParams(8.dpToPx(), 8.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(card.textView(15f, 240).apply { text = item.title }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                if (!item.ok) addView(card.textView(14f, 150).apply {
+                addView(card.textView(Style.TEXT_BODY, 240).apply { text = item.title }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                if (!item.ok) addView(card.textView(Style.TEXT_BODY, 150).apply {
                     text = getString(if (item.fix != null) R.string.tracking_fix else R.string.tracking_check)
                 })
             }
@@ -1067,10 +1067,10 @@ class SettingsFragment : CardPageFragment() {
             row(card, getString(R.string.limits), if (limits == 0) getString(R.string.off)
                 else resources.getQuantityString(R.plurals.lockdown_apps_count, limits, limits), R.string.info_app_limits) {
                 findNavController().navigate(R.id.lockdownPageFragment, androidx.core.os.bundleOf(LockdownPageFragment.PAGE to LockdownPageFragment.LIMITS))
-            }.also { if (limits > 0) it.valueDot(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt()) },
+            }.also { if (limits > 0) it.valueDot(Style.accent(darkPage)) },
             row(card, getString(R.string.lockdown), LockdownGate.status(context), R.string.info_lockdown) {
                 findNavController().navigate(R.id.lockdownFragment)
-            }.also { if (on) it.valueDot(0xFFEF5350.toInt()) },
+            }.also { if (on) it.valueDot(Style.DANGER) },
         )
     }
 
@@ -1270,7 +1270,7 @@ fun pageHeader(context: android.content.Context, icon: String?, title: String, o
         setPadding(12.dpToPx(), 0, 20.dpToPx(), 16.dpToPx())
         addView(TextView(context, null, 0, R.style.TextLarge).apply {
             text = "‹"
-            textSize = 28f
+            textSize = Style.TEXT_LARGE
             setTextColor(ink)
             setPadding(8.dpToPx(), 0, 14.dpToPx(), 0)
             contentDescription = context.getString(R.string.close)
@@ -1280,7 +1280,7 @@ fun pageHeader(context: android.content.Context, icon: String?, title: String, o
             LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { marginEnd = 12.dpToPx() })
         addView(TextView(context, null, 0, R.style.TextLarge).apply {
             text = title
-            textSize = 28f
+            textSize = Style.TEXT_LARGE
             setTextColor(ink)
             isSingleLine = true
             ellipsize = android.text.TextUtils.TruncateAt.END

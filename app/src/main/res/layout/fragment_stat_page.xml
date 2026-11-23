@@ -41,7 +41,7 @@
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="4dp"
                     android:text="‹"
-                    android:textSize="24sp" />
+                    android:textSize="@dimen/size_large" />
 
                 <View
                     android:id="@+id/statIcon"
@@ -58,7 +58,7 @@
                     android:ellipsize="end"
                     android:gravity="center_vertical"
                     android:singleLine="true"
-                    android:textSize="24sp"
+                    android:textSize="@dimen/size_large"
                     android:textStyle="bold"
                     tools:text="Anxiety" />
 
@@ -70,7 +70,7 @@
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="6dp"
                     android:text="@string/edit"
-                    android:textSize="13sp" />
+                    android:textSize="@dimen/size_small" />
             </LinearLayout>
 
             <!-- A card per view of the stat, built for the kind of stat it is -->

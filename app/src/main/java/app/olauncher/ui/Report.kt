@@ -58,9 +58,9 @@ object Report {
             y = M
         }
         fun need(height: Float) { if (y + height > H - M) newPage() }
-        val ink = Color.rgb(25, 25, 28)
-        val grey = Color.rgb(120, 120, 128)
-        val line = Color.rgb(225, 225, 230)
+        val ink = Style.PRINT_INK
+        val grey = Style.PRINT_GREY
+        val line = Style.PRINT_LINE
         fun paint(size: Float, color: Int = ink, bold: Boolean = false) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = size
             this.color = color
@@ -159,8 +159,8 @@ object Report {
                 dates.forEachIndexed { i, d ->
                     val f = face(med, d)
                     val color = when {
-                        f == null -> Color.rgb(240, 240, 243)
-                        med.isBlank(f) -> Color.rgb(214, 214, 220)
+                        f == null -> Style.PRINT_EMPTY
+                        med.isBlank(f) -> Style.PRINT_BLANK
                         else -> med.faceColor(context, f)
                     }
                     c.drawRect(RectF(M + i * cell + 0.5f, y, M + (i + 1) * cell - 0.5f, y + 14f), Paint().apply { this.color = color })

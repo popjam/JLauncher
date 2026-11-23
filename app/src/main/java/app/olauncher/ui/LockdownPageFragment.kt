@@ -198,7 +198,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(4.dpToPx(), 9.dpToPx(), 0, 9.dpToPx())
-            addView(card.textView(15.5f, 240).apply {
+            addView(card.textView(Style.TEXT_BODY, 240).apply {
                 text = item.name
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -583,9 +583,9 @@ class LockdownPageFragment : LockdownBaseFragment() {
         }
         now.add(android.widget.TextView(context, null, 0, R.style.TextLarge).apply {
             text = getString(R.string.lockdown_used_today, LockdownGate.duration(context, Limits.totalToday(context)))
-            textSize = 26f
+            textSize = Style.TEXT_LARGE
             setTextColor(ink)
-        }, now.textView(14f, 165).apply {
+        }, now.textView(Style.TEXT_BODY, 165).apply {
             text = listOfNotNull(resources.getQuantityString(R.plurals.lockdown_apps_count, withRules.size, withRules.size).takeIf { withRules.isNotEmpty() },
                 getString(R.string.limits_at_limit, over).takeIf { over > 0 }).joinToString(" · ").ifEmpty { getString(R.string.limits_none_yet) }
             updatePadding(top = 4.dpToPx())
@@ -635,13 +635,13 @@ class LockdownPageFragment : LockdownBaseFragment() {
             setOnClickListener { appSheet(pkg) }
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                addView(card.textView(16f, 255).apply {
+                addView(card.textView(Style.TEXT_BODY, 255).apply {
                     text = label
                     typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(card.textView(14.5f, 200).apply { text = summary(pkg) })
+                addView(card.textView(Style.TEXT_BODY, 200).apply { text = summary(pkg) })
             })
-            addView(card.textView(13f, 150).apply {
+            addView(card.textView(Style.TEXT_SMALL, 150).apply {
                 text = listOfNotNull(getString(R.string.lockdown_used_today, LockdownGate.durationOrNone(context, used)),
                     resources.getQuantityString(R.plurals.lockdown_opens, Limits.opensToday(context, pkg), Limits.opensToday(context, pkg)).takeIf { rule.opens > 0 }
                 ).joinToString(" · ")

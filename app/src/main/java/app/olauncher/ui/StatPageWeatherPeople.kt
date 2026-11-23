@@ -202,7 +202,7 @@ internal fun StatPageFragment.peopleCallsCard(days: Map<LocalDate, People.Day>) 
     if (!People.hasCallLog(requireContext())) return
     val card = Card(getString(R.string.people_calls_title))
     // The span's total, between the title and the bars
-    val total = card.textView(14f, 220).apply { setPadding(0, 0, 0, (10 * resources.displayMetrics.density).toInt()) }
+    val total = card.textView(Style.TEXT_BODY, 220).apply { setPadding(0, 0, 0, (10 * resources.displayMetrics.density).toInt()) }
     card.root.addView(total, card.root.indexOfChild(card.scene))
     fun draw() {
         peopleSpanPicker(card, ::draw)

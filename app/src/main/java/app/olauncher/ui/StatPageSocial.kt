@@ -135,17 +135,17 @@ internal fun StatPageFragment.socialHomesCard(days: Map<LocalDate, Social.Day>) 
             updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(card.textView(15f, 255).apply {
+                addView(card.textView(Style.TEXT_BODY, 255).apply {
                     text = home?.name ?: getString(R.string.social_home_n, slot + 1)
                     setStatDot(homeColors[slot])
                 })
-                addView(card.textView(12f, 140).apply {
+                addView(card.textView(Style.TEXT_SMALL, 140).apply {
                     text = if (home == null) getString(R.string.social_not_set)
                     else listOfNotNull(home.ssid, resources.getQuantityString(R.plurals.day_count, dates.size, dates.size), moodText).joinToString(" · ")
                     updatePadding(top = 2.dpToPx())
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(card.textView(13f, 255).apply {
+            addView(card.textView(Style.TEXT_SMALL, 255).apply {
                 setText(if (home == null) R.string.social_set else R.string.edit)
                 setBackgroundResource(R.drawable.bg_stat_chip)
                 setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
@@ -161,18 +161,18 @@ internal fun StatPageFragment.socialHomesCard(days: Map<LocalDate, Social.Day>) 
         updatePadding(top = 8.dpToPx(), bottom = 8.dpToPx())
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(card.textView(15f, 255).apply {
+            addView(card.textView(Style.TEXT_BODY, 255).apply {
                 text = work?.name ?: getString(R.string.work)
                 setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.BRIEFCASE, homeColors[Social.WORK], 13.dpToPx()), null, null, null)
                 compoundDrawablePadding = 8.dpToPx()
             })
-            addView(card.textView(12f, 140).apply {
+            addView(card.textView(Style.TEXT_SMALL, 140).apply {
                 text = if (work == null) getString(R.string.social_work_not_set) else listOf(work.ssid,
                     resources.getQuantityString(R.plurals.day_count, stayedWork, stayedWork)).joinToString(" · ")
                 updatePadding(top = 2.dpToPx())
             })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(card.textView(13f, 255).apply {
+        addView(card.textView(Style.TEXT_SMALL, 255).apply {
             setText(if (work == null) R.string.social_set else R.string.edit)
             setBackgroundResource(R.drawable.bg_stat_chip)
             setPadding(14.dpToPx(), 6.dpToPx(), 14.dpToPx(), 6.dpToPx())
@@ -294,7 +294,7 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
             .onFailure { android.widget.Toast.makeText(context, R.string.places_no_map, android.widget.Toast.LENGTH_SHORT).show() }
     }
     fun row(title: String, detail: String, color: Int?, onTap: () -> Unit, onHold: (() -> Unit)?, buttons: List<Pair<Int, () -> Unit>>): android.widget.TextView {
-        val titleView = card.textView(15f, 255).apply {
+        val titleView = card.textView(Style.TEXT_BODY, 255).apply {
             text = title
             if (color != null) setStatDot(color)
         }
@@ -311,13 +311,13 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(titleView)
-                addView(card.textView(12f, 140).apply {
+                addView(card.textView(Style.TEXT_SMALL, 140).apply {
                     text = detail
                     updatePadding(top = 2.dpToPx())
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             buttons.forEach { (label, action) ->
-                addView(card.textView(13f, 255).apply {
+                addView(card.textView(Style.TEXT_SMALL, 255).apply {
                     setText(label)
                     setBackgroundResource(R.drawable.bg_stat_chip)
                     setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())

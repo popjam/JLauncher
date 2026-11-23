@@ -128,7 +128,7 @@ abstract class CardPageFragment : Fragment() {
         val context = requireContext()
         footer = TextView(context, null, 0, R.style.TextSmall).apply {
             text = resources.getQuantityString(R.plurals.hidden_cards, hidden.size, hidden.size)
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setTextColor(faint(150))
             gravity = Gravity.CENTER
             setPadding(16.dpToPx(), 20.dpToPx(), 16.dpToPx(), 8.dpToPx())
@@ -184,21 +184,21 @@ abstract class CardPageFragment : Fragment() {
     internal val darkPage get() = ColorUtils.calculateLuminance(ink) > 0.5
 
     /** The solid colour behind each section and the search boxes */
-    internal val panelColor get() = if (darkPage) 0xFF151716.toInt() else 0xFFF4F5F4.toInt()
+    internal val panelColor get() = Style.panel(darkPage)
 
     /** A card as a settings section: a solid panel, so the wallpaper doesn't show through, its name a heading over its rows */
     internal fun Card.panel() {
         scene.visibility = View.GONE
         root.background = GradientDrawable().apply {
-            cornerRadius = 20.dpToPx().toFloat()
+            cornerRadius = Style.radiusLarge
             setColor(panelColor)
         }
         // A large heading, and room between one section and the next
-        titleView.textSize = 21f
+        titleView.textSize = Style.TEXT_TITLE
         titleView.isAllCaps = false
         titleView.letterSpacing = 0.01f
         titleView.setTypeface(Typeface.DEFAULT_BOLD)
-        titleView.setTextColor(if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt())
+        titleView.setTextColor(Style.accent(darkPage))
         (root.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
             it.topMargin = 24.dpToPx()
             root.layoutParams = it
@@ -235,7 +235,7 @@ abstract class CardPageFragment : Fragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val titleView = textView(15f, 255).apply {
+        val titleView = textView(Style.TEXT_BODY, 255).apply {
             this.text = title
             if (icon != null) {
                 setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(icon, iconColor ?: ink, 15.dpToPx()), null, null, null)
@@ -243,7 +243,7 @@ abstract class CardPageFragment : Fragment() {
             }
         }
         val scene = StatSceneView(context)
-        val note = textView(13f, 150).apply {
+        val note = textView(Style.TEXT_SMALL, 150).apply {
             gravity = Gravity.CENTER
             updatePadding(top = 20.dpToPx(), bottom = 20.dpToPx())
             isVisible = false
@@ -253,7 +253,7 @@ abstract class CardPageFragment : Fragment() {
         val details = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 14.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 setColor(faint(16))
             }
             setPadding(14.dpToPx(), 10.dpToPx(), 14.dpToPx(), 10.dpToPx())
@@ -317,7 +317,7 @@ abstract class CardPageFragment : Fragment() {
             details.isVisible = !text.isNullOrBlank()
             if (text.isNullOrBlank()) return
             val parts = text.split("\n").flatMap { it.split(" · ") }.map { it.trim() }.filter { it.isNotEmpty() }
-            details.addView(textView(14f, 255).apply {
+            details.addView(textView(Style.TEXT_BODY, 255).apply {
                 this.text = parts.first()
                 setTypeface(null, Typeface.BOLD)
             })
@@ -330,7 +330,7 @@ abstract class CardPageFragment : Fragment() {
                 }
                 if (split > 0) {
                     val label = part.substring(0, split)
-                    row.addView(textView(13f, 170).apply {
+                    row.addView(textView(Style.TEXT_SMALL, 170).apply {
                         this.text = label
                         colorOfLabel(label)?.let { color ->
                             val icon = iconOfLabel(label)
@@ -340,19 +340,19 @@ abstract class CardPageFragment : Fragment() {
                             } else setStatDot(color)
                         }
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    row.addView(textView(13f, 255).apply {
+                    row.addView(textView(Style.TEXT_SMALL, 255).apply {
                         this.text = part.substring(split + 2)
                         setTypeface(null, Typeface.BOLD)
                         gravity = Gravity.END
                     })
-                } else row.addView(textView(13f, 200).apply { this.text = part })
+                } else row.addView(textView(Style.TEXT_SMALL, 200).apply { this.text = part })
                 details.addView(row)
             }
         }
 
         fun subtitle(text: String) {
             headerEnd.removeAllViews()
-            headerEnd.addView(textView(13f, 150).apply { this.text = text })
+            headerEnd.addView(textView(Style.TEXT_SMALL, 150).apply { this.text = text })
         }
 
         /** A big figure with a line under it, between the title and the drawing */
@@ -362,11 +362,11 @@ abstract class CardPageFragment : Fragment() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 addView(TextView(context, null, 0, R.style.TextLarge).apply {
                     text = figure
-                    textSize = 40f
+                    textSize = Style.TEXT_FIGURE
                     setTextColor(ink)
                     includeFontPadding = false
                 })
-                if (caption.isNotEmpty()) addView(textView(13f, 150).apply {
+                if (caption.isNotEmpty()) addView(textView(Style.TEXT_SMALL, 150).apply {
                     text = caption
                     updatePadding(top = 4.dpToPx())
                 })
@@ -379,7 +379,7 @@ abstract class CardPageFragment : Fragment() {
         fun segment(options: List<Int>, selected: Int, onSelect: (Int) -> Unit) {
             headerEnd.removeAllViews()
             options.forEachIndexed { i, option ->
-                headerEnd.addView(textView(13f, if (i == selected) 255 else 120).apply {
+                headerEnd.addView(textView(Style.TEXT_SMALL, if (i == selected) 255 else 120).apply {
                     setText(option)
                     if (i == selected) setTypeface(null, Typeface.BOLD)
                     setPadding(8.dpToPx(), 4.dpToPx(), if (i == options.lastIndex) 0 else 2.dpToPx(), 4.dpToPx())
@@ -393,7 +393,7 @@ abstract class CardPageFragment : Fragment() {
             headerEnd.removeAllViews()
             fun arrow(symbol: String, enabled: Boolean, by: Int, description: Int) = TextView(context, null, 0, R.style.TextLarge).apply {
                 this.text = symbol
-                textSize = 18f
+                textSize = Style.TEXT_TITLE
                 setTextColor(ink)
                 alpha = if (enabled) 0.8f else 0.2f
                 isEnabled = enabled
@@ -402,7 +402,7 @@ abstract class CardPageFragment : Fragment() {
                 setOnClickListener { onStep(by) }
             }
             headerEnd.addView(arrow("‹", canGoBack, -1, R.string.previous_days))
-            headerEnd.addView(textView(13f, 150).apply { this.text = text })
+            headerEnd.addView(textView(Style.TEXT_SMALL, 150).apply { this.text = text })
             headerEnd.addView(arrow("›", canGoForward, 1, R.string.next_days))
         }
 
@@ -414,7 +414,7 @@ abstract class CardPageFragment : Fragment() {
             chips.isVisible = true
             chips.removeAllViews()
             options.forEachIndexed { i, (name, color) ->
-                chips.addView(textView(13f, 255).apply {
+                chips.addView(textView(Style.TEXT_SMALL, 255).apply {
                     text = name
                     setBackgroundResource(R.drawable.bg_stat_chip)
                     setPadding(10.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
@@ -433,7 +433,7 @@ abstract class CardPageFragment : Fragment() {
         /** A key entry: a dot (or ring, or [icon]) in [color] and what it stands for */
         fun keyItem(color: Int, text: String, ring: Boolean = false, icon: String? = null) {
             key.isVisible = true
-            key.addView(textView(13f, 150).apply {
+            key.addView(textView(Style.TEXT_SMALL, 150).apply {
                 this.text = text
                 gravity = Gravity.CENTER_VERTICAL
                 val size = 11.dpToPx()

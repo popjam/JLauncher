@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.content.Context
 import android.os.SystemClock
 import app.olauncher.data.MoodStore
@@ -13,7 +14,7 @@ import kotlin.concurrent.thread
 object LockdownStats {
 
     const val NAME = "Lockdown"
-    private val COLOR = 0xFF8FB3FF.toInt()
+    private val COLOR = Style.LOCKDOWN_ON_DARK
 
     /** Left to right on the inverted row, happy to sad */
     private val LABELS = listOf("8h+", "4–8h", "2–4h", "Under 2h", "None")

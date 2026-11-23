@@ -44,7 +44,7 @@ object NewMedicine {
             addView(doses)
             addView(TextView(context).apply {
                 setText(R.string.medicine_doses_note)
-                textSize = 13f
+                textSize = Style.TEXT_SMALL
                 alpha = 0.6f
                 setPadding(4.dpToPx(), 6.dpToPx(), 4.dpToPx(), 0)
             })
@@ -99,5 +99,5 @@ object NewMedicine {
             medicine = true, nextDay = false)
     }
 
-    private val COLORS = listOf(0xFF9575CD, 0xFF4DB6AC, 0xFF64B5F6, 0xFFF06292, 0xFFFFB74D, 0xFFAED581).map { it.toInt() }
+    private val COLORS = listOf(Style.Palette.DEEP_PURPLE, Style.Palette.TEAL, Style.Palette.BLUE, Style.Palette.PINK, Style.Palette.ORANGE, Style.Palette.LIME)
 }

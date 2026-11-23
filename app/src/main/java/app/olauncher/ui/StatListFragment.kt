@@ -83,15 +83,15 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
             text = resources.getQuantityString(R.plurals.tracking_need_look, problems.size, problems.map { it.title }.let { names ->
                 if (names.size < 2) names.joinToString() else getString(R.string.list_and, names.dropLast(1).joinToString(", "), names.last())
             })
-            setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.WARNING, 0xFFFFB300.toInt(), 16.dpToPx()), null, null, null)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(StatIcons.drawable(StatIcons.WARNING, Style.WARNING, 16.dpToPx()), null, null, null)
             compoundDrawablePadding = 10.dpToPx()
             gravity = Gravity.CENTER_VERTICAL
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setTextColor(context.getColorFromAttr(R.attr.primaryColor))
             setLineSpacing(0f, 1.2f)
             background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = 16.dpToPx().toFloat()
-                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(0xFFFFB300.toInt(), 48))
+                cornerRadius = Style.radiusSmall
+                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(Style.WARNING, 48))
             }
             setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 12.dpToPx())
             setOnClickListener { findNavController().navigate(R.id.action_global_statsSettingsFragment, bundleOf(SettingsFragment.TO_TRACKING to true)) }
@@ -156,14 +156,14 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
                 LinearLayout.LayoutParams(22.dpToPx(), 22.dpToPx()).apply { marginEnd = 18.dpToPx() })
             addView(TextView(context, null, 0, R.style.TextLarge).apply {
                 text = name
-                textSize = if (home) 20f else 18f
+                textSize = if (home) Style.TEXT_TITLE else Style.TEXT_TITLE
                 setTextColor(ink)
                 isSingleLine = true
                 ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (value != null) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = value
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 alpha = 0.55f
                 isSingleLine = true

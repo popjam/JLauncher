@@ -230,25 +230,25 @@ internal fun StatPageFragment.musicTracksCard() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             updatePadding(top = 7.dpToPx(), bottom = 7.dpToPx())
-            addView(card.textView(20f, 255).apply {
+            addView(card.textView(Style.TEXT_TITLE, 255).apply {
                 text = (i + 1).toString()
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(musicShade(i / MUSIC_TRACKS.toFloat()))
             }, LinearLayout.LayoutParams(34.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(card.textView(14f, 240).apply {
+                addView(card.textView(Style.TEXT_BODY, 240).apply {
                     text = title
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
-                if (artist.isNotEmpty()) addView(card.textView(12f, 140).apply {
+                if (artist.isNotEmpty()) addView(card.textView(Style.TEXT_SMALL, 140).apply {
                     text = artist
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(card.textView(13f, 170).apply {
+            addView(card.textView(Style.TEXT_SMALL, 170).apply {
                 text = resources.getQuantityString(R.plurals.music_plays, count, count)
                 updatePadding(left = 10.dpToPx())
             })

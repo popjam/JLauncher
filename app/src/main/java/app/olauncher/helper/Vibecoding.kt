@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.content.Context
 import android.net.Uri
 import app.olauncher.data.MoodStore
@@ -101,7 +102,7 @@ object Vibecoding {
 
     const val NAME = "Vibecoding"
     private val DEVICES = listOf("PC", "Mac")
-    private val COLOR = 0xFFBA68C8.toInt()
+    private val COLOR = Style.Palette.PURPLE
 
     /** Left to right on the inverted row, happy to sad */
     private val LABELS = listOf("Under 1h", "1–2h", "2–3h", "3–5h", "5h+")

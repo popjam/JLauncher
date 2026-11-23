@@ -169,7 +169,7 @@ class DragSession(
         zones.forEach { zone ->
             val label = TextView(context, null, 0, R.style.TextSmall).apply {
                 text = zone.label
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 gravity = Gravity.CENTER
                 setPadding(20.dpToPx(), 12.dpToPx(), 20.dpToPx(), 12.dpToPx())
@@ -247,7 +247,7 @@ class DragSession(
         zoneViews.forEach { (zone, view) ->
             val on = zone.key == over
             view.background = GradientDrawable().apply {
-                cornerRadius = 24.dpToPx().toFloat()
+                cornerRadius = Style.radiusLarge
                 setColor(ColorUtils.blendARGB(back, ink, if (on) 0.3f else 0.08f))
                 setStroke(1.dpToPx(), ColorUtils.setAlphaComponent(ink, if (on) 200 else 80))
             }
@@ -256,7 +256,7 @@ class DragSession(
         slotViews.forEach { (slot, view) ->
             val on = slot.key == over
             view.background = GradientDrawable().apply {
-                cornerRadius = 14.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 setColor(ColorUtils.setAlphaComponent(ink, if (on) 46 else 10))
                 setStroke(if (on) 2.dpToPx() else 1.dpToPx(), ColorUtils.setAlphaComponent(ink, if (on) 220 else 90), 6.dpToPx().toFloat(), if (on) 0f else 4.dpToPx().toFloat())
             }

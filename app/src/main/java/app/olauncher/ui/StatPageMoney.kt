@@ -137,26 +137,26 @@ internal fun StatPageFragment.spendingCard() {
                 askEssential(purchase)
                 true
             }
-            addView(card.textView(15f, 255).apply {
+            addView(card.textView(Style.TEXT_BODY, 255).apply {
                 text = money(purchase.cents)
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(if (purchase.essential) faint(255) else moneyGold)
             }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(card.textView(14f, 235).apply {
+                addView(card.textView(Style.TEXT_BODY, 235).apply {
                     text = purchase.merchant
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
-                addView(card.textView(12f, 140).apply {
+                addView(card.textView(Style.TEXT_SMALL, 140).apply {
                     text = listOfNotNull(purchase.category, getString(R.string.essential).takeIf { purchase.essential },
                         getString(R.string.subscription).takeIf { isSubscription(purchase) }).joinToString(" · ").ifEmpty { `when` }
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(card.textView(12f, 130).apply {
+            addView(card.textView(Style.TEXT_SMALL, 130).apply {
                 text = `when`
                 updatePadding(left = 10.dpToPx())
             })
@@ -374,31 +374,31 @@ internal fun StatPageFragment.subscriptionsCard() {
                     .show()
                 true
             }
-            addView(card.textView(15f, 255).apply {
+            addView(card.textView(Style.TEXT_BODY, 255).apply {
                 text = money(sub.cents)
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(moneyGold)
             }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(card.textView(14f, 235).apply {
+                addView(card.textView(Style.TEXT_BODY, 235).apply {
                     text = sub.merchant
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
-                addView(card.textView(12f, 140).apply {
+                addView(card.textView(Style.TEXT_SMALL, 140).apply {
                     text = getString(periodName(sub.period)) + " · " + getString(R.string.subscription_next, dateText(sub.next))
                     isSingleLine = true
                     ellipsize = TextUtils.TruncateAt.END
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (sub.period != Subscriptions.Period.MONTHLY) addView(card.textView(12f, 130).apply {
+            if (sub.period != Subscriptions.Period.MONTHLY) addView(card.textView(Style.TEXT_SMALL, 130).apply {
                 text = getString(R.string.subscription_per_month, money(sub.monthlyCents))
                 updatePadding(left = 10.dpToPx())
             })
         })
     }
-    list.addView(card.textView(12f, 110).apply {
+    list.addView(card.textView(Style.TEXT_SMALL, 110).apply {
         text = getString(R.string.subscriptions_hint)
         updatePadding(top = 8.dpToPx())
     })
@@ -458,7 +458,7 @@ internal fun StatPageFragment.moneyCalendarCard() {
                 }
                 if (fill != null) s.rect(x, y, x + size, y + size, fill, corner)
                 else if (text != null) s.outline(x, y, x + size, y + size, faint(80), corner, s.dp(1.5f))
-                val textColor = if (fill != null && ColorUtils.calculateLuminance(fill) > 0.4) 0xFF1A1A1A.toInt() else if (fill != null) 0xFFFFFFFF.toInt() else faint(150)
+                val textColor = if (fill != null && ColorUtils.calculateLuminance(fill) > 0.4) Style.INK_ON_LIGHT else if (fill != null) android.graphics.Color.WHITE else faint(150)
                 // A day with nothing logged is just its date, faint
                 if (text == null) s.text(date.dayOfMonth.toString(), x + size / 2, y + size / 2 + s.sp(4.5f), faint(70), s.sp(12.5f))
                 else s.text(date.dayOfMonth.toString(), x + s.dp(6f), y + s.sp(11f), ColorUtils.setAlphaComponent(textColor, 150), s.sp(9.5f), Paint.Align.LEFT)

@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -32,8 +33,8 @@ object DeviceTime {
 
     /** [key] is the device's in [MoodStore.Day.deviceMs] */
     enum class Device(val file: String, val key: String, val label: Int, val color: Int, val updatedKey: String) {
-        MAC("JLauncher Mac screen time.json", "mac", R.string.device_mac, 0xFF90A4AE.toInt(), "updated"),
-        TV("JLauncher TV time.json", "tv", R.string.device_tv, 0xFFFF8A65.toInt(), "updatedTv"),
+        MAC("JLauncher Mac screen time.json", "mac", R.string.device_mac, Style.Palette.GREY, "updated"),
+        TV("JLauncher TV time.json", "tv", R.string.device_tv, Style.Palette.CORAL, "updatedTv"),
     }
 
     /** [spans]: when it was in use, in minutes from midnight ([ScreenSpans]); empty from files written before they were */

@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
@@ -379,7 +380,7 @@ object Places {
     private const val NETS_KEPT = 5
     private const val LEARN_ACCURACY_M = 200f
     private const val KEEP_DAYS = 400L
-    private val COLORS = listOf(0xFF4DB6AC, 0xFFF06292, 0xFFBA68C8, 0xFFFFD54F, 0xFFE57373, 0xFFAED581, 0xFFA1887F, 0xFF90A4AE).map { it.toInt() }
+    private val COLORS = listOf(Style.Palette.TEAL, Style.Palette.PINK, Style.Palette.PURPLE, Style.Palette.YELLOW, Style.Palette.RED, Style.Palette.LIME, Style.Palette.BROWN, Style.Palette.GREY)
 }
 
 /** The quarter-hourly check, for when the notification listener isn't running to get readings */

@@ -72,19 +72,19 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
         return onClosed()
     }
     val ink = ui.getColorFromAttr(R.attr.primaryColor)
-    val red = 0xFFEF5350.toInt()
+    val red = Style.DANGER
     fun faint(alpha: Int) = ColorUtils.setAlphaComponent(ink, alpha)
 
     val dot = ImageView(ui)
     val status = TextView(ui, null, 0, R.style.TextSmall).apply {
-        textSize = 13f
+        textSize = Style.TEXT_SMALL
         setTextColor(ink)
         setTypeface(null, Typeface.BOLD)
         letterSpacing = 0.08f
     }
     val timer = TextView(ui, null, 0, R.style.TextLarge).apply {
         text = "0:00"
-        textSize = 52f
+        textSize = Style.TEXT_FIGURE
         setTextColor(ink)
         gravity = Gravity.CENTER
         fontFeatureSettings = "tnum"
@@ -218,7 +218,7 @@ private fun roundButton(context: Context, icon: String, name: String, ink: Int, 
     addView(this.icon, LinearLayout.LayoutParams(sizeDp.dpToPx(), sizeDp.dpToPx()))
     label.apply {
         text = name
-        textSize = 12f
+        textSize = Style.TEXT_SMALL
         setTextColor(ColorUtils.setAlphaComponent(ink, 170))
         gravity = Gravity.CENTER
     }
@@ -266,7 +266,7 @@ private fun sheetCard(context: Context) = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
     val ink = context.getColorFromAttr(R.attr.primaryColor)
     background = GradientDrawable().apply {
-        cornerRadius = 28.dpToPx().toFloat()
+        cornerRadius = Style.radiusLarge
         setColor(ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryInverseColor), 245))
         setStroke((0.5f * context.resources.displayMetrics.density).toInt().coerceAtLeast(1), ColorUtils.setAlphaComponent(ink, 90))
     }
@@ -304,7 +304,7 @@ internal fun Fragment.fillPending(into: LinearLayout) {
     // Being written out now
     if (writing) into.addView(TextView(ui, null, 0, R.style.TextSmall).apply {
         setText(R.string.voice_writing)
-        textSize = 13f
+        textSize = Style.TEXT_SMALL
         setTextColor(ink)
         alpha = 0.6f
         setTypeface(null, Typeface.BOLD)
@@ -313,7 +313,7 @@ internal fun Fragment.fillPending(into: LinearLayout) {
     if (files.isEmpty()) return
     into.addView(TextView(ui, null, 0, R.style.TextSmall).apply {
         text = resources.getQuantityString(R.plurals.voice_not_written, files.size, files.size)
-        textSize = 13f
+        textSize = Style.TEXT_SMALL
         setTextColor(ink)
         alpha = 0.6f
         setTypeface(null, Typeface.BOLD)
@@ -332,7 +332,7 @@ private fun Fragment.pendingRow(ui: Context, ink: Int, file: File, faint: (Int) 
         setPadding(4.dpToPx(), 6.dpToPx(), 0, 6.dpToPx())
         addView(TextView(ui, null, 0, R.style.TextSmall).apply {
             text = "$day, $time · ${clockOf(VoiceNotes.wavMs(file))}"
-            textSize = 14f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(pillButton(ui, ink, ui.getString(R.string.voice_try_again), null) {
@@ -357,7 +357,7 @@ private fun Fragment.pendingRow(ui: Context, ink: Int, file: File, faint: (Int) 
 /** A small outlined button with an optional pixel icon, doing [onTap] */
 internal fun pillButton(context: Context, ink: Int, text: String, icon: String?, onTap: () -> Unit): TextView = TextView(context, null, 0, R.style.TextSmall).apply {
     this.text = text
-    textSize = 13f
+    textSize = Style.TEXT_SMALL
     setTextColor(ink)
     gravity = Gravity.CENTER_VERTICAL
     if (icon != null) {
@@ -365,7 +365,7 @@ internal fun pillButton(context: Context, ink: Int, text: String, icon: String?,
         compoundDrawablePadding = 6.dpToPx()
     }
     background = GradientDrawable().apply {
-        cornerRadius = 14.dpToPx().toFloat()
+        cornerRadius = Style.radiusSmall
         setStroke(1.dpToPx(), ColorUtils.setAlphaComponent(ink, 70))
     }
     setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())

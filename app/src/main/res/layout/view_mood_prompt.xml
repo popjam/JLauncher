@@ -53,7 +53,7 @@
                 android:maxLines="3"
                 android:text="@string/how_are_you_feeling"
                 android:textColor="?attr/primaryColor"
-                android:textSize="24sp"
+                android:textSize="@dimen/size_large"
                 app:autoSizeMaxTextSize="24sp"
                 app:autoSizeMinTextSize="14sp"
                 app:autoSizeStepGranularity="1sp"
@@ -156,7 +156,7 @@
                 android:alpha="0.7"
                 android:text="@string/thoughts"
                 android:textColor="?attr/primaryColor"
-                android:textSize="14sp" />
+                android:textSize="@dimen/size_body" />
 
             <TextView
                 android:id="@+id/moodPromptVoice"
@@ -170,7 +170,7 @@
                 android:paddingVertical="6dp"
                 android:text="@string/voice_note_button"
                 android:textColor="?attr/primaryColor"
-                android:textSize="13sp"
+                android:textSize="@dimen/size_small"
                 android:visibility="gone" />
         </LinearLayout>
 
@@ -192,7 +192,7 @@
             android:shadowRadius="0"
             android:textColor="?attr/primaryColor"
             android:textColorHint="?attr/primaryColorTrans50"
-            android:textSize="15sp" />
+            android:textSize="@dimen/size_body" />
 
         <TextView
             android:id="@+id/moodPromptConfirm"

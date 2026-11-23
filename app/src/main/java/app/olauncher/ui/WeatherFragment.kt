@@ -116,8 +116,8 @@ class WeatherFragment : Fragment() {
                 line.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
-                    addView(smallText(label, 12f, 0.6f))
-                    addView(smallText(value, 15f).apply { isSingleLine = true })
+                    addView(smallText(label, Style.TEXT_SMALL, 0.6f))
+                    addView(smallText(value, Style.TEXT_BODY).apply { isSingleLine = true })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
             binding.dayStats.addView(line)
@@ -145,7 +145,7 @@ class WeatherFragment : Fragment() {
                     isDay = hour.isDay
                     contentDescription = Weather.conditionName(context, hour.code)
                 }, LinearLayout.LayoutParams(28.dpToPx(), 28.dpToPx()).apply { topMargin = 6.dpToPx() })
-                addView(line("${hour.temp}°", 15f).apply { setPadding(0, 6.dpToPx(), 0, 0) })
+                addView(line("${hour.temp}°", Style.TEXT_BODY).apply { setPadding(0, 6.dpToPx(), 0, 0) })
                 addView(line(getString(R.string.uv_index, hour.uv), 11f, 0.7f).apply { setPadding(0, 2.dpToPx(), 0, 0) })
                 // Only worth a mention when rain is a real chance
                 addView(line(if (hour.rainChance >= 10) "${hour.rainChance}%" else " ", 11f, 0.7f))
@@ -168,19 +168,19 @@ class WeatherFragment : Fragment() {
                     selectedDate = day.date
                     render()
                 }
-                addView(smallText(name, 15f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(smallText(name, Style.TEXT_BODY), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(PixelWeatherView(context).apply {
                     code = day.code
                     uv = day.uv
                     contentDescription = Weather.conditionName(context, day.code)
                 }, LinearLayout.LayoutParams(28.dpToPx(), 28.dpToPx()))
-                addView(smallText(if (day.rainChance >= 10) "${day.rainChance}%" else "", 13f, 0.7f).apply {
+                addView(smallText(if (day.rainChance >= 10) "${day.rainChance}%" else "", Style.TEXT_SMALL, 0.7f).apply {
                     gravity = Gravity.END
                 }, LinearLayout.LayoutParams(48.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
                 addView(smallText(getString(R.string.uv_index, day.uv), 13f, 0.7f).apply {
                     gravity = Gravity.END
                 }, LinearLayout.LayoutParams(56.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
-                addView(smallText("${day.max}° / ${day.min}°", 15f).apply {
+                addView(smallText("${day.max}° / ${day.min}°", Style.TEXT_BODY).apply {
                     gravity = Gravity.END
                 }, LinearLayout.LayoutParams(84.dpToPx(), ViewGroup.LayoutParams.WRAP_CONTENT))
             })

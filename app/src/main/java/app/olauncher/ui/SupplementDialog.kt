@@ -54,7 +54,7 @@ object SupplementDialog {
         }
         fun label(text: Int) = TextView(context).apply {
             setText(text)
-            textSize = 12.5f
+            textSize = Style.TEXT_SMALL
             alpha = 0.6f
             setPadding(4.dpToPx(), 10.dpToPx(), 4.dpToPx(), 0)
         }
@@ -99,7 +99,7 @@ object SupplementDialog {
         val kinds = FlowLayout(context)
         val days = FlowLayout(context)
         val dateText = TextView(context).apply {
-            textSize = 16f
+            textSize = Style.TEXT_BODY
         }.also { AppDialog.box(it) }
 
         box.addView(column(R.string.supplement_name, name))
@@ -151,7 +151,7 @@ object SupplementDialog {
 
         fun chip(text: String, on: Boolean, onTap: () -> Unit) = TextView(context).apply {
             this.text = text
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setBackgroundResource(R.drawable.bg_stat_chip)
             val side = if (text.length == 1) 10.dpToPx() else 12.dpToPx()
             setPadding(side, 6.dpToPx(), side, 6.dpToPx())
@@ -210,7 +210,7 @@ object SupplementDialog {
         val accent = TypedValue().also { context.theme.resolveAttribute(android.R.attr.colorAccent, it, true) }.data
         fun button(text: Int, color: Int = accent, onTap: () -> Unit) = TextView(context).apply {
             setText(text)
-            textSize = 14.5f
+            textSize = Style.TEXT_BODY
             setTypeface(null, Typeface.BOLD)
             setTextColor(color)
             setPadding(10.dpToPx(), 10.dpToPx(), 10.dpToPx(), 10.dpToPx())
@@ -232,7 +232,7 @@ object SupplementDialog {
                 finish()
             }
             buttons.addView(startAgain)
-            buttons.addView(button(R.string.supplement_delete, 0xFFE57373.toInt()) {
+            buttons.addView(button(R.string.supplement_delete, Style.DANGER_SOFT) {
                 AppDialog(context)
                     .setMessage(context.getString(R.string.supplement_delete_confirm, supplement.name))
                     .setNegativeButton(R.string.cancel, null)
@@ -286,7 +286,7 @@ object SupplementDialog {
             addView(field, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (supplement.unit.isNotEmpty()) addView(TextView(context).apply {
                 text = supplement.unit
-                textSize = 16f
+                textSize = Style.TEXT_BODY
                 setPadding(12.dpToPx(), 0, 0, 0)
             })
         }

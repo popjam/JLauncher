@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -97,14 +98,7 @@ object Weather {
     private const val HIGH_UV = 6
 
     /** Colours from cold to hot, at temperatures in °C */
-    private val TEMP_COLORS = listOf(
-        0f to 0xFF2F4FC4.toInt(),  // dark blue
-        10f to 0xFF4A9BE8.toInt(), // light blue
-        17f to 0xFF56C7A8.toInt(), // teal
-        22f to 0xFFF2C84B.toInt(), // yellow
-        28f to 0xFFF2843A.toInt(), // orange
-        34f to 0xFFE53935.toInt(), // red
-    )
+    private val TEMP_COLORS = Style.TEMPERATURE
 
     /** Dark blue for cold through to red for hot. */
     fun tempColor(temp: Int, fahrenheit: Boolean): Int {

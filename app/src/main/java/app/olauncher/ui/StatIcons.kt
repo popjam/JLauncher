@@ -59,7 +59,7 @@ object StatIcons {
         paint.style = Paint.Style.FILL
         // A stat as dark as near-black would vanish on the dark background, so it's lifted a little
         paint.color = if (androidx.core.graphics.ColorUtils.calculateLuminance(color) < 0.05)
-            androidx.core.graphics.ColorUtils.blendARGB(color, 0xFFFFFFFF.toInt(), 0.35f) else color
+            androidx.core.graphics.ColorUtils.blendARGB(color, android.graphics.Color.WHITE, 0.35f) else color
         val rows = icon.lines()
         rows.forEachIndexed { y, row ->
             row.forEachIndexed { x, c ->

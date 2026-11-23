@@ -69,7 +69,7 @@ class DayPageFragment : CardPageFragment() {
         val header = pageHeader(context, null, "") { findNavController().popBackStack() }.also { h ->
             // The day's name goes in the header's title
             title = (h as LinearLayout).getChildAt(h.childCount - 1) as TextView
-            title.textSize = 24f
+            title.textSize = Style.TEXT_LARGE
         }
         return FrameLayout(context).apply {
             isClickable = true
@@ -181,7 +181,7 @@ class DayPageFragment : CardPageFragment() {
         app.olauncher.helper.JournalSummaries.get(context, date, note)?.let { summary ->
             card.root.addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = summary
-                textSize = 15f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 alpha = 0.7f
                 setTypeface(null, Typeface.ITALIC)
@@ -196,7 +196,7 @@ class DayPageFragment : CardPageFragment() {
         val noteText = TextView(context, null, 0, R.style.TextSmall).apply {
             text = note
             hint = getString(R.string.day_note_hint)
-            textSize = 17f
+            textSize = Style.TEXT_TITLE
             setTextColor(ink)
             setHintTextColor(faint(110))
             setLineSpacing(3.dpToPx().toFloat(), 1.05f)
@@ -214,7 +214,7 @@ class DayPageFragment : CardPageFragment() {
             isVerticalScrollBarEnabled = true
             overScrollMode = View.OVER_SCROLL_NEVER
             background = GradientDrawable().apply {
-                cornerRadius = 16.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 setColor(faint(18))
             }
             clipToOutline = true
@@ -253,20 +253,20 @@ class DayPageFragment : CardPageFragment() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 9.dpToPx(), 0, 9.dpToPx())
                 if (stat.id == editing) background = GradientDrawable().apply {
-                    cornerRadius = 10.dpToPx().toFloat()
+                    cornerRadius = Style.radiusSmall
                     setColor(faint(22))
                 } else if (editable) setBackgroundResource(android.R.drawable.list_selector_background)
                 setPadding(8.dpToPx(), 9.dpToPx(), 8.dpToPx(), 9.dpToPx())
                 addView(View(context).apply { background = StatIcons.drawable(StatIcons.forStat(stat), stat.color, 16.dpToPx()) },
                     LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(card.textView(15f, 235).apply { text = stat.name }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(card.textView(Style.TEXT_BODY, 235).apply { text = stat.name }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 if (face != null && stat.id != MoodStore.USAGE && !stat.isBlank(face)) addView(View(context).apply {
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
                         setColor(stat.faceColor(context, face))
                     }
                 }, LinearLayout.LayoutParams(9.dpToPx(), 9.dpToPx()).apply { marginEnd = 8.dpToPx() })
-                addView(card.textView(14f, if (value == null) 90 else 190).apply { text = value ?: "–" })
+                addView(card.textView(Style.TEXT_BODY, if (value == null) 90 else 190).apply { text = value ?: "–" })
                 if (editable) setOnClickListener {
                     editing = stat.id
                     render()
@@ -327,12 +327,12 @@ class DayPageFragment : CardPageFragment() {
             Social.WORK -> work?.name ?: getString(R.string.work)
             else -> homes.getOrNull(place)?.name ?: getString(R.string.social_home_n, place + 1)
         }
-        fun color(place: Int) = if (Social.isNamed(place)) app.olauncher.helper.Places.place(context, place)?.color ?: 0xFF4FC3F7.toInt() else when (place) {
-            Social.OUT -> 0xFF4FC3F7.toInt()
+        fun color(place: Int) = if (Social.isNamed(place)) app.olauncher.helper.Places.place(context, place)?.color ?: Style.Palette.SKY else when (place) {
+            Social.OUT -> Style.Palette.SKY
             Social.UNKNOWN -> faint(50)
-            Social.WORK -> 0xFF7986CB.toInt()
-            1 -> 0xFFFFB74D.toInt()
-            else -> 0xFF81C784.toInt()
+            Social.WORK -> Style.Palette.INDIGO
+            1 -> Style.Palette.ORANGE
+            else -> Style.Palette.GREEN
         }
         val card = Card(getString(R.string.day_places), icon = StatIcons.SOCIAL, iconColor = faint(200))
         val (start, end) = Social.dayBounds(context, date)
@@ -421,12 +421,12 @@ class DayPageFragment : CardPageFragment() {
                 setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
                 if (icon != null) addView(View(context).apply { background = StatIcons.drawable(icon, faint(190), 15.dpToPx()) },
                     LinearLayout.LayoutParams(15.dpToPx(), 15.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(card.textView(14f, 230).apply {
+                addView(card.textView(Style.TEXT_BODY, 230).apply {
                     text = name
                     isSingleLine = true
                     ellipsize = android.text.TextUtils.TruncateAt.END
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                addView(card.textView(13f, 160).apply {
+                addView(card.textView(Style.TEXT_SMALL, 160).apply {
                     text = value
                     updatePadding(left = 10.dpToPx())
                 })

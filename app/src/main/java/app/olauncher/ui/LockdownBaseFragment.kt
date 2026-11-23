@@ -179,7 +179,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
                 if (level == 0) typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            if (value != null) addView(card.textView(15f, 215).apply {
+            if (value != null) addView(card.textView(Style.TEXT_BODY, 215).apply {
                 text = value
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
@@ -202,20 +202,20 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         val box = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 18.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(context.getColorFromAttr(R.attr.primaryShadeDarkColor), 255))
                 setStroke(1.dpToPx(), faint(60))
             }
             setPadding(16.dpToPx(), 12.dpToPx(), 16.dpToPx(), 14.dpToPx())
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 this.text = title
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 this.text = text
-                textSize = 14f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 alpha = 0.8f
                 updatePadding(top = 4.dpToPx())
@@ -229,7 +229,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
     }
 
     /** A line of small text in a card, like "Pause before blocked apps" */
-    internal fun line(card: Card, text: String) = card.textView(13.5f, 160).apply {
+    internal fun line(card: Card, text: String) = card.textView(Style.TEXT_SMALL, 160).apply {
         this.text = text
         setPadding(4.dpToPx(), 0, 4.dpToPx(), 6.dpToPx())
     }
@@ -241,10 +241,10 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         val context = requireContext()
         return TextView(context, null, 0, R.style.TextSmall).apply {
             this.text = if (removable) "$text  ×" else text
-            textSize = 13.5f
+            textSize = Style.TEXT_SMALL
             setTextColor(if (on) context.getColorFromAttr(R.attr.primaryShadeDarkColor).let { androidx.core.graphics.ColorUtils.setAlphaComponent(it, 255) } else ink)
             background = GradientDrawable().apply {
-                cornerRadius = 14.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 if (on) setColor(faint(230)) else setStroke(1.dpToPx(), faint(80))
             }
             setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
@@ -262,14 +262,14 @@ abstract class LockdownBaseFragment : CardPageFragment() {
 
     internal fun box(context: Context, hint: Int, onText: (String) -> Unit, onDone: ((String) -> Unit)? = null) = EditText(context, null, 0, R.style.TextSmall).apply {
         this.hint = getString(hint)
-        textSize = 15f
+        textSize = Style.TEXT_BODY
         setTextColor(ink)
         setHintTextColor(faint(110))
         isSingleLine = true
         inputType = InputType.TYPE_CLASS_TEXT or if (onDone != null) InputType.TYPE_TEXT_VARIATION_URI else InputType.TYPE_TEXT_VARIATION_FILTER
         imeOptions = if (onDone != null) android.view.inputmethod.EditorInfo.IME_ACTION_DONE else android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         background = GradientDrawable().apply {
-            cornerRadius = 22.dpToPx().toFloat()
+            cornerRadius = Style.radiusLarge
             setColor(panelColor)
         }
         setPadding(18.dpToPx(), 11.dpToPx(), 18.dpToPx(), 11.dpToPx())
@@ -301,10 +301,10 @@ abstract class LockdownBaseFragment : CardPageFragment() {
 
     internal fun pill(text: String, onTap: () -> Unit) = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
         this.text = text
-        textSize = 14.5f
+        textSize = Style.TEXT_BODY
         setTextColor(ink)
         background = GradientDrawable().apply {
-            cornerRadius = 20.dpToPx().toFloat()
+            cornerRadius = Style.radiusLarge
             setColor(faint(36))
         }
         setPadding(18.dpToPx(), 9.dpToPx(), 18.dpToPx(), 9.dpToPx())
@@ -408,14 +408,14 @@ abstract class LockdownBaseFragment : CardPageFragment() {
      */
     internal fun devicePill(device: Lockdown.Device, on: Boolean, enabled: Boolean, onTap: () -> Unit): TextView {
         val context = requireContext()
-        val fill = if (darkPage) 0xFF8FB3FF.toInt() else 0xFF3D5AFE.toInt()
+        val fill = Style.lockdown(darkPage)
         val text = when {
-            on -> if (darkPage) 0xFF0B1020.toInt() else 0xFFFFFFFF.toInt()
+            on -> if (darkPage) Style.LOCKDOWN_INK_ON_DARK else android.graphics.Color.WHITE
             else -> faint(if (enabled) 200 else 70)
         }
         return TextView(context, null, 0, R.style.TextSmall).apply {
             this.text = LockdownGate.deviceName(context, device.bit)
-            textSize = 12.5f
+            textSize = Style.TEXT_SMALL
             setTextColor(text)
             val icon = StatIcons.drawable(when (device) {
                 Lockdown.Device.PHONE -> StatIcons.PHONE_SMALL
@@ -427,7 +427,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
             compoundDrawablePadding = 5.dpToPx()
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 14.dpToPx().toFloat()
+                cornerRadius = Style.radiusSmall
                 if (on) setColor(fill) else setStroke(1.dpToPx(), faint(if (enabled) 90 else 30))
             }
             setPadding(10.dpToPx(), 5.dpToPx(), 11.dpToPx(), 5.dpToPx())

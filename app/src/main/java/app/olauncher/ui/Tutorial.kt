@@ -34,17 +34,17 @@ object Tutorial {
         }
         var page = 0
         val step = TextView(activity, null, 0, R.style.TextSmall).apply {
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setTextColor(ink)
             alpha = 0.5f
         }
         val title = TextView(activity, null, 0, R.style.TextLarge).apply {
-            textSize = 26f
+            textSize = Style.TEXT_LARGE
             setTextColor(ink)
             setPadding(0, 6.dpToPx(), 0, 0)
         }
         val body = TextView(activity, null, 0, R.style.TextSmall).apply {
-            textSize = 16f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
             alpha = 0.85f
             setLineSpacing(0f, 1.25f)
@@ -52,7 +52,7 @@ object Tutorial {
         }
         fun button(text: Int, faded: Boolean) = TextView(activity, null, 0, R.style.TextSmall).apply {
             setText(text)
-            textSize = 16f
+            textSize = Style.TEXT_BODY
             setTextColor(ink)
             alpha = if (faded) 0.55f else 1f
             setPadding(12.dpToPx(), 10.dpToPx(), 12.dpToPx(), 10.dpToPx())
@@ -76,7 +76,7 @@ object Tutorial {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 28.dpToPx().toFloat()
+                cornerRadius = Style.radiusLarge
                 setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(activity.getColorFromAttr(R.attr.primaryShadeDarkColor), 255))
                 setStroke(1.dpToPx(), androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 50))
             }

@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.Manifest
 import android.app.Notification
 import android.app.Person
@@ -270,7 +271,7 @@ object People {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     const val NAME = "People"
-    private val COLOR = 0xFFFF8A65.toInt()
+    private val COLOR = Style.Palette.CORAL
     private val LABELS = listOf("No messages", "1–9", "10–29", "30–59", "60+")
     private val OLD_LABELS = listOf("No one", "1 person", "2 people", "3–4 people", "5+ people")
     private const val MAX_NAME = 40

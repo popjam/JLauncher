@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -411,13 +412,13 @@ object Social {
     private const val ALIVE = "alive"
     private const val ALIVE_EVERY_MS = 10 * 60_000L
     private const val ZONES = "zones"
-    private val WORK_COLOR = 0xFF7986CB.toInt()
+    private val WORK_COLOR = Style.Palette.INDIGO
     private val WORK_LABELS = listOf("Off", "Worked")
     private const val WORK_SINCE = "workSince"
     private const val MIN_WORK_MS = 60 * 60 * 1000L
     private const val WORK_DAYS_BACK = 60L
     const val HOMES = 2
-    private val COLOR = 0xFF4FC3F7.toInt()
+    private val COLOR = Style.Palette.SKY
     private val LABELS = listOf("Under 1h", "1–2h", "2–4h", "4–6h", "6h+")
 
     private val LOCK = Any()

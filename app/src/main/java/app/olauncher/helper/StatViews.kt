@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
@@ -66,17 +67,16 @@ data class StatInfo(
 /** What a stat is, for the cards and colours its page gets. Worked out from its name or what fills it in. */
 enum class StatKind(val shades: Pair<Int, Int>? = null) {
     MOOD, SCREEN,
-    MEDICINE(0xFFC4A3F5.toInt() to 0xFF4A148C.toInt()),
-    COFFEE(0xFFD9B48F.toInt() to 0xFF6D4325.toInt()),
-    MONEY(0xFFFFE08A.toInt() to 0xFFB8860B.toInt()),
-    EXERCISE(0xFFA7F3EB.toInt() to 0xFF00897B.toInt()),
-    MUSIC(0xFFA5ECF5.toInt() to 0xFF00838F.toInt()),
-    WORK(0xFFC5CAE9.toInt() to 0xFF3949AB.toInt()),
+    MEDICINE(Style.Shades.MEDICINE),
+    COFFEE(Style.Shades.COFFEE),
+    MONEY(Style.Shades.MONEY),
+    EXERCISE(Style.Shades.EXERCISE),
+    MUSIC(Style.Shades.MUSIC),
+    WORK(Style.Shades.WORK),
     MEDITATION, SLEEP, VIBECODING, SOCIAL, LIBIDO, WEATHER, PEOPLE, LOCKDOWN, PLAIN;
 }
 
-/** Sleep's faces by id, happiest (most sleep) first: bright blue down to slate */
-private val SLEEP_BLUES = intArrayOf(0xFF8FB8F7.toInt(), 0xFF6E9FE8.toInt(), 0xFF5577C4.toInt(), 0xFF495E92.toInt(), 0xFF4A5568.toInt())
+private val SLEEP_BLUES = Style.SLEEP_BLUES
 
 /** [StatKind] for a stat, from what fills it in or its name. */
 fun Context.statKind(id: String, name: String, medicine: Boolean, data: MoodStore.Data): StatKind {
@@ -141,7 +141,7 @@ fun bindFaceLabels(row: LinearLayout, labels: List<String>, alphas: List<Float>)
         repeat(labels.size) {
             row.addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 gravity = Gravity.CENTER
-                textSize = 12f
+                textSize = Style.TEXT_SMALL
                 isSingleLine = true
                 ellipsize = TextUtils.TruncateAt.END
                 setTextColor(context.getColorFromAttr(R.attr.primaryColor))

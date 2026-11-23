@@ -294,21 +294,21 @@ class StatPageFragment : CardPageFragment() {
         val context = requireContext()
         val problems = Tracking.problemsFor(context, stat.kind)
         if (problems.isEmpty()) return
-        val card = Card(getString(R.string.tracking_paused), icon = StatIcons.WARNING, iconColor = 0xFFFFB300.toInt())
+        val card = Card(getString(R.string.tracking_paused), icon = StatIcons.WARNING, iconColor = Style.WARNING)
         card.showNote(problems.joinToString("\n") { problem ->
             problem.title + ": " + problem.detail + (problem.since?.let { " · " + getString(R.string.tracking_since, dateText(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate())) } ?: "")
         })
         card.note.gravity = android.view.Gravity.START
         val fixable = problems.firstOrNull { it.fix != null }
-        if (fixable != null) card.chipRow(listOf(getString(R.string.tracking_fix) to 0xFFFFB300.toInt()), null) { fixable.fix?.invoke(context) }
+        if (fixable != null) card.chipRow(listOf(getString(R.string.tracking_fix) to Style.WARNING), null) { fixable.fix?.invoke(context) }
     }
 
     /** The stat's name and icon on a band of its colour, with back and Edit on it */
     internal fun renderHeader() {
         val color = stat.themeColor
-        val onColor = if (ColorUtils.calculateLuminance(color) > 0.45) 0xFF161616.toInt() else 0xFFFFFFFF.toInt()
+        val onColor = if (ColorUtils.calculateLuminance(color) > 0.45) Style.INK_ON_LIGHT else android.graphics.Color.WHITE
         binding.header.background = GradientDrawable().apply {
-            cornerRadius = 28.dpToPx().toFloat()
+            cornerRadius = Style.radiusLarge
             setColor(color)
         }
         binding.statName.text = stat.name
@@ -317,7 +317,7 @@ class StatPageFragment : CardPageFragment() {
         binding.back.setTextColor(onColor)
         binding.editStat.setTextColor(onColor)
         binding.editStat.background = GradientDrawable().apply {
-            cornerRadius = 20.dpToPx().toFloat()
+            cornerRadius = Style.radiusLarge
             setStroke(1.dpToPx(), ColorUtils.setAlphaComponent(onColor, 110))
         }
     }
@@ -616,7 +616,7 @@ class StatPageFragment : CardPageFragment() {
                         else -> {
                             val fill = stat.faceColor(requireContext(), face)
                             s.rect(x, y, x + size, y + size, fill, corner)
-                            if (ColorUtils.calculateLuminance(fill) > 0.4) 0xFF111111.toInt() else 0xFFFFFFFF.toInt()
+                            if (ColorUtils.calculateLuminance(fill) > 0.4) Style.INK_ON_LIGHT else android.graphics.Color.WHITE
                         }
                     }
                     val textSize = s.sp(13.5f)
@@ -643,7 +643,7 @@ class StatPageFragment : CardPageFragment() {
     }
 
     /** The homes' colours, then work's */
-    internal val homeColors by lazy { listOf(0xFF81C784.toInt(), 0xFFFFB74D.toInt(), 0xFF7986CB.toInt()) }
+    internal val homeColors by lazy { listOf(Style.Palette.GREEN, Style.Palette.ORANGE, Style.Palette.INDIGO) }
 
     /** Which of week, month and year the places pie shows */
     internal var placesPeriod = 0
@@ -662,8 +662,8 @@ class StatPageFragment : CardPageFragment() {
     internal val sources: List<Source>
         get() = listOf(
             Source(PHONE, getString(R.string.device_phone), StatIcons.PHONE, stat.color),
-            Source(DeviceTime.Device.MAC.key, getString(R.string.device_mac), StatIcons.LAPTOP, ColorUtils.blendARGB(stat.color, 0xFFFFFFFF.toInt(), 0.45f)),
-            Source(DeviceTime.Device.TV.key, getString(R.string.device_tv), StatIcons.TV, ColorUtils.blendARGB(stat.color, 0xFF000000.toInt(), 0.4f)),
+            Source(DeviceTime.Device.MAC.key, getString(R.string.device_mac), StatIcons.LAPTOP, ColorUtils.blendARGB(stat.color, android.graphics.Color.WHITE, 0.45f)),
+            Source(DeviceTime.Device.TV.key, getString(R.string.device_tv), StatIcons.TV, ColorUtils.blendARGB(stat.color, android.graphics.Color.BLACK, 0.4f)),
         )
 
     // --- The Mac's and TV's screen time, from the files they write to Google Drive ---
@@ -1142,7 +1142,7 @@ class StatPageFragment : CardPageFragment() {
         internal const val PORN_WEEKS = 10
         internal const val LIMIT_WEEKS = 10
         internal const val WORK_TREND_WEEKS = 12
-        internal const val LIMIT_OVER_COLOR = 0xFFE5736F.toInt()
+        internal const val LIMIT_OVER_COLOR = Style.DANGER_SOFT
         internal const val PORN_GRID_WEEKS = 5
         internal const val PORN_MIN_MINUTES = 2
 

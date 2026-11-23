@@ -66,7 +66,7 @@ class JournalEntryFragment : Fragment() {
         saved = day?.note.orEmpty()
 
         words = TextView(context, null, 0, R.style.TextSmall).apply {
-            textSize = 13f
+            textSize = Style.TEXT_SMALL
             setTextColor(faint(150))
         }
         val meta = LinearLayout(context).apply {
@@ -86,7 +86,7 @@ class JournalEntryFragment : Fragment() {
         input = EditText(context).apply {
             setText(saved)
             hint = getString(if (date == LocalDate.now()) R.string.journal_today_hint else R.string.journal_day_hint)
-            textSize = 17f
+            textSize = Style.TEXT_TITLE
             setTextColor(ink)
             setHintTextColor(faint(110))
             setLineSpacing(4.dpToPx().toFloat(), 1.1f)

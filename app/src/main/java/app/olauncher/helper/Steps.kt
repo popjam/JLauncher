@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -122,7 +123,7 @@ object Steps {
     fun setGoal(context: Context, steps: Int) = prefs(context).edit().putInt(GOAL_KEY, steps).apply()
 
     private const val GOAL_KEY = "goal"
-    private val COLOR = 0xFFAED581.toInt()
+    private val COLOR = Style.Palette.LIME
     private val LABELS = listOf("Under 2k", "2–5k", "5–8k", "8–10k", "10k+")
 
     private val LOCK = Any()

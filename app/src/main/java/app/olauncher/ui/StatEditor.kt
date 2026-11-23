@@ -257,7 +257,7 @@ object StatEditor {
             color = faceColor
         }, LinearLayout.LayoutParams(26.dpToPx(), 26.dpToPx()))
         addView(textInput(context, text, null, onChange).apply {
-            textSize = 15f
+            textSize = Style.TEXT_BODY
             setPadding(12.dpToPx(), 10.dpToPx(), 12.dpToPx(), 10.dpToPx())
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -268,7 +268,7 @@ object StatEditor {
     /** A one-line box, up to [maxLength] if given. The default EditText style makes it focusable and brings up the keyboard. */
     private fun textInput(context: Context, text: String, maxLength: Int?, onChange: (String) -> Unit) = EditText(context).apply {
         setBackgroundResource(R.drawable.rounded_box)
-        textSize = 13f
+        textSize = Style.TEXT_SMALL
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         imeOptions = EditorInfo.IME_ACTION_NEXT
         isSingleLine = true
@@ -300,7 +300,7 @@ object StatEditor {
         })
         addView(TextView(context).apply {
             text = context.getString(R.string.out_of, scale)
-            textSize = 12f
+            textSize = Style.TEXT_SMALL
             gravity = Gravity.CENTER
             setTextColor(context.getColorFromAttr(R.attr.primaryColor))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {

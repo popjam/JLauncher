@@ -1,5 +1,6 @@
 package app.olauncher.helper
 
+import app.olauncher.ui.Style
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -31,7 +32,7 @@ object BlockScreen {
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = 22.dpToPx().toFloat()
+                cornerRadius = Style.radiusLarge
                 setColor(Color.BLACK)
                 setStroke((0.8f * context.resources.displayMetrics.density).toInt().coerceAtLeast(1), faint(128))
             }
@@ -46,7 +47,7 @@ object BlockScreen {
                 })
                 addView(TextView(context, null, 0, R.style.TextLarge).apply {
                     text = title
-                    textSize = 23f
+                    textSize = Style.TEXT_TITLE
                     setTextColor(ink)
                     setShadowLayer(0f, 0f, 0f, 0)
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -54,7 +55,7 @@ object BlockScreen {
             lines.filter { it.isNotBlank() }.forEachIndexed { i, line ->
                 addView(TextView(context, null, 0, R.style.TextSmall).apply {
                     text = line
-                    textSize = 15f
+                    textSize = Style.TEXT_BODY
                     setTextColor(faint(195))
                     setShadowLayer(0f, 0f, 0f, 0)
                     setLineSpacing(0f, 1.15f)
@@ -63,12 +64,12 @@ object BlockScreen {
             }
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = context.getString(R.string.close)
-                textSize = 16f
+                textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 setShadowLayer(0f, 0f, 0f, 0)
                 gravity = Gravity.CENTER
                 background = GradientDrawable().apply {
-                    cornerRadius = 18.dpToPx().toFloat()
+                    cornerRadius = Style.radiusSmall
                     setStroke(1.dpToPx(), faint(128))
                 }
                 setPadding(0, 12.dpToPx(), 0, 12.dpToPx())
@@ -94,8 +95,8 @@ object BlockScreen {
     const val WARNING = MoodStore.SAD - 1
 
     /** Over a blocked app: nearly black, so the app doesn't show through */
-    const val SHADE_BLOCK = 0xF2000000.toInt()
+    const val SHADE_BLOCK = Style.SHADE_BLOCK
 
     /** Over a settings page or an app with a notice: dimmed */
-    const val SHADE_DIM = 0xB3000000.toInt()
+    const val SHADE_DIM = Style.SHADE_DIM
 }

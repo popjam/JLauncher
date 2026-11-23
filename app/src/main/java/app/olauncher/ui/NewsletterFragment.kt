@@ -122,7 +122,7 @@ class NewsletterFragment : CardPageFragment() {
 
     // --- Running ---
 
-    private val teal get() = if (darkPage) 0xFF7FD1C2.toInt() else 0xFF00796B.toInt()
+    private val teal get() = Style.accent(darkPage)
 
     private fun runCard() {
         val snap = snapshot
@@ -151,7 +151,7 @@ class NewsletterFragment : CardPageFragment() {
             setBackgroundResource(android.R.drawable.list_selector_background)
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = profileName(profile)
-                textSize = 20f
+                textSize = Style.TEXT_TITLE
                 setTextColor(if (status != null) teal else ink)
             })
             if (status != null) {
@@ -304,13 +304,13 @@ class NewsletterFragment : CardPageFragment() {
 
     private fun small(text: String, alpha: Int) = TextView(requireContext(), null, 0, R.style.TextSmall).apply {
         this.text = text
-        textSize = 13f
+        textSize = Style.TEXT_SMALL
         setTextColor(faint(alpha))
         updatePadding(top = 2.dpToPx())
     }
 
     private fun line(text: String) = small(text, 150).apply {
-        textSize = 14f
+        textSize = Style.TEXT_BODY
         setLineSpacing(0f, 1.15f)
         setPadding(4.dpToPx(), 12.dpToPx(), 4.dpToPx(), 12.dpToPx())
     }
@@ -325,14 +325,14 @@ class NewsletterFragment : CardPageFragment() {
             setOnClickListener { onTap() }
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = title
-                textSize = 16f
+                textSize = Style.TEXT_BODY
                 setTextColor(faint(if (faded) 170 else 255))
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                 setPadding(0, 13.dpToPx(), 0, 13.dpToPx())
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (value != null) addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 text = value
-                textSize = 15f
+                textSize = Style.TEXT_BODY
                 setTextColor(faint(215))
                 updatePadding(left = 12.dpToPx())
             })
