@@ -62,7 +62,7 @@ public struct Firebase: Sendable {
 
     public struct HTTPError: Error, CustomStringConvertible {
         public let code: Int
-        public var description: String { code == 401 || code == 403 ? "Database refused (check its rules)" : "HTTP \(code)" }
+        public var description: String { code == 401 || code == 403 ? "The server refused" : "HTTP \(code)" }
     }
 
     static func check(_ response: URLResponse) throws {

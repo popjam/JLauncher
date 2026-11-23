@@ -109,7 +109,7 @@ object Tracking {
             val bought = Spending.purchases(context).any { it.time >= now - WEEK_MS }
             val ok = unread < UNREAD_WORRY || bought
             list += Item("bank", context.getString(R.string.tracking_bank), ok,
-                if (ok) context.getString(R.string.tracking_bank_ok) else context.getString(R.string.tracking_bank_unread, unread),
+                if (ok) context.getString(R.string.tracking_bank_ok) else context.resources.getQuantityString(R.plurals.tracking_bank_unread, unread, unread),
                 setOf(StatKind.MONEY))
         }
 

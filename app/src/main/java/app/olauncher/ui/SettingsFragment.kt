@@ -168,7 +168,6 @@ class SettingsFragment : CardPageFragment() {
     private fun folderPicked(existing: JSONObject?, link: () -> Unit) {
         if (existing == null) {
             link()
-            requireContext().showToast(getString(R.string.backup_folder_set))
             return
         }
         // Don't silently overwrite either side: ask which to keep
@@ -180,10 +179,7 @@ class SettingsFragment : CardPageFragment() {
             .setMessage(getString(R.string.backup_found_message) + savedAt)
             .setCancelable(false)
             .setPositiveButton(R.string.restore) { _, _ -> restoreBackup(existing, link) }
-            .setNegativeButton(R.string.keep_current) { _, _ ->
-                link()
-                requireContext().showToast(getString(R.string.backup_folder_set))
-            }
+            .setNegativeButton(R.string.keep_current) { _, _ -> link() }
             .show()
     }
 
@@ -880,7 +876,7 @@ class SettingsFragment : CardPageFragment() {
                     .setTitle(R.string.places_delete_title)
                     .setMessage(R.string.places_delete_ask)
                     .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.delete_confirm) { _, _ -> Places.deleteHistory(context); render() }
+                    .setPositiveButton(R.string.action_delete) { _, _ -> Places.deleteHistory(context); render() }
                     .show()
             } else null,
         )

@@ -378,7 +378,7 @@ class StatsHomeFragment : CardPageFragment() {
         val date = selectedDate
         container.addView(TextView(context, null, 0, R.style.TextSmall).apply {
             text = day?.note.orEmpty()
-            hint = getString(R.string.thoughts_hint)
+            hint = getString(R.string.day_note_hint)
             textSize = Style.TEXT_BODY
             setTextColor(ink)
             setHintTextColor(faint(110))
@@ -899,7 +899,7 @@ class StatsHomeFragment : CardPageFragment() {
         }
         val amount = when (y.kind) {
             ValueKind.SCORE -> decimal(abs(diff))
-            ValueKind.YES_NO -> getString(R.string.compare_points, Math.round(abs(diff) * 100))
+            ValueKind.YES_NO -> Math.round(abs(diff) * 100).let { resources.getQuantityString(R.plurals.compare_points, it, it) }
             ValueKind.AMOUNT -> y.format(abs(diff))
         }
         val counts = " " + getString(R.string.insight_counts, last.values.size, first.values.size)
@@ -1367,7 +1367,7 @@ class StatsHomeFragment : CardPageFragment() {
 
     /** The clearest takeaways, in plain words; tapping one opens it in Compare or its stat */
     private fun fillInsights(card: Card, insights: List<Insight>) {
-        if (insights.isEmpty()) return card.showNote(getString(R.string.insights_none))
+        if (insights.isEmpty()) return card.showNote(getString(R.string.needs_more_days))
         card.note.isVisible = false
         card.scene.isVisible = false
         val context = requireContext()

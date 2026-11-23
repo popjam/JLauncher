@@ -319,7 +319,7 @@ class StatPageFragment : CardPageFragment() {
         if (problems.isEmpty()) return
         val card = Card(getString(R.string.tracking_paused), icon = StatIcons.WARNING, iconColor = Style.WARNING)
         card.showNote(problems.joinToString("\n") { problem ->
-            problem.title + ": " + problem.detail + (problem.since?.let { " · " + getString(R.string.tracking_since, dateText(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate())) } ?: "")
+            problem.title + " · " + problem.detail + (problem.since?.let { " · " + getString(R.string.tracking_since, dateText(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate())) } ?: "")
         })
         card.note.gravity = android.view.Gravity.START
         val fixable = problems.firstOrNull { it.fix != null }

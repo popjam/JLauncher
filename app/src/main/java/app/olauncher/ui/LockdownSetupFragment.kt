@@ -69,7 +69,7 @@ class LockdownSetupFragment : LockdownBaseFragment() {
         buttons()
     }
 
-    private fun stepCard(title: Int) = section(getString(title), getString(R.string.lockdown_step, step + 1, STEPS))
+    private fun stepCard(title: Int) = section(getString(title), getString(R.string.n_of, step + 1, STEPS))
 
     // --- 1. Blocks ---
 
@@ -154,12 +154,12 @@ class LockdownSetupFragment : LockdownBaseFragment() {
         val last = step == STEPS - 1
         val pills = listOfNotNull(
             if (step > 0) pill(getString(R.string.back)) { go(step - 1) } else null,
-            if (!last) pill(getString(R.string.lockdown_next)) { go(step + 1) } else null,
+            if (!last) pill(getString(R.string.next)) { go(step + 1) } else null,
             if (last && !prefs.lockdownModeOn) pill(getString(R.string.lockdown_turn_on_now)) {
                 prefs.lockdownModeOn = true
                 finish()
             } else null,
-            if (last) pill(getString(R.string.lockdown_finish)) { finish() } else null,
+            if (last) pill(getString(R.string.okay)) { finish() } else null,
         )
         card.add(android.widget.LinearLayout(requireContext()).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL

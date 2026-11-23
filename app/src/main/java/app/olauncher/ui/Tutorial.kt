@@ -46,16 +46,16 @@ object Tutorial {
             .setTitle(PAGES[0].first)
             .setView(content)
             .setNegativeButton(R.string.tutorial_skip, null)
-            .setPositiveButton(R.string.tutorial_next, null)
+            .setPositiveButton(R.string.next, null)
             .create()
         dialog.setOnShowListener {
             val next = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             val skip = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
             fun draw() {
-                step.text = activity.getString(R.string.tutorial_step, page + 1, PAGES.size)
+                step.text = activity.getString(R.string.n_of, page + 1, PAGES.size)
                 dialog.setTitle(PAGES[page].first)
                 body.setText(PAGES[page].second)
-                next.setText(if (page == PAGES.lastIndex) R.string.tutorial_done else R.string.tutorial_next)
+                next.setText(if (page == PAGES.lastIndex) R.string.okay else R.string.next)
                 skip.visibility = if (page == PAGES.lastIndex) View.INVISIBLE else View.VISIBLE
             }
             // Next turns the page rather than closing, until the last

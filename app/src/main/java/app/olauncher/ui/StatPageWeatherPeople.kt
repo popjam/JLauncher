@@ -117,13 +117,13 @@ private fun StatPageFragment.weatherDayText(date: LocalDate, day: WeatherHistory
     getString(R.string.weather_rain_mm, String.format(Locale.getDefault(), "%.1f", day.rain)),
 ).joinToString(" · ")
 
-private fun hours(h: Float) = String.format(Locale.getDefault(), "%.1fh", h)
+private fun hours(h: Float) = app.olauncher.helper.Formats.duration((h * 3_600_000L).toLong())
 
 /** Today's sunshine, high and low, rain and daylight, and the last days' sunshine as bars */
 internal fun StatPageFragment.weatherTodayCard(days: Map<LocalDate, WeatherHistory.Day>) {
     val today = LocalDate.now()
     val day = days[today] ?: days.maxByOrNull { it.key }?.value ?: return
-    val card = Card(getString(R.string.mac_today))
+    val card = Card(getString(R.string.weather_today))
     card.headline(getString(R.string.weather_sun_hours, hours(day.sunHours)), listOf(
         "${temp(day.max)} / ${temp(day.min)}",
         getString(R.string.weather_rain_mm, String.format(Locale.getDefault(), "%.1f", day.rain)),
@@ -179,7 +179,7 @@ internal fun StatPageFragment.peopleTodayCard(days: Map<LocalDate, People.Day>) 
     val messagesOn = Spending.isEnabled(context)
     // Nothing yet, and nothing missing: no card
     if (days.isEmpty() && messagesOn) return
-    val card = Card(getString(R.string.mac_today))
+    val card = Card(getString(R.string.people_today))
     val today = LocalDate.now()
     val day = days[today] ?: People.Day(0, 0L, 0, 0, 0, 0)
     if (days.isNotEmpty()) {
@@ -203,7 +203,7 @@ internal fun StatPageFragment.peopleTodayCard(days: Map<LocalDate, People.Day>) 
     }
     val past = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }
     if (past.size < 2) return
-    tiles(Card(getString(R.string.steps_usual_title)), getString(R.string.social_usual, past.size), listOf(
+    tiles(Card(getString(R.string.people_usual_title)), getString(R.string.social_usual, past.size), listOf(
         past.values.map { it.messages }.average().roundToInt().toString() to getString(R.string.people_tile_messages),
         String.format(Locale.getDefault(), "%.1f", past.values.map { it.people }.average()) to getString(R.string.people_tile_people),
         duration(past.values.sumOf { it.talkMs } / past.size) to getString(R.string.people_tile_talking),

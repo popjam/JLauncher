@@ -225,7 +225,7 @@ class NewsletterReaderFragment : CardPageFragment() {
             val sectionTitle = book.sections[currentSection].title
             val inSection = saved.first - book.sections.take(currentSection).sumOf { it.pages.size } + 1
             val card = Card(getString(R.string.newsletter_continue))
-            card.body(row(sectionTitle, "$inSection / ${book.sections[currentSection].pages.size}", color = teal) { openPage(saved.first, saved.second) })
+            card.body(row(sectionTitle, getString(R.string.n_of, inSection, book.sections[currentSection].pages.size), color = teal) { openPage(saved.first, saved.second) })
         }
         val card = Card(getString(R.string.newsletter_contents))
         val rows = mutableListOf<View>()
@@ -370,7 +370,7 @@ class NewsletterReaderFragment : CardPageFragment() {
         val s = book.sectionOf(current)
         val start = book.sections.take(s).sumOf { it.pages.size }
         val where = "${book.sections[s].title} ${current - start + 1} / ${book.sections[s].pages.size}"
-        topWhere.text = if (paged && pages > 1) "$where · ${getString(R.string.newsletter_page_of, page + 1, pages)}" else where
+        topWhere.text = if (paged && pages > 1) "$where · ${getString(R.string.n_of, page + 1, pages)}" else where
     }
 
     private fun savePosition() {

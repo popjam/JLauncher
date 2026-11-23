@@ -178,7 +178,6 @@ internal fun StatPageFragment.weekLimitCard() {
     val card = Card(getString(R.string.week_limit))
     val limit = Spending.weekLimitCents(context)
     if (limit <= 0) {
-        card.showNote(getString(R.string.week_limit_none))
         card.chipRow(listOf(getString(R.string.week_limit_change, getString(R.string.off)) to moneyGold), null) { openMoneySettings() }
         return
     }

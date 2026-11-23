@@ -63,9 +63,9 @@ struct PairView: View {
     var body: some View {
         Card {
             Title(text: "Pair with phone")
-            Line(text: "On the phone: Lockdown → Devices → Mac.").padding(.bottom, 12)
-            BoxField(placeholder: "Database URL", text: $url).padding(.bottom, 8)
-            BoxField(placeholder: "Pairing key", text: $key, onSubmit: pair)
+            Line(text: "On the phone: Lockdown › Devices › Mac").padding(.bottom, 12)
+            BoxField(placeholder: "Server", text: $url).padding(.bottom, 8)
+            BoxField(placeholder: "Pairing code", text: $key, onSubmit: pair)
             if let error { Line(text: error, color: Style.red).padding(.top, 10) }
             BoxButton(title: busy ? "Checking…" : "Pair", enabled: !busy, action: pair).padding(.top, 18)
             TextButton(title: "Cancel") { Dialog.close() }
@@ -75,8 +75,8 @@ struct PairView: View {
     private func pair() {
         let url = url.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Firebase.validURL(url) else { error = "That isn't a Firebase database URL."; Dialog.refit(); return }
-        guard Firebase.validKey(key) else { error = "The key is 40 letters and numbers."; Dialog.refit(); return }
+        guard Firebase.validURL(url) else { error = "Not a server address"; Dialog.refit(); return }
+        guard Firebase.validKey(key) else { error = "The pairing code is 40 letters and numbers"; Dialog.refit(); return }
         busy = true
         Task {
             let problem = await Model.shared.pair(url: url, key: key)
@@ -175,7 +175,7 @@ struct HoldView: View {
             Line(text: "Keep this open. Leaving starts it again.")
             Text(Format.clock(Ms(left) * 1000)).font(.system(size: 40, weight: .light)).foregroundStyle(.white)
                 .frame(maxWidth: .infinity).padding(.vertical, 14)
-            BoxButton(title: "Continue", enabled: left <= 0) { Dialog.close(); then() }
+            BoxButton(title: "Next", enabled: left <= 0) { Dialog.close(); then() }
             TextButton(title: "Cancel") { Dialog.close() }
         }
         .onAppear { left = seconds }
@@ -257,7 +257,7 @@ struct WaitView: View {
             switch model.wait {
             case .none:
                 Title(text: "Wait to unlock")
-                Line(text: "Lockdown unlocks in \(Format.duration(Ms(model.challenge.amount) * 60_000)), for 10m.")
+                Line(text: "Lockdown unlocks in \(Format.duration(Ms(model.challenge.amount) * 60_000)), for 10m")
                 BoxButton(title: "Start") { model.startWait(); Dialog.close() }.padding(.top, 18)
                 TextButton(title: "Cancel") { Dialog.close() }
             case .waiting(let left):
@@ -266,7 +266,7 @@ struct WaitView: View {
                 TextButton(title: "Stop waiting") { model.cancelWait(); Dialog.close() }
             case .ready:
                 Title(text: "Unlocked")
-                BoxButton(title: "Continue") { Dialog.close(); then() }.padding(.top, 4)
+                BoxButton(title: "Next") { Dialog.close(); then() }.padding(.top, 4)
                 TextButton(title: "Cancel") { Dialog.close() }
             }
         }
@@ -351,7 +351,7 @@ struct ItemsView: View {
                 }
             }
             .frame(height: 380)
-            BoxButton(title: "Done") { Dialog.close() }.padding(.top, 14)
+            BoxButton(title: "Close") { Dialog.close() }.padding(.top, 14)
         }
         .onAppear { model.loadPhoneApps() }
     }

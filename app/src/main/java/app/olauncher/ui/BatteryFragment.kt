@@ -189,10 +189,7 @@ class BatteryFragment : CardPageFragment() {
         return getString(R.string.battery_working, text)
     }
 
-    private fun hours(h: Float) = when {
-        h >= 1 -> String.format(Locale.getDefault(), "%.0fh", h)
-        else -> String.format(Locale.getDefault(), "%.0fm", h * 60)
-    }
+    private fun hours(h: Float) = app.olauncher.helper.Formats.duration((h * 3_600_000L).toLong())
 
     private fun rate(r: Float) = String.format(Locale.getDefault(), "%.1f%%", r)
 

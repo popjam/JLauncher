@@ -439,7 +439,7 @@ class SupplementsFragment : CardPageFragment() {
         val (taken, not) = Supplements.takenAndNot(s, today)
         card.subtitle(getString(R.string.supplement_taken_count, taken.size, not.size))
         val rows = rows(taken, not)
-        if (rows.isEmpty()) return card.showNote(getString(R.string.supplement_not_enough))
+        if (rows.isEmpty()) return card.showNote(getString(R.string.needs_more_days))
         card.keyItem(faint(170), getString(R.string.supplement_not_taken), ring = true)
         card.keyItem(s.color, getString(R.string.supplement_taken))
         dotRows(card, rows, s.color, R.string.supplement_vs_detail)
@@ -449,7 +449,7 @@ class SupplementsFragment : CardPageFragment() {
     private fun beforeSinceCard(s: Supplement) {
         val card = Card(getString(R.string.supplement_before_since))
         val points = s.changes.filter { !it.stopped && it.from <= today }.takeLast(MAX_CHANGES)
-        if (points.isEmpty()) return card.showNote(getString(R.string.supplement_not_enough))
+        if (points.isEmpty()) return card.showNote(getString(R.string.needs_more_days))
         // Counted back from the newest, which is picked to start with
         changeIndex = changeIndex.coerceIn(0, points.lastIndex)
         val picked = points.lastIndex - changeIndex
@@ -479,7 +479,7 @@ class SupplementsFragment : CardPageFragment() {
         val rows = rows(since, before)
         if (rows.isEmpty()) {
             card.note.visibility = View.VISIBLE
-            card.note.text = getString(R.string.supplement_not_enough)
+            card.note.text = getString(R.string.needs_more_days)
             card.scene.visibility = View.GONE
             return
         }
@@ -516,10 +516,10 @@ class SupplementsFragment : CardPageFragment() {
         }
         val bars = byAmount.keys.sorted().map { bar(SupplementDialog.amountText(s, it), byAmount[it]!!, s.color) } +
             bar(getString(R.string.supplement_none), not, faint(110))
-        if (bars.count { it.average != null } < 2) return card.showNote(getString(R.string.supplement_not_enough))
+        if (bars.count { it.average != null } < 2) return card.showNote(getString(R.string.needs_more_days))
         card.describe = { key ->
             val b = bars[key as Int]
-            getString(R.string.supplement_amount_detail, b.label, b.average?.let { decimal(it) } ?: "–", b.days)
+            getString(R.string.supplement_amount_detail, b.label, b.average?.let { decimal(it) } ?: "–", resources.getQuantityString(R.plurals.day_count, b.days, b.days))
         }
         card.draw { sc ->
             val nameSize = sc.sp(13.5f)

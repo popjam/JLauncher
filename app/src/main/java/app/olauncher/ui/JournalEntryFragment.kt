@@ -85,7 +85,7 @@ class JournalEntryFragment : Fragment() {
         }
         input = EditText(context).apply {
             setText(saved)
-            hint = getString(if (date == LocalDate.now()) R.string.journal_today_hint else R.string.journal_day_hint)
+            hint = getString(R.string.note_hint)
             textSize = Style.TEXT_TITLE
             setTextColor(ink)
             setHintTextColor(faint(110))

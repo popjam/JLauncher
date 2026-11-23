@@ -49,7 +49,7 @@
     <string name="lockdown_take_break">Take a break</string>
     <string name="lockdown_end_break">End break</string>
     <string name="lockdown_on_break">On a break</string>
-    <string name="lockdown_break_title">%1$d minute break</string>
+    <string name="lockdown_break_title">%1$s break</string>
     <string name="lockdown_break_until">Break until %1$s</string>
     <string name="lockdown_break_ready">Break available</string>
     <string name="lockdown_breaks_off">Breaks are off</string>
@@ -137,7 +137,7 @@
     <string name="lockdown_on_screen">On screen</string>
     <string name="lockdown_always_allowed">Always allowed</string>
     <string name="lockdown_always_allowed_count_title">Always allowed · %1$d</string>
-    <string name="info_lockdown_always_allowed">With Only allow these, apps that always work during lockdown, as well as the allowed apps. The phone app always works.</string>
+    <string name="info_lockdown_always_allowed">Apps that always work during lockdown when it\'s set to Only allow these, as well as the allowed apps. The phone app always works.</string>
     <string name="lockdown_greyscale">Greyscale</string>
     <string name="lockdown_greyscale_setup">Needs a one-time permission. Run this on a computer connected to the phone:</string>
     <string name="info_lockdown_greyscale">Turns the screen grey during lockdown. Needs a one-time permission given from a computer.</string>

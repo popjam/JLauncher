@@ -41,9 +41,9 @@ internal fun StatPageFragment.money(dollars: Double) = String.format(Locale.getD
 internal fun StatPageFragment.vibeTodayCard(days: Map<LocalDate, Vibecoding.Day>) {
     val context = requireContext()
     // Until the Drive folder the files are written to is chosen, a way to choose it; then, until they come in, no card
-    if (app.olauncher.helper.DeviceTime.folder(context).isEmpty()) return Card(getString(R.string.mac_today)).needs(getString(R.string.needs_drive_folder)) { chooseDeviceFolder() }
+    if (app.olauncher.helper.DeviceTime.folder(context).isEmpty()) return Card(getString(R.string.vibe_today)).needs(getString(R.string.needs_drive_folder)) { chooseDeviceFolder() }
     if (days.isEmpty()) return
-    val card = Card(getString(R.string.mac_today))
+    val card = Card(getString(R.string.vibe_today))
     val updated = Vibecoding.updated(context)
     val today = LocalDate.now()
     val day = days[today]
@@ -58,7 +58,7 @@ internal fun StatPageFragment.vibeTodayCard(days: Map<LocalDate, Vibecoding.Day>
     card.keyItem(faint(110), getString(R.string.vibe_three_hours))
     val past = days.filterKeys { it < today && it >= today.minusDays(HABIT_DAYS.toLong()) }
     if (past.size < 2) return
-    val tilesCard = Card(getString(R.string.steps_usual_title))
+    val tilesCard = Card(getString(R.string.vibe_usual_title))
     // Days without any count as none
     tiles(tilesCard, getString(R.string.social_usual, HABIT_DAYS), listOf(
         duration(past.values.sumOf { it.minutes } * 60_000L / HABIT_DAYS) to getString(R.string.steps_tile_average),
@@ -147,7 +147,7 @@ internal fun StatPageFragment.vibeHoursCard(days: Map<LocalDate, Vibecoding.Day>
     val late = ContextCompat.getColor(requireContext(), R.color.holiday)
     fun isLate(h: Int) = h >= 23 || h < 5
     card.keyItem(stat.color, getString(R.string.vibe_daytime))
-    card.keyItem(late, getString(R.string.vibe_late))
+    card.keyItem(late, app.olauncher.helper.Formats.timeRange(requireContext(), java.time.LocalTime.of(23, 0), java.time.LocalTime.of(5, 0)))
     val lateShare = (hours.indices.filter(::isLate).sumOf { hours[it] } * 100f / hours.sum()).roundToInt()
     card.headline("$lateShare%", getString(R.string.vibe_late_share))
     card.describe = { key ->
@@ -182,6 +182,7 @@ internal fun StatPageFragment.vibeCostCard(days: Map<LocalDate, Vibecoding.Day>)
     val recent = days.filterKeys { it > today.minusDays(VIBE_DAYS.toLong()) }
     if (recent.values.sumOf { it.cost } <= 0.0) return
     val card = Card(getString(R.string.vibe_cost))
+    card.subtitle(getString(R.string.vibe_cost_note))
     val tokens = recent.values.sumOf { it.tokens }
     card.headline(money(recent.values.sumOf { it.cost }), getString(R.string.vibe_cost_caption, VIBE_DAYS,
         java.text.NumberFormat.getIntegerInstance(Locale.getDefault()).format(tokens / 1_000_000)))
@@ -202,7 +203,7 @@ internal fun StatPageFragment.vibeYouCard(days: Map<LocalDate, Vibecoding.Day>) 
     val lateSleep = lateDates.mapNotNull { nights[it.plusDays(1)]?.asleepMs }
     val otherSleep = nights.filterKeys { it.minusDays(1) !in lateDates && it.minusDays(1) >= since }.values.map { it.asleepMs }
     val note = if (lateSleep.size >= 2 && otherSleep.size >= 2)
-        getString(R.string.vibe_late_sleep, lateSleep.size, duration(lateSleep.average().toLong()), duration(otherSleep.average().toLong())) else null
+        getString(R.string.vibe_late_sleep, lateSleep.size, duration(lateSleep.average().toLong()), duration(otherSleep.average().toLong()), app.olauncher.helper.Formats.time(requireContext(), java.time.LocalTime.of(23, 0))) else null
     // Every logged day since vibecoding was first seen, days without any counting as none
     moodByCard(getString(R.string.vibe_and_you), dates.filter { it >= since }, listOf(MoodGroups(
         listOf(R.string.vibe_none, R.string.social_under_1, R.string.social_1_3, R.string.vibe_3_plus).map { getString(it) }) { date ->

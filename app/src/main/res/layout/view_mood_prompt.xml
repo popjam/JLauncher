@@ -154,7 +154,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:alpha="0.7"
-                android:text="@string/thoughts"
+                android:text="@string/note_hint"
                 android:textColor="?attr/primaryColor"
                 android:textSize="@dimen/size_body" />
 
@@ -183,7 +183,7 @@
             android:layout_marginEnd="8dp"
             android:background="@drawable/rounded_box"
             android:gravity="top|start"
-            android:hint="@string/thoughts_hint"
+            android:hint="@string/note_hint"
             android:importantForAutofill="no"
             android:inputType="textMultiLine|textCapSentences"
             android:maxLines="6"
@@ -205,7 +205,7 @@
             android:background="@drawable/rounded_box"
             android:paddingHorizontal="24dp"
             android:paddingVertical="10dp"
-            android:text="@string/confirm"
+            android:text="@string/save"
             android:textColor="?attr/primaryColor" />
 
     </LinearLayout>

@@ -18,12 +18,14 @@
     <string name="double_tap_to_lock_screen">Double tap to lock</string>
     <string name="home_button_show_recents">Home button for recents</string>
     <string name="admin_permission_message">Lets JLauncher lock the screen when you double tap.</string>
+    <string name="admin_on">Lock permission on</string>
+    <string name="admin_off">Lock permission off</string>
     <string name="about">About</string>
     <string name="off">Off</string>
     <string name="on">On</string>
     <string name="change_default_launcher">Change default launcher</string>
     <string name="share">Share</string>
-    <string name="swipe_up_for_apps">1. Swipe up for all apps\n2. Long press anywhere for settings</string>
+    <string name="swipe_up_for_apps">1. Swipe up for all apps\n2. Hold anywhere for settings</string>
     <string name="apps_on_home_screen">Apps</string>
     <string name="home_pages">Pages</string>
     <string name="left">Left</string>
@@ -37,6 +39,7 @@
     <string name="remove">Remove</string>
     <string name="select">Select</string>
     <string name="n_selected">%1$d selected</string>
+    <string name="n_of">%1$d of %2$d</string>
     <string name="action_delete">Delete</string>
     <string name="delete_what">Delete %1$s?</string>
     <string name="open_in_map">Open in map</string>
@@ -81,13 +84,6 @@
     <string name="stat_dose">Dose</string>
     <string name="stat_cups">Cups</string>
     <string name="stat_default_labels">Default</string>
-    <string-array name="default_face_labels">
-        <item>Great</item>
-        <item>Good</item>
-        <item>Okay</item>
-        <item>Bad</item>
-        <item>Terrible</item>
-    </string-array>
     <string name="spending_listener">JLauncher stats (Money spent, Music)</string>
     <string name="sleep_last_night">Last night</string>
     <string name="sleep_span">%1$s–%2$s</string>
@@ -105,10 +101,8 @@
     <string name="sleep_and_day">Mood vs sleep</string>
     <string name="sleep_by_bedtime">Bedtime</string>
     <string name="sleep_by_hours">Hours</string>
-    <string name="sleep_before_11">Before 11</string>
-    <string name="sleep_11_12">11–12</string>
-    <string name="sleep_12_1">12–1</string>
-    <string name="sleep_after_1">After 1</string>
+    <string name="sleep_before">Before %1$s</string>
+    <string name="sleep_after">After %1$s</string>
     <string name="sleep_under_6">Under 6h</string>
     <string name="sleep_6_7">6–7h</string>
     <string name="sleep_7_8">7–8h</string>
@@ -119,28 +113,29 @@
     <string name="device_phone">Phone</string>
     <string name="device_mac">Mac</string>
     <string name="device_tv">TV</string>
-    <string name="mac_today">Today</string>
     <string name="mac_updated">updated %1$s</string>
     <plurals name="vibe_prompts">
         <item quantity="one">%1$d prompt</item>
         <item quantity="other">%1$d prompts</item>
     </plurals>
+    <string name="vibe_today">Today</string>
+    <string name="vibe_usual_title">Usually</string>
     <string name="vibe_your_time">your time today</string>
-    <string name="vibe_three_hours">3 hours</string>
+    <string name="vibe_three_hours">3h</string>
     <string name="vibe_tile_prompts">prompts a day</string>
     <string name="vibe_tile_off">days off</string>
     <string name="vibe_projects">Projects</string>
     <string name="vibe_when">When you vibecode</string>
     <string name="vibe_daytime">Day</string>
-    <string name="vibe_late">11 pm – 5 am</string>
     <string name="vibe_late_share">of your time is late at night</string>
     <string name="vibe_cost">Spend</string>
-    <string name="vibe_cost_caption">over the last %1$d days · %2$sM tokens</string>
+    <string name="vibe_cost_note">Estimate, at list prices</string>
+    <string name="vibe_cost_caption">last %1$d days · %2$sM tokens</string>
     <string name="vibe_cost_day">%1$s · %2$sM tokens</string>
     <string name="vibe_and_you">Mood vs vibecoding</string>
     <string name="vibe_none">None</string>
     <string name="vibe_3_plus">3h+</string>
-    <string name="vibe_late_sleep">After %1$d late nights (past 11 pm) you slept %2$s, vs %3$s on other nights</string>
+    <string name="vibe_late_sleep">After %1$d late nights (past %4$s) you slept %2$s, vs %3$s on other nights</string>
     <string name="pickups_today">unlocks today</string>
     <string name="usually_n">usually %1$d</string>
     <string name="usually_text">usually %1$s</string>
@@ -153,19 +148,17 @@
     <string name="steps_so_far">steps so far</string>
     <string name="steps_goal">%1$s steps</string>
     <string name="steps_count">%1$s steps</string>
-    <string name="steps_usual_title">Usually</string>
     <string name="steps_tile_average">a day</string>
     <string name="steps_tile_best">best day</string>
     <string name="steps_tile_goal">days over 10k</string>
     <string name="social_home_n">Home %1$d</string>
     <string name="social_need_location">Needs location access</string>
     <string name="social_need_always">Needs location access all the time</string>
-    <string name="social_not_set">Not set · tap Set while on its Wi-Fi</string>
+    <string name="social_not_set">Not set</string>
     <string name="social_set">Set</string>
-    <string name="social_remove">Remove</string>
-    <string name="social_connect_first">Connect to this home\'s Wi-Fi first, then tap Set.</string>
-    <string name="social_uses_wifi">Uses the Wi-Fi you\'re on now: %1$s</string>
-    <string name="social_keeps_wifi">Keeps its Wi-Fi: %1$s</string>
+    <string name="social_connect_first">Connect to this home’s Wi-Fi first</string>
+    <string name="social_uses_wifi">Uses this Wi-Fi · %1$s</string>
+    <string name="social_keeps_wifi">Keeps its Wi-Fi · %1$s</string>
     <string name="social_now_out">out since %1$s</string>
     <string name="social_now_at">at %1$s now</string>
     <string name="social_now_unknown">not known yet</string>
@@ -233,7 +226,7 @@
     </string-array>
     <string name="taken_of_days">taken %1$d of %2$d days</string>
     <string name="a_day">%1$s a day</string>
-    <string name="taken_vs_not_detail">%1$s: %2$s on %3$d days taken, %4$s on %5$d skipped</string>
+    <string name="taken_vs_not_detail">%1$s %2$s taken vs %4$s skipped · %3$d vs %5$d days</string>
     <plurals name="day_count">
         <item quantity="one">%d day</item>
         <item quantity="other">%d days</item>
@@ -247,7 +240,6 @@
     <string name="backup_exported">Backup exported</string>
     <string name="export_failed">Export failed</string>
     <string name="import_failed">Import failed</string>
-    <string name="backup_folder_set">Backup folder set</string>
     <string name="backup_restored">Backup restored</string>
     <string name="backup_found_message">This folder already has a JLauncher backup.\n\nRestore it and replace your current settings, or keep your current settings and overwrite the backup?</string>
     <string name="backup_saved_on">Backup saved %1$s</string>
@@ -263,7 +255,7 @@
     <string name="spent_today_on_app">%1$d%% of today so far on %2$s</string>
     <string name="use_for_question">How long do you want to use %1$s for?</string>
     <string name="minutes_short">%1$dm</string>
-    <string name="seconds_value">%1$d s</string>
+    <string name="seconds_value">%1$ds</string>
     <string name="take_a_breath">Take a breath</string>
     <string name="breathe_in">Breathe in</string>
     <string name="breathe_out">Breathe out</string>
@@ -314,7 +306,6 @@
     <string name="sleep_late_avg">late, usually</string>
     <string name="sleep_late_nights">nights 30m+ late</string>
     <string name="sleep_morning_avg">on waking</string>
-    <string name="sleep_late_row">After 11 pm</string>
     <string name="sleep_morning_row">On waking</string>
     <string name="plus_essentials">+%1$s essentials</string>
     <string name="essential">Essential</string>
@@ -336,11 +327,10 @@
     <string name="streak_done">Did it</string>
     <string name="streak_missed">Didn’t</string>
     <string name="music_each_day">Each day</string>
-    <string name="music_block">each block is %1$d minutes</string>
+    <string name="music_block">Each block is %1$s</string>
     <string name="steps_title">Steps</string>
     <string name="steps_usual_heading">Steps, usually</string>
     <string name="week_limit">Weekly limit</string>
-    <string name="week_limit_none">Set a limit to see what’s left each week and which weeks went over</string>
     <string name="week_limit_change">Weekly limit · %1$s</string>
     <string name="week_limit_left">Left this week, of %1$s</string>
     <string name="week_limit_over">over this week’s %1$s</string>
@@ -386,11 +376,11 @@
     <string name="social_neither">at neither home</string>
     <string name="work">Work</string>
     <string name="work_days">Work days</string>
-    <string name="social_work_not_set">Not set · tap Set while on work’s Wi-Fi</string>
-    <string name="social_places">Where your time went</string>
+    <string name="social_work_not_set">Not set</string>
+    <string name="social_places">Places</string>
     <string name="social_out_place">Out</string>
     <string name="social_unknown_place">Unknown</string>
-    <string name="social_tracked_since">Tracked since %1$s; before that is left out</string>
+    <string name="social_tracked_since">Tracked since %1$s</string>
     <string name="period_week">Week</string>
     <string name="period_month">Month</string>
     <string name="period_year">Year</string>
@@ -399,8 +389,8 @@
         <item quantity="other">%d days</item>
     </plurals>
     <string name="work_hours_week">worked this week · %1$s at work</string>
-    <string name="work_set_wifi">Set work’s Wi-Fi on the Social page, under Homes, and work days fill in by themselves</string>
-    <string name="work_usual">On a usual work day, the last 30 days</string>
+    <string name="work_set_wifi">Needs work’s Wi-Fi, set under Homes</string>
+    <string name="work_usual">A usual work day, last 30 days</string>
     <string name="work_a_day">at work</string>
     <string name="work_arrive">arrive</string>
     <string name="work_leave">leave</string>
@@ -417,7 +407,10 @@
     <string name="compare_same_day">Same day</string>
     <string name="compare_next_day">Next day</string>
     <string name="compare_next_day_of">Next day’s %1$s</string>
-    <string name="compare_points">%1$d points</string>
+    <plurals name="compare_points">
+        <item quantity="one">%1$d point</item>
+        <item quantity="other">%1$d points</item>
+    </plurals>
     <string name="essential_title">%1$s · %2$s</string>
     <string name="essential_this">Count this one as essential</string>
     <string name="essential_not_this">Count this one as not essential</string>
@@ -427,10 +420,9 @@
     <string name="essential_reset_group">All %1$s: back to automatic</string>
     <string name="work_days_a_week">days worked each week</string>
     <string name="insights">Insights</string>
-    <string name="insights_none">Not enough days yet</string>
     <string name="journal">Journal</string>
-    <string name="journal_search">Search your notes</string>
-    <string name="journal_empty">Notes you write each day show here</string>
+    <string name="journal_search">Search notes</string>
+    <string name="journal_empty">No notes</string>
     <plurals name="journal_count">
         <item quantity="one">%d note</item>
         <item quantity="other">%d notes</item>
@@ -439,13 +431,12 @@
         <item quantity="one">%d note found</item>
         <item quantity="other">%d notes found</item>
     </plurals>
-    <string name="day_note_hint">Anything about the day… or hold to talk</string>
-    <string name="journal_today_hint">Write about today</string>
+    <string name="day_note_hint">Note · hold to talk</string>
+    <string name="note_hint">Note</string>
     <string name="day_stats">Stats</string>
-    <string name="day_tap_to_change">tap to change · hold to open</string>
     <string name="day_top_app">mostly %1$s, %2$s</string>
     <string name="day_sleep">Sleep the night before</string>
-    <string name="day_places">Where the day went</string>
+    <string name="day_places">Places</string>
     <string name="day_money">Money</string>
     <string name="day_music">Music</string>
     <string name="day_mostly">mostly %1$s</string>
@@ -469,11 +460,11 @@
     <string name="tracking_fix">Fix</string>
     <string name="tracking_usage">Usage access</string>
     <string name="tracking_usage_ok">Screen time and sleep</string>
-    <string name="tracking_usage_off">Off: screen time and sleep can’t be read</string>
+    <string name="tracking_usage_off">Off · screen time and sleep can’t be read</string>
     <string name="tracking_notifications">Notification access</string>
     <string name="tracking_notifications_ok">Money, music, places and work</string>
-    <string name="tracking_notifications_off">Off: money, music, places and work aren’t filling in</string>
-    <string name="tracking_notifications_stopped">Stopped by Android %1$s ago; tap to start it again</string>
+    <string name="tracking_notifications_off">Off · money, music, places and work aren’t filling in</string>
+    <string name="tracking_notifications_stopped">Stopped by Android %1$s ago</string>
     <string name="tracking_location">Location</string>
     <string name="tracking_location_ok">Homes and work, from their Wi-Fi</string>
     <string name="tracking_location_permission">Needs location “all the time” to know homes and work</string>
@@ -483,13 +474,16 @@
     <string name="tracking_steps_off">Needs physical activity access</string>
     <string name="tracking_bank">CommBank purchases</string>
     <string name="tracking_bank_ok">Being read</string>
-    <string name="tracking_bank_unread">%1$d notifications this week had amounts that couldn’t be read as purchases; CommBank’s wording may have changed</string>
+    <plurals name="tracking_bank_unread">
+        <item quantity="one">%1$d notification this week couldn’t be read as a purchase</item>
+        <item quantity="other">%1$d notifications this week couldn’t be read as purchases</item>
+    </plurals>
     <string name="tracking_device_ok">Came in %1$s ago</string>
-    <string name="tracking_device_stale">Last came in %1$s ago; check it’s running there</string>
+    <string name="tracking_device_stale">Last came in %1$s ago</string>
     <string name="tracking_vibecoding">Vibecoding</string>
     <string name="tracking_backup">Backups to Drive</string>
     <string name="tracking_backup_ok">Saving</string>
-    <string name="tracking_backup_failing">Not saving; check the folder in Settings</string>
+    <string name="tracking_backup_failing">Not saving</string>
     <string name="settings_spending">Money</string>
     <string name="settings_essentials">Essentials</string>
     <string name="settings_essentials_how">Hold a purchase on the Money page to count it, or everything in its category, as essential or not.</string>
@@ -499,7 +493,7 @@
     <string name="report_file">JLauncher report %1$s.pdf</string>
     <string name="report_done">Report saved</string>
     <string name="report_failed">The report couldn’t be saved</string>
-    <string name="report_title">Mood and medication report</string>
+    <string name="report_title">Mood and medicine report</string>
     <string name="report_average">Average %1$s of 5</string>
     <string name="report_before">the period before: %1$s</string>
     <string name="report_logged">logged %1$d of %2$d days</string>
@@ -511,7 +505,11 @@
     <string name="report_scale">Averages out of 5, where 5 is best</string>
     <string name="report_vs_before">vs the period before</string>
     <string name="report_daily_life">Sleep and screen time</string>
-    <string name="report_sleep">Asleep %1$s a night on average (%2$d nights)</string>
+    <string name="report_sleep">Asleep %1$s a night on average · %2$s</string>
+    <plurals name="night_count">
+        <item quantity="one">%d night</item>
+        <item quantity="other">%d nights</item>
+    </plurals>
     <string name="report_screen">Screen time %1$s a day on average, across phone, Mac and TV</string>
     <string name="report_low_days">Hardest days</string>
     <string name="report_high_days">Best days</string>
@@ -546,7 +544,7 @@
     <string name="insight_next_day">after %1$s, %2$s the next day than after %3$s.</string>
     <string name="insight_after">after %1$s, %2$s than %3$s.</string>
     <string name="insight_barely">%1$s is about the same whatever your %2$s.</string>
-    <string name="insight_counts">(%1$d days vs %2$d)</string>
+    <string name="insight_counts">· %1$d vs %2$d days</string>
     <string name="word_more">more</string>
     <string name="word_less">less</string>
     <string name="word_fewer">fewer</string>
@@ -675,7 +673,6 @@
     <string name="graph_months">Month</string>
     <string name="graph_years">Year</string>
     <string name="social_elsewhere">Elsewhere</string>
-    <string name="places_title">Places you go</string>
     <string name="places_new">New place</string>
     <string name="places_new_near">New place near %1$s</string>
     <string name="places_name">Name</string>
@@ -710,21 +707,21 @@
         <item quantity="one">%d to name</item>
         <item quantity="other">%d to name</item>
     </plurals>
-    <string name="voice_allow_mic">Allow the microphone, then try the voice note again</string>
+    <string name="voice_allow_mic">Needs microphone access</string>
     <string name="voice_cant_record">Couldn’t start recording</string>
     <string name="voice_recording">Recording</string>
-    <string name="voice_done">Done</string>
     <string name="voice_paused">Paused</string>
     <string name="voice_added">Added to today\'s note</string>
     <string name="voice_pause">Pause</string>
     <string name="voice_resume">Resume</string>
-    <string name="voice_discard_ask">Throw this recording away? Its words haven’t been written out.</string>
-    <string name="voice_keep_going">Keep it</string>
-    <string name="voice_discard">Throw away</string>
+    <string name="voice_discard_ask">Delete recording?</string>
+    <string name="voice_discard_detail">Its words haven’t been written out</string>
+    <string name="voice_discard">Delete recording</string>
     <string name="voice_too_short">Too short to keep</string>
     <string name="voice_writing">Writing it down…</string>
     <string name="voice_no_text">Couldn’t write it out. Try again from the Journal.</string>
     <string name="weather_sun_hours">%1$s sun</string>
+    <string name="weather_today">Today</string>
     <string name="weather_rain_mm">%1$s mm rain</string>
     <string name="weather_daylight">%1$s daylight</string>
     <string name="weather_and_mood">Mood vs weather</string>
@@ -737,15 +734,17 @@
     <string name="weather_daylight_middle">Middle</string>
     <string name="weather_daylight_long">%1$s+</string>
     <string name="people_talking">%1$s talking</string>
+    <string name="people_today">Today</string>
+    <string name="people_usual_title">Usually</string>
     <string name="people_need_calls">Needs call log access</string>
     <string name="people_need_notifications">Needs notification access for messages</string>
     <string name="people_count_calls">Count calls</string>
     <string name="people_tile_people">people a day</string>
     <string name="people_tile_messages">messages a day</string>
     <string name="people_tile_talking">on calls a day</string>
-        <string name="people_and_mood">Mood vs messages</string>
+    <string name="people_and_mood">Mood vs messages</string>
     <string name="people_group_none">None</string>
-        <string name="people_group_few">1–9</string>
+    <string name="people_group_few">1–9</string>
     <string name="people_group_some">10–29</string>
     <string name="people_group_many">30+</string>
     <string name="ins_sun_more">on sunnier days</string>
@@ -779,7 +778,7 @@
     <string name="swipe_down">Swipe down</string>
     <string name="accessibility">Accessibility</string>
     <string name="check_in">Check-in</string>
-    <string name="homes_and_work">Homes and work</string>
+    <string name="homes_and_work">Homes</string>
     <string name="places_today">Today</string>
     <string name="settings_carry_over">Carry over</string>
     <string name="settings_automatic">Automatic</string>
@@ -795,7 +794,7 @@
     <string name="info_status_bar">Shows the phone’s status bar (time, battery, signal) at the top.</string>
     <string name="info_screen_time">Shows today’s screen time under the mood face. Needs usage access.</string>
     <string name="info_weather">Shows today’s weather at the top of home. Tap it for the forecast.</string>
-    <string name="info_money_left">Shows on home what’s left of the weekly limit this week.</string>
+    <string name="info_money_left">Shows what’s left this week on home.</string>
     <string name="info_swipe_left">Picks what swiping left on home opens.</string>
     <string name="info_swipe_right">Picks what swiping right on home opens.</string>
     <string name="info_swipe_down">Picks what pulling down on home opens: notifications or search.</string>
@@ -803,7 +802,7 @@
     <string name="info_home_recents">Pressing home while already on home shows recent apps.</string>
     <string name="info_hidden_apps">Apps hidden from the app list. Tap one to open or unhide it.</string>
     <string name="info_keyboard">Opens the keyboard as soon as the app list opens, so you can type to find an app.</string>
-    <string name="info_pause_length">How long the pause before a paused app opens lasts.</string>
+    <string name="info_pause_length">How long the wait is before a paused app opens.</string>
     <string name="info_check_in">Asks how your day was, once a day, when you’re on home.</string>
     <string name="info_check_in_time">When the check-in shows up.</string>
     <string name="info_missed_day">If you missed yesterday, asks about it the next morning.</string>
@@ -820,7 +819,7 @@
     <string name="info_report">Makes a PDF of your mood, medicines and other stats, to take to an appointment.</string>
     <string name="info_lockdown">Blocks apps, sites and settings changes on the phone and the switched-on devices, and makes that hard to undo. While it\'s on, loosening anything needs what Unlock is set to.</string>
     <string name="info_lockdown_schedules">Turns lockdown on by itself on chosen days, between two times.</string>
-    <string name="info_lockdown_accessibility">Needed to block apps opened from links, notifications or recent apps, and to protect JLauncher.</string>
+    <string name="info_lockdown_accessibility">Lets lockdown block apps opened from links, notifications or recent apps, and protect JLauncher.</string>
     <string name="info_change_password">Changes the password. Asks for the current one first.</string>
     <string name="info_recovery">Ways to see the password again if you forget it.</string>
     <string name="info_backup_folder">Saves a backup to this folder, such as one on Google Drive, whenever something changes.</string>
@@ -837,7 +836,7 @@
     <string name="lockdown_until">Until %1$s</string>
     <string name="lockdown_until_a_time">Until a time</string>
     <string name="lockdown_lock_until_ask">Lock until %1$s?</string>
-    <string name="lockdown_lock_until_message">It can\'t be turned off before then.</string>
+    <string name="lockdown_lock_until_message">It can’t be turned off before then</string>
     <string name="lockdown_lock">Lock</string>
     <string name="lockdown_cant_shorten">Lockdown already runs past then</string>
     <string name="lockdown_schedule_days">Days</string>
@@ -856,7 +855,7 @@
     <string name="lockdown_unlock_nothing">Nothing</string>
     <string name="lockdown_unlock_wait">%1$s wait</string>
     <string name="lockdown_wait_title">Wait to unlock</string>
-    <string name="lockdown_wait_message">Lockdown unlocks in %1$s, for %2$s.</string>
+    <string name="lockdown_wait_message">Lockdown unlocks in %1$s, for %2$s</string>
     <string name="lockdown_start_wait">Start</string>
     <string name="lockdown_stop_waiting">Stop waiting</string>
     <string name="lockdown_end_now">End now</string>
@@ -881,11 +880,10 @@
     <string name="info">Info</string>
     <string name="delete">Uninstall</string>
     <string name="text_size">Text size</string>
-    <string name="enabled">Enabled</string>
-    <string name="please_turn_on_double_tap_to_unlock">Turn on double tap to lock in Settings first.</string>
-    <string name="launcher_failed_to_lock_device">Couldn\'t lock the phone.</string>
+    <string name="please_turn_on_double_tap_to_unlock">Turn on double tap to lock in Settings first</string>
+    <string name="launcher_failed_to_lock_device">Couldn’t lock the phone</string>
     <string name="long_press_to_select_app">Hold to pick an app</string>
-    <string name="unable_to_open_app">Couldn\'t open it</string>
+    <string name="unable_to_open_app">Couldn’t open the app</string>
     <string name="system_app_cannot_delete">System apps can\'t be uninstalled</string>
     <string name="type_a_new_app_name_first">Type a new name first</string>
     <string name="app_not_found">Couldn\'t find that app</string>
@@ -909,7 +907,7 @@
     <string name="weather_next_days">7 days</string>
     <string name="weather_feels_like">Feels like %1$d°</string>
     <string name="weather_high_low">High %1$d° · low %2$d°</string>
-    <string name="weather_updated">Updated %1$s · Open-Meteo · tap to refresh</string>
+    <string name="weather_updated">Updated %1$s · Open-Meteo</string>
     <string name="weather_loading">Getting the forecast…</string>
     <string name="weather_failed">Couldn\'t get the forecast · tap to try again</string>
     <string name="weather_location_denied">Weather needs location access</string>
@@ -937,7 +935,6 @@
     <string name="password_too_short">At least 4 characters</string>
     <string name="catastrophic_warning">Before setting a password</string>
     <string name="lockdown_password_warning">If you forget it, the only way back in is to uninstall JLauncher. Turn on a way to recover it first.</string>
-    <string name="proceed">Continue</string>
     <string name="cancel">Cancel</string>
     <string name="lockdown_password_recovery">Password recovery</string>
     <string name="recovery_tap_500">Tap 500 times</string>
@@ -949,26 +946,23 @@
     <string name="essay_prompt">Why you need the password, in 500 characters</string>
     <string name="essay_too_short">%1$d of 500 characters</string>
     <string name="your_password_is">Password</string>
-    <string name="recovery_tap_progress">%1$d / 500</string>
+    <string name="recovery_tap_progress">%1$d of 500</string>
     <string name="no_recovery_methods">No ways to recover it are on</string>
     <string name="generate_password">Random password</string>
     <string name="generated_password_warning">The password is:\n\n%1$s\n\nThis is the only time it\'s shown. Write it down or turn on a way to recover it.</string>
     <string name="recover_password">Recover password</string>
-    <string name="mood_tracker">Mood tracker</string>
+    <string name="mood_tracker">Check-in</string>
     <string name="mood">Mood</string>
     <string name="today">Today</string>
     <string name="how_are_you_feeling">How are you feeling?</string>
-    <string name="daily_mood_prompt">Daily check-in</string>
+    <string name="daily_mood_prompt">Check-in</string>
     <string name="prompt_time">Time</string>
-    <string name="thoughts">Thoughts</string>
-    <string name="thoughts_hint">Write 3 positive things… or hold to talk</string>
-    <string name="confirm">Confirm</string>
     <string name="no_data">No data</string>
     <string name="how_was_today">How was today?</string>
     <string name="how_was_yesterday">How was yesterday?</string>
     <string name="ask_missed_day">Missed days</string>
     <string name="ask_missed_day_until">Ask until</string>
-    <string name="stat_step">%1$s  %2$d/%3$d</string>
+    <string name="stat_step">%1$s · %2$d of %3$d</string>
     <string name="previous_stat">Previous stat</string>
     <string name="next_stat">Next stat</string>
     <string name="new_stat">New stat</string>
@@ -977,7 +971,7 @@
     <string name="stat_name_hint">e.g. Sleep</string>
     <string name="stat_colour">Colour</string>
     <string name="stat_brightness">Brightness</string>
-    <string name="stat_daily_check">Add to daily check</string>
+    <string name="stat_daily_check">Check-in</string>
     <string name="stat_medicine">Medicine</string>
     <string name="stat_next_day">Affects the next day</string>
     <string name="stat_next_day_hint">For one taken at night: each dose counts towards the day after on the stat pages</string>
@@ -1004,7 +998,6 @@
     <string name="out_of">Out of %1$d</string>
     <string name="add">Add</string>
     <string name="save">Save</string>
-    <string name="delete_stat">Delete</string>
     <string name="graph_so_far">%1$s · so far</string>
     <string name="graph_month_range">%1$s – %2$s</string>
     <string name="previous_days">Previous %1$d days</string>
@@ -1022,10 +1015,7 @@
     </plurals>
     <string name="tutorial">Tutorial</string>
     <string name="info_tutorial">Shows a short walk-through of the app.</string>
-    <string name="tutorial_step">%1$d of %2$d</string>
     <string name="tutorial_skip">Skip</string>
-    <string name="tutorial_next">Next</string>
-    <string name="tutorial_done">Done</string>
     <string name="tutorial_home_title">Just your apps</string>
     <string name="tutorial_home">Tap a name to open it. Swipe up for every app, and type to find one.\n\nHold an app to rename it, or drag it onto Hide to hide it.</string>
     <string name="tutorial_stats_title">Swipe left for stats</string>
@@ -1037,7 +1027,6 @@
     <string name="medicine_name_hint">Name</string>
     <string name="medicine_doses_hint">Doses, like 10mg, 20mg</string>
     <string name="medicine_doses_note">Leave doses empty to just mark it taken or skipped. Up to four.</string>
-    <string name="medicine_added">%1$s added to the check-in</string>
     <string name="medicine_skipped">Skipped</string>
     <string name="medicine_taken">Taken</string>
     <string name="medicine_more">More</string>
@@ -1051,7 +1040,7 @@
         <item quantity="other">%1$s need a look</item>
     </plurals>
     <string name="temperature">Temperature</string>
-    <string name="info_temperature">Degrees in °C or °F, or whatever your region uses.</string>
+    <string name="info_temperature">Shows temperatures in °C or °F, or the way your region does.</string>
     <string name="units_auto">Automatic</string>
     <string name="week_starts">Week starts on</string>
     <string name="info_week_starts">The day weeks start on, for the weekly limit, weekly stats and calendars.</string>
@@ -1065,8 +1054,11 @@
     <string name="copied">Copied</string>
     <string name="pick_an_app">Pick an app</string>
     <string name="cant_hide_shortcut">Shortcuts can\'t be hidden</string>
+    <string name="shortcut_added">Shortcut added</string>
+    <string name="shortcut_failed">Couldn’t add shortcut</string>
+    <string name="widgets_unsupported">Widgets can’t be added</string>
     <string name="porn_from_mac">Porn time from the Mac</string>
-    <string name="info_porn_from_mac">Counts the Mac\'s time in VLC as porn, on Libido\'s page and in insights.</string>
+    <string name="info_porn_from_mac">Counts the Mac\'s time in VLC as porn, on the Porn usage card and in insights.</string>
     <string name="use_for_lengths">Lengths</string>
     <string name="info_use_for_lengths">The times you can pick from when opening an app set to Use for a set time.</string>
     <string name="money_left_on_home">On home</string>
@@ -1074,7 +1066,7 @@
     <string name="info_step_goal">The steps a day the Steps page aims for.</string>
     <string name="battery">Battery</string>
     <string name="battery_now">Now</string>
-    <string name="battery_waiting">Readings show here as the battery changes</string>
+    <string name="battery_waiting">No readings yet</string>
     <string name="battery_charging">Charging</string>
     <string name="battery_full_in">full in about %1$s</string>
     <string name="battery_off_charger">%1$s off the charger</string>
@@ -1099,7 +1091,7 @@
     <string name="battery_own">What JLauncher uses</string>
     <string name="battery_screen_off_short">Screen off</string>
     <string name="battery_all_day">All day</string>
-    <string name="battery_own_waiting">Measuring from now. Check back after a night.</string>
+    <string name="battery_own_waiting">Not enough data yet</string>
     <string name="battery_own_summary_off">About %1$s of the battery in the last 24 hours with the screen off, while the phone lost %2$d%%</string>
     <string name="battery_own_summary_all">About %1$s of the battery in the last 24 hours, while the phone lost %2$d%%</string>
     <string name="battery_own_small">That\'s %1$s of the drain, so most of it is something else</string>
@@ -1107,7 +1099,7 @@
     <string name="battery_under_one">&lt;1%</string>
     <string name="battery_own_note">Estimated from how long each part ran and what it asked the phone for</string>
     <string name="battery_part_places">Places</string>
-    <string name="battery_part_wifi">Home and work (Wi-Fi)</string>
+    <string name="battery_part_wifi">Homes (Wi-Fi)</string>
     <string name="battery_part_steps">Steps</string>
     <string name="battery_part_battery">Battery readings</string>
     <string name="battery_part_notifications">Notifications (spending, people)</string>
@@ -1188,7 +1180,6 @@
         <item quantity="other">%d notes couldn\'t be done</item>
     </plurals>
     <string name="info_voice_tidy">Sends the written-out text of spoken notes to Claude, which adds punctuation and paragraphs and keeps your words. Needs an Anthropic API key, which stays on this phone. Without one, notes are still written out on the phone with filler words taken out.</string>
-    <string name="journal_day_hint">Write about the day</string>
     <string name="journal_open_day">Day</string>
     <string name="journal_more">Show more</string>
     <plurals name="journal_words">
@@ -1203,10 +1194,10 @@
     <string name="to_page">Page %1$d</string>
     <string name="moved_to_page">Moved to page %1$d</string>
     <string name="page_full">Page %1$d is full</string>
-    <string name="hidden_turn_on">Hidden. Turn it back on in Settings.</string>
+    <string name="hidden_turn_on">Hidden · turn it back on in Settings</string>
     <plurals name="hidden_cards">
-        <item quantity="one">1 hidden card · tap to bring it back</item>
-        <item quantity="other">%d hidden cards · tap to bring them back</item>
+        <item quantity="one">1 hidden card</item>
+        <item quantity="other">%d hidden cards</item>
     </plurals>
     <string name="hidden_cards_title">Hidden cards</string>
     <string name="settings_reset_layout">Reset layout</string>
@@ -1215,7 +1206,7 @@
     <string name="layout_reset_done">Layout reset</string>
     <string name="people_who_messages">Who messages you most</string>
     <string name="people_calls_title">Phone calls</string>
-    <string name="people_calls_none">No calls answered or made in this time</string>
+    <string name="people_calls_none">No calls</string>
     <string name="people_calls_total">%1$s on calls · %2$s</string>
     <plurals name="messages_count">
         <item quantity="one">%d message</item>
@@ -1233,7 +1224,7 @@
     <string name="lockdown_why_place">At %1$s</string>
     <string name="lockdown_keep_on">Keep lockdown on?</string>
     <string name="lockdown_keep_on_after">Keep lockdown on after %1$s?</string>
-    <string name="lockdown_keep_on_message">It stays on until turned off.</string>
+    <string name="lockdown_keep_on_message">It stays on until turned off</string>
     <string name="lockdown_keep_on_button">Keep on</string>
     <string name="lockdown_starts_now">Lockdown starts now</string>
     <string name="lockdown_home_widget">Home widget</string>
@@ -1253,7 +1244,7 @@
     <string name="lockdown_mac">Mac</string>
     <string name="lockdown_mac_url">Server</string>
     <string name="lockdown_mac_code">Pairing code</string>
-    <string name="lockdown_mac_bad_url">Must start with https://</string>
+    <string name="lockdown_mac_bad_url">Not a server address</string>
     <string name="copy">Copy</string>
     <string name="info_lockdown_mac">Puts the Mac in the same lockdown as the phone. It blocks the apps and sites on the list that it has, and shares breaks and Unlock. Switching it off counts as loosening.</string>
     <string name="lockdown_start">Start</string>
@@ -1262,15 +1253,12 @@
     <string name="lockdown_none">None</string>
     <string name="lockdown_all_but">All but %1$d</string>
     <string name="lockdown_settings_changes">Settings changes</string>
-    <string name="lockdown_n_of">%1$d of %2$d</string>
     <string name="info_lockdown_settings_changes">Changes to the launcher, its apps and the phone\'s settings that are locked during lockdown.</string>
     <string name="lockdown_at_places">At places</string>
     <string name="lockdown_a_tap">+%1$s a tap</string>
     <string name="info_lockdown_setup">Goes through Blocks, Turns on and Unlock one step at a time.</string>
     <string name="lockdown_setup_title">Set up lockdown</string>
-    <string name="lockdown_step">%1$d of %2$d</string>
-    <string name="lockdown_next">Next</string>
-    <string name="lockdown_finish">Done</string>
+    <string name="next">Next</string>
     <string name="lockdown_turn_on_now">Turn on now</string>
     <string name="lockdown_permissions">Permissions</string>
     <string name="lockdown_usage_access">Usage access</string>
@@ -1305,14 +1293,14 @@
     <string name="lockdown_suspicious_line">This page could undo lockdown</string>
     <string name="lockdown_on_title">Lockdown on</string>
     <string name="lockdown_on_until_title">Lockdown on until %1$s</string>
-    <string name="lockdown_add_hour">+1 hour</string>
+    <string name="lockdown_add_hour">+1h</string>
     <string name="lockdown_open">Open</string>
     <string name="lockdown_blocked_count">%1$d blocked</string>
     <string name="lockdown_stat_caption">blocked today · %1$d a day this week</string>
     <!-- Held to explain -->
     <string name="info_lockdown_places">Turns lockdown on while you\'re at a chosen place, from Places.</string>
-    <string name="info_lockdown_during">Block the apps on the list during lockdown, or allow only the listed apps and block the rest.</string>
-    <string name="info_allowed_apps">With Only allow these, the apps that work during lockdown.</string>
+    <string name="info_lockdown_during">Blocks the listed apps during lockdown, or allows only the listed apps and blocks the rest.</string>
+    <string name="info_allowed_apps">The apps that work during lockdown when it\'s set to Only allow these.</string>
     <string name="info_app_limits">Each app\'s daily time and opens per day, which can differ by day of the week, plus Pause and Use for a set time.</string>
     <string name="info_lock_app_list">Hides the app list during lockdown.</string>
     <string name="info_lock_app_changes">Locks App info and Uninstall when holding an app on Home or in the app list. Swapping a Home app still works.</string>
@@ -1354,7 +1342,6 @@
     <string name="supplement_today_date">Today, %1$s</string>
     <string name="supplement_stop">Stop</string>
     <string name="supplement_start_again">Start again</string>
-    <string name="supplement_delete">Delete</string>
     <string name="supplement_on_today">Today</string>
     <string name="supplement_off_today">Off today</string>
     <string name="supplement_week_of">Week %1$d of %2$d</string>
@@ -1364,14 +1351,14 @@
     <string name="supplement_days">Days</string>
     <string name="supplement_taken">Taken</string>
     <string name="supplement_off">Off</string>
-    <string name="supplement_missed">Missed</string>
+    <string name="supplement_missed">Skipped</string>
     <string name="supplement_changes">Changes</string>
     <string name="supplement_started">Started · %1$s · %2$s</string>
     <string name="supplement_started_again">Started again · %1$s · %2$s</string>
     <string name="supplement_was">%1$s, was %2$s</string>
     <string name="supplement_stopped">Stopped</string>
-    <string name="supplement_taken_vs_not">Taken vs not</string>
-    <string name="supplement_taken_count">%1$d taken · %2$d not</string>
+    <string name="supplement_taken_vs_not">Taken vs skipped</string>
+    <string name="supplement_taken_count">%1$d taken · %2$d skipped</string>
     <string name="supplement_not_taken">Skipped</string>
     <string name="supplement_before_since">Before vs since</string>
     <string name="supplement_started_seg">Started %1$s</string>
@@ -1380,10 +1367,9 @@
     <string name="supplement_since">Since</string>
     <string name="supplement_by_amount">By amount</string>
     <string name="supplement_none">None</string>
-    <string name="supplement_not_enough">Not enough days yet</string>
-    <string name="supplement_vs_detail">%1$s: %2$s taken (%3$d days) vs %4$s not (%5$d days)</string>
-    <string name="supplement_since_detail">%1$s: %2$s since (%3$d days) vs %4$s before (%5$d days)</string>
-    <string name="supplement_amount_detail">%1$s: %2$s on %3$d days</string>
+    <string name="supplement_vs_detail">%1$s %2$s taken vs %4$s skipped · %3$d vs %5$d days</string>
+    <string name="supplement_since_detail">%1$s %2$s since vs %4$s before · %3$d vs %5$d days</string>
+    <string name="supplement_amount_detail">%1$s %2$s · %3$s</string>
     <string name="supplement_checkin_question">Any change to supplements?</string>
     <string name="supplement_checkin_same">Same as usual</string>
     <string name="supplement_checkin_changed">Changed</string>
@@ -1407,23 +1393,23 @@
     <string name="newsletter_daily">Daily</string>
     <string name="newsletter_weekly">Weekly</string>
     <string name="newsletter_pc">PC</string>
-    <string name="newsletter_needs_pairing">Needs the Mac pairing from Lockdown.</string>
+    <string name="newsletter_needs_pairing">Needs the Mac pairing from Lockdown</string>
     <string name="newsletter_run">Run</string>
     <string name="newsletter_stop">Stop</string>
     <string name="newsletter_stop_ask">Stop the run?</string>
     <string name="newsletter_send">Send</string>
     <string name="newsletter_send_ask">Send %1$s to Kindle?</string>
-    <string name="newsletter_cant_reach">Couldn\'t reach the database</string>
+    <string name="newsletter_cant_reach">Couldn’t reach the server</string>
     <string name="newsletter_loading">Loading…</string>
     <string name="newsletter_fetching">r/%1$s · %2$d of %3$d</string>
     <string name="newsletter_stage_starting">Starting</string>
     <string name="newsletter_stage_book">Making the book</string>
     <string name="newsletter_stage_send">Sending to Kindle</string>
-    <string name="newsletter_progress">%1$s · %2$d min</string>
-    <string name="newsletter_last_sent">Last run: %1$s · sent %2$s</string>
-    <string name="newsletter_last_failed">Last run: %1$s · failed %2$s</string>
-    <string name="newsletter_last_stopped">Last run: %1$s · stopped %2$s</string>
-    <string name="newsletter_last_expired">Last run: %1$s · not started, the PC was away</string>
+    <string name="newsletter_progress">%1$s · %2$s</string>
+    <string name="newsletter_last_sent">Last run %1$s · sent %2$s</string>
+    <string name="newsletter_last_failed">Last run %1$s · failed %2$s</string>
+    <string name="newsletter_last_stopped">Last run %1$s · stopped %2$s</string>
+    <string name="newsletter_last_expired">Last run %1$s · not started, the PC was away</string>
     <string name="newsletter_pc_away">PC last seen %1$s</string>
     <string name="newsletter_pc_never">PC not seen yet</string>
     <string name="newsletter_issues">Issues</string>
@@ -1444,7 +1430,7 @@
     <string name="newsletter_images">Images</string>
     <string name="newsletter_book">Book</string>
     <string name="newsletter_own_settings">Own settings</string>
-    <string name="newsletter_as_default">Default (%1$s)</string>
+    <string name="newsletter_as_default">Default · %1$s</string>
     <string name="newsletter_default">Default</string>
     <string name="newsletter_keep_one">Keep at least one subreddit</string>
     <string name="newsletter_set_posts">Posts per subreddit</string>
@@ -1482,14 +1468,13 @@
     <string name="newsletter_dark">Dark</string>
     <string name="newsletter_images_on">Images on</string>
     <string name="newsletter_images_off">Images off</string>
-    <string name="newsletter_page_of">%1$d of %2$d</string>
     <string name="newsletter_previous">Previous</string>
     <string name="newsletter_next">Next</string>
     <!-- Updating from the build on Drive -->
     <string name="app_update">Update</string>
     <string name="app_update_checking">Checking…</string>
     <string name="app_update_latest">Latest · %1$s</string>
-    <string name="app_update_newer">New build, %1$s</string>
+    <string name="app_update_newer">New build · %1$s</string>
     <string name="app_update_not_found">No build on Drive</string>
     <string name="info_app_update">Installs a newer version of JLauncher when one is on Drive. Tap to install it, or to check again.</string>
     <!-- Settings -->
@@ -1501,7 +1486,6 @@
     <string name="places_delete_title">Delete location history?</string>
     <string name="reset_layout_title">Reset layout?</string>
     <string name="reset">Reset</string>
-    <string name="delete_confirm">Delete</string>
     <string name="info_newsletter_profile">The subreddits this newsletter takes posts from, and how it makes the book. Changes go to the PC that makes it.</string>
     <string name="info_newsletter_reader">Reads issues as pages you turn, or as one long scroll.</string>
     <plurals name="hidden_count">

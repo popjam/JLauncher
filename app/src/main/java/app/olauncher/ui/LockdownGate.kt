@@ -129,7 +129,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) start()
                 else context.showToast(context.getString(R.string.password_incorrect))
             } else start()
-            else -> run(challenge, context.getString(R.string.lockdown_break_title, config.minutes)) { start() }
+            else -> run(challenge, context.getString(R.string.lockdown_break_title, app.olauncher.helper.Formats.minutes(config.minutes))) { start() }
         }
     }
 
@@ -249,7 +249,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
         }
         fun show() {
             shown.text = texts[index]
-            progress.text = if (texts.size > 1) context.getString(R.string.lockdown_n_of, index + 1, texts.size) else ""
+            progress.text = if (texts.size > 1) context.getString(R.string.n_of, index + 1, texts.size) else ""
             input.setText("")
         }
         val box = LinearLayout(context).apply {
@@ -341,7 +341,7 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             AppDialog(context)
                 .setTitle(R.string.catastrophic_warning)
                 .setMessage(R.string.lockdown_password_warning)
-                .setPositiveButton(R.string.lockdown_next) { _, _ -> setNewPassword(false, onSet) }
+                .setPositiveButton(R.string.next) { _, _ -> setNewPassword(false, onSet) }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
             return

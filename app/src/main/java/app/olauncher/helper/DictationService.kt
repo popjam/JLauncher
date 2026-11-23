@@ -79,7 +79,7 @@ class DictationService : Service() {
         // Tapping it brings the recording popup back
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, VoiceNoteActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
         .addAction(0, getString(if (Dictation.recorder?.paused == true) R.string.voice_resume else R.string.voice_pause), action(PAUSE))
-        .addAction(0, getString(R.string.voice_done), action(DONE))
+        .addAction(0, getString(R.string.save), action(DONE))
         .build()
 
     private fun action(name: String) = PendingIntent.getService(this, name.hashCode(),

@@ -138,7 +138,7 @@ abstract class CardPageFragment : Fragment() {
                     .setTitle(R.string.hidden_cards_title)
                     .setMultiChoiceItems(hidden.map { cardLabel(it) }.toTypedArray(), picked) { _, i, on -> picked[i] = on }
                     .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.show) { _, _ -> unhideCards(hidden.filterIndexed { i, _ -> picked[i] }.toSet()) }
+                    .setPositiveButton(R.string.save) { _, _ -> unhideCards(hidden.filterIndexed { i, _ -> picked[i] }.toSet()) }
                     .show()
             }
         }

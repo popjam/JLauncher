@@ -96,7 +96,7 @@ final class Model: ObservableObject {
             connect()
             return nil
         } catch {
-            return "Couldn't reach the database: \(error)"
+            return "Couldn't reach the server: \(error)"
         }
     }
 

@@ -79,12 +79,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // On a break: ending it is the first thing
         if model.onBreak {
-            menu.addItem(action("End break now (\(Format.clock(model.state.breakUntil - Date().ms)) left)") { [model] in model.endBreak() })
+            menu.addItem(action("End break now · \(Format.clock(model.state.breakUntil - Date().ms)) left") { [model] in model.endBreak() })
             menu.addItem(.separator())
         }
         menu.addItem(label(headline(status)))
         if let phone = model.phone, phone.updatedAt > 0 {
-            menu.addItem(label("Phone: " + phoneLine(phone)))
+            menu.addItem(label("Phone · " + phoneLine(phone)))
         }
         if model.waitingForPhone { menu.addItem(label("Waiting for phone")) }
         if let error = model.syncError { menu.addItem(label(error)) }
@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         func lengths(_ devices: Int, add: Bool) -> [NSMenuItem] {
             Self.lengths.prefix(add ? 5 : 7).map { (title, ms) in
                 action((add ? "+" : "") + title) { [model] in add ? model.add(ms, devices: devices) : model.start(for: ms, devices: devices) }
-            } + (add ? [NSMenuItem]() : [NSMenuItem.separator(), action("Until I turn it off") { [model] in model.start(for: nil, devices: devices) }])
+            } + (add ? [NSMenuItem]() : [NSMenuItem.separator(), action("Until turned off") { [model] in model.start(for: nil, devices: devices) }])
         }
         let add = status.on
         let title = add ? "Add time" : "Start"
@@ -117,16 +117,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switch model.canBreak {
             case .yes:
                 menu.addItem(action("Take a \(breaks.minutes)m break…") { [model] in
-                    Unlocking.run(title: "Take a \(breaks.minutes) minute break?", action: "Take break", challenge: breaks.challenge) { model.takeBreak() }
+                    Unlocking.run(title: "Take a \(breaks.minutes)m break?", action: "Take break", challenge: breaks.challenge) { model.takeBreak() }
                 })
             case let can:
-                menu.addItem(label("Break: " + Self.cantBreak(can)))
+                menu.addItem(label("Break · " + Self.cantBreak(can)))
             }
         }
 
         menu.addItem(.separator())
         let count = model.macApps.count + model.sites.count
-        menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites (\(count) on this Mac)…") { Dialog.show(width: 460) { ItemsView() } })
+        menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count) on this Mac…") { Dialog.show(width: 460) { ItemsView() } })
         if !Blocker.accessibilityOn {
             menu.addItem(action("Allow Accessibility (needed for websites)…") { Blocker.askForAccessibility() })
         }

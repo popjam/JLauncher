@@ -225,7 +225,7 @@ object SupplementDialog {
                 finish()
             }
             buttons.addView(startAgain)
-            buttons.addView(button(R.string.supplement_delete, Style.DANGER_SOFT) {
+            buttons.addView(button(R.string.action_delete, Style.DANGER_SOFT) {
                 AppDialog.confirmDelete(context, context.getString(R.string.delete_what, supplement.name), context.getString(R.string.supplement_delete_detail)) {
                     store.deleteSupplement(supplement.id)
                     finish()
@@ -234,7 +234,7 @@ object SupplementDialog {
         }
         buttons.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
         buttons.addView(button(R.string.cancel) { dialog.dismiss() })
-        save = button(if (editing) R.string.save else R.string.add, boxed = true) {
+        save = button(R.string.save, boxed = true) {
             val value = amountValue() ?: return@button
             if (supplement == null) {
                 store.addSupplement(name.text.toString(), unit.text.toString(), value, schedule(), from)

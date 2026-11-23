@@ -99,7 +99,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (launching) Lockdown.blockFor(appContext, appModel.appPackage, opening = true, prefs)?.takeUnless { it.gentle }?.let { block ->
             // The block screen, over the launcher; without the service, a line saying why
             if (!MyAccessibilityService.showBlock(appModel.appLabel, block, appModel.appPackage))
-                appContext.showToast(appModel.appLabel + ": " + app.olauncher.ui.LockdownGate.reasonText(appContext, block))
+                appContext.showToast(appModel.appLabel + " · " + app.olauncher.ui.LockdownGate.reasonText(appContext, block))
             return
         }
         if (launching

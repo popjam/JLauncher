@@ -187,7 +187,7 @@ class NewsletterFragment : CardPageFragment() {
                 else -> getString(R.string.newsletter_stage_starting)
             }
         val minutes = if (status.startedAt > 0) ((System.currentTimeMillis() - status.startedAt) / 60_000L).coerceAtLeast(0) else 0
-        return getString(R.string.newsletter_progress, where, minutes)
+        return getString(R.string.newsletter_progress, where, app.olauncher.helper.Formats.minutes(minutes.toInt()))
     }
 
     private fun lastRunText(status: Status?): String? {

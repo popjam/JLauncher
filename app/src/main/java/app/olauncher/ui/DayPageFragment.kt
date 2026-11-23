@@ -239,7 +239,6 @@ class DayPageFragment : CardPageFragment() {
     private fun statsCard(stats: List<StatInfo>, day: MoodStore.Day?) {
         val context = requireContext()
         val card = Card(getString(R.string.day_stats))
-        card.subtitle(getString(R.string.day_tap_to_change))
         card.scene.visibility = View.GONE
         val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         stats.forEach { stat ->

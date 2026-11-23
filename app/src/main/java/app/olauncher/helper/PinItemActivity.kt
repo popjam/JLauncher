@@ -3,12 +3,14 @@ package app.olauncher.helper
 import android.content.pm.LauncherApps
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import app.olauncher.R
 
+/** Another app asking to pin a shortcut: shortcuts are added to the app list; widgets aren't supported */
 class PinItemActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         // Set window to be transparent
         window.setBackgroundDrawable(null)
 
@@ -17,7 +19,7 @@ class PinItemActivity : AppCompatActivity() {
 
         when (pinItemRequest != null) {
             true -> handleRequestType(pinItemRequest)
-            false -> showToast("Invalid pin request")
+            false -> showToast(R.string.shortcut_failed)
         }
 
         finish()
@@ -29,23 +31,14 @@ class PinItemActivity : AppCompatActivity() {
                 handleShortcutRequest(pinItemRequest)
 
             LauncherApps.PinItemRequest.REQUEST_TYPE_APPWIDGET ->
-                showToast("Widgets are not supported")
+                showToast(R.string.widgets_unsupported)
 
-            else -> showToast("Unknown action not supported")
+            else -> showToast(R.string.shortcut_failed)
         }
     }
 
     private fun handleShortcutRequest(pinItemRequest: LauncherApps.PinItemRequest) {
-        val shortcutInfo = pinItemRequest.shortcutInfo
-        if (shortcutInfo != null) {
-            val success = pinItemRequest.accept()
-            val message = when (success) {
-                true -> "Shortcut pinned successfully"
-                false -> "Failed to pin shortcut"
-            }
-            showToast(message)
-        } else {
-            showToast("Invalid shortcut info")
-        }
+        val accepted = pinItemRequest.shortcutInfo != null && pinItemRequest.accept()
+        showToast(if (accepted) R.string.shortcut_added else R.string.shortcut_failed)
     }
 }

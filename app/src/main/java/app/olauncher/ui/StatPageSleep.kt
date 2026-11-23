@@ -137,7 +137,12 @@ internal fun StatPageFragment.sleepTimesCard(nights: Map<LocalDate, Sleep.Night>
 internal fun StatPageFragment.sleepMoodCard(nights: Map<LocalDate, Sleep.Night>) {
     val mood = stats.firstOrNull { it.id == MoodStore.MOOD } ?: return
     val energy = stats.firstOrNull { it.id != MoodStore.MOOD && it.name.contains("energy", ignoreCase = true) }
-    val byBedtime = MoodGroups(listOf(R.string.sleep_before_11, R.string.sleep_11_12, R.string.sleep_12_1, R.string.sleep_after_1).map { getString(it) }) { date ->
+    val byBedtime = MoodGroups(java.time.LocalTime.of(23, 0).let { eleven ->
+        val (midnight, one) = java.time.LocalTime.MIDNIGHT to java.time.LocalTime.of(1, 0)
+        val context = requireContext()
+        listOf(getString(R.string.sleep_before, app.olauncher.helper.Formats.time(context, eleven)), app.olauncher.helper.Formats.timeRange(context, eleven, midnight),
+            app.olauncher.helper.Formats.timeRange(context, midnight, one), getString(R.string.sleep_after, app.olauncher.helper.Formats.time(context, one)))
+    }) { date ->
         val bed = offset((nights[date] ?: return@MoodGroups null).bedtime, date)
         when {
             bed < -60 -> 0
@@ -176,14 +181,14 @@ internal fun StatPageFragment.sleepPhoneCard(nights: Map<LocalDate, Sleep.Night>
     val morning = shown.map { it.morningMs }
     val tiles = listOf(
         duration(late.average().toLong()) to getString(R.string.sleep_late_avg),
-        late.count { it >= SLEEP_LATE_MS }.toString() + "/" + shown.size to getString(R.string.sleep_late_nights),
+        getString(R.string.n_of, late.count { it >= SLEEP_LATE_MS }, shown.size) to getString(R.string.sleep_late_nights),
         duration(morning.average().toLong()) to getString(R.string.sleep_morning_avg),
     )
     val color = stat.themeColor
     card.describe = { key ->
         val date = key as LocalDate
         val night = nights.getValue(date)
-        listOf(dateText(date), getString(R.string.stat_label, getString(R.string.sleep_late_row), duration(night.lateMs)),
+        listOf(dateText(date), getString(R.string.stat_label, getString(R.string.sleep_after, app.olauncher.helper.Formats.time(requireContext(), java.time.LocalTime.of(app.olauncher.helper.Sleep.LATE_HOUR, 0))), duration(night.lateMs)),
             getString(R.string.stat_label, getString(R.string.sleep_morning_row), duration(night.morningMs))).joinToString("\n")
     }
     card.draw { s ->
@@ -198,11 +203,11 @@ internal fun StatPageFragment.sleepPhoneCard(nights: Map<LocalDate, Sleep.Night>
         }
         val top = s.dp(84f)
         val labelSize = s.sp(12f)
-        val left = maxOf(s.textWidth(getString(R.string.sleep_late_row), labelSize), s.textWidth(getString(R.string.sleep_morning_row), labelSize)) + s.dp(12f)
+        val left = maxOf(s.textWidth(getString(R.string.sleep_after, app.olauncher.helper.Formats.time(requireContext(), java.time.LocalTime.of(app.olauncher.helper.Sleep.LATE_HOUR, 0))), labelSize), s.textWidth(getString(R.string.sleep_morning_row), labelSize)) + s.dp(12f)
         val column = (s.width - left) / days.size
         val row = s.dp(30f)
         val most = minOf(s.dp(10f), column * 0.45f)
-        listOf(getString(R.string.sleep_late_row) to { n: Sleep.Night -> n.lateMs }, getString(R.string.sleep_morning_row) to { n: Sleep.Night -> n.morningMs })
+        listOf(getString(R.string.sleep_after, app.olauncher.helper.Formats.time(requireContext(), java.time.LocalTime.of(app.olauncher.helper.Sleep.LATE_HOUR, 0))) to { n: Sleep.Night -> n.lateMs }, getString(R.string.sleep_morning_row) to { n: Sleep.Night -> n.morningMs })
             .forEachIndexed { r, (label, ms) ->
                 val cy = top + r * row + row / 2
                 s.text(label, 0f, cy + labelSize * 0.35f, faint(180), labelSize, Paint.Align.LEFT)

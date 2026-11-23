@@ -276,7 +276,7 @@ internal fun StatPageFragment.socialPlacesCard(days: Map<LocalDate, Social.Day>)
  */
 internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) {
     val context = requireContext()
-    if (!Social.hasLocation(context)) return Card(getString(R.string.places_title)).needs(getString(R.string.social_need_location)) {
+    if (!Social.hasLocation(context)) return Card(getString(R.string.places_title_short)).needs(getString(R.string.social_need_location)) {
         askLocation.launch(Manifest.permission.ACCESS_FINE_LOCATION)
     }
     // Finding places turned off in Settings: no card
@@ -285,7 +285,7 @@ internal fun StatPageFragment.socialSpotsCard(days: Map<LocalDate, Social.Day>) 
     val named = Places.places(context)
     // None found yet: no card
     if (suggestions.isEmpty() && named.isEmpty()) return
-    val card = Card(getString(R.string.places_title))
+    val card = Card(getString(R.string.places_title_short))
     // Suggestions and named places are separate lists, so selecting several only takes in one kind
     val suggestionRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     val namedRows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }

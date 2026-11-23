@@ -249,7 +249,7 @@ class NewsletterSettingsFragment : CardPageFragment() {
         AppDialog(requireContext())
             .setTitle(R.string.newsletter_add_subreddit)
             .setView(padded(field))
-            .setPositiveButton(R.string.add) { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val name = NewsletterSync.cleanName(field.text.toString())
                 when {
                     name == null -> requireContext().showToast(R.string.newsletter_bad_name)

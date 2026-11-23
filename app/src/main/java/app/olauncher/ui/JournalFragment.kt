@@ -230,7 +230,7 @@ class JournalFragment : Fragment() {
                 addView(voiceButton(ink) { recordVoiceNote(date) })
             })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
-                text = if (note.isBlank()) getString(R.string.journal_today_hint) else gist(date, note, 400)
+                text = if (note.isBlank()) getString(R.string.day_note_hint) else gist(date, note, 400)
                 textSize = Style.TEXT_BODY
                 setTextColor(ink)
                 alpha = if (note.isBlank()) 0.45f else 1f

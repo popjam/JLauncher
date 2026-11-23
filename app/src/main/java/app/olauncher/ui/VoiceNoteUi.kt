@@ -93,7 +93,7 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
     val bars = LevelBars(ui, ink)
     val cancel = roundButton(ui, StatIcons.CROSS, ui.getString(R.string.cancel), ink, filled = false, sizeDp = 54)
     val pause = roundButton(ui, StatIcons.PAUSE, ui.getString(R.string.voice_pause), ink, filled = true, sizeDp = 72)
-    val done = roundButton(ui, StatIcons.CHECK, ui.getString(R.string.voice_done), ink, filled = false, sizeDp = 54)
+    val done = roundButton(ui, StatIcons.CHECK, ui.getString(R.string.save), ink, filled = false, sizeDp = 54)
 
     val card = sheetCard(ui).apply {
         gravity = Gravity.CENTER_HORIZONTAL
@@ -175,11 +175,7 @@ fun showRecorder(ui: Context, lifecycle: Lifecycle, date: LocalDate, onText: ((S
         if (recorder.recordedMs < KEEP_WITHOUT_ASKING_MS) return@setOnClickListener Dictation.cancel(context)
         recorder.paused = true
         showState()
-        AppDialog(ui)
-            .setMessage(R.string.voice_discard_ask)
-            .setNegativeButton(R.string.voice_keep_going, null)
-            .setPositiveButton(R.string.voice_discard) { _, _ -> Dictation.cancel(context) }
-            .show()
+        AppDialog.confirmDelete(ui, ui.getString(R.string.voice_discard_ask), ui.getString(R.string.voice_discard_detail)) { Dictation.cancel(context) }
     }
     pause.setOnClickListener { Dictation.togglePause() }
     done.setOnClickListener { Dictation.done(context) }
@@ -323,11 +319,7 @@ private fun Fragment.pendingRow(ui: Context, ink: Int, file: File, faint: (Int) 
             setBackgroundResource(android.R.drawable.list_selector_background)
             contentDescription = ui.getString(R.string.voice_discard)
             setOnClickListener {
-                AppDialog(ui)
-                    .setMessage(R.string.voice_discard_ask)
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.voice_discard) { _, _ -> VoiceNotes.delete(file) }
-                    .show()
+                AppDialog.confirmDelete(ui, ui.getString(R.string.voice_discard_ask), ui.getString(R.string.voice_discard_detail)) { VoiceNotes.delete(file) }
             }
         }, LinearLayout.LayoutParams(40.dpToPx(), 40.dpToPx()))
     }

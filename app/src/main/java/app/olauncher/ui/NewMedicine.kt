@@ -5,7 +5,6 @@ import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import app.olauncher.R
 import app.olauncher.data.MoodStore
@@ -53,12 +52,11 @@ object NewMedicine {
             .setTitle(R.string.new_kind_medicine)
             .setView(box)
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.add) { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val title = name.text.toString().trim()
                 if (title.isEmpty()) return@setPositiveButton
                 val list = doses.text.toString().split(',', '/', ';').map { it.trim() }.filter { it.isNotEmpty() }.take(4)
                 add(context, store, title, list)
-                Toast.makeText(context, context.getString(R.string.medicine_added, title), Toast.LENGTH_SHORT).show()
                 onDone()
             }
             .show()

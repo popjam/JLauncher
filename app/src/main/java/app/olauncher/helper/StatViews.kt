@@ -181,7 +181,7 @@ fun Context.statAmount(stat: StatInfo, date: LocalDate, day: MoodStore.Day?): St
     StatKind.MUSIC -> Music.days(this)[date]?.let { Formats.duration(it.ms) }
     StatKind.SOCIAL -> Social.days(this)[date]?.let { Formats.duration(it.outMs) }
     StatKind.WORK -> Social.days(this)[date]?.workMs?.takeIf { it > 0 }?.let { Formats.duration(it) }
-    StatKind.WEATHER -> WeatherHistory.days(this)[date]?.let { String.format(Locale.getDefault(), "%.1fh sun", it.sunHours) }
+    StatKind.WEATHER -> WeatherHistory.days(this)[date]?.let { getString(R.string.weather_sun_hours, Formats.duration((it.sunHours * 3_600_000L).toLong())) }
     StatKind.PEOPLE -> People.days(this)[date]?.let { resources.getQuantityString(R.plurals.messages_count, it.messages, it.messages) }
     StatKind.LOCKDOWN -> Lockdown.blockedDays(app.olauncher.data.Prefs(this))[date]?.let { getString(R.string.lockdown_blocked_count, it) }
     StatKind.MONEY -> if (Spending.purchases(this).any { it.date == date })

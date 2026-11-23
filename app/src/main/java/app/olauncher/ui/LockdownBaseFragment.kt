@@ -310,7 +310,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
         val limits = Limits.appsWithRules(context, prefs)
         val needsService = items.values.any { it.phone } || prefs.lockdownProtect || prefs.lockdownSystemSettings || limits > 0 || allow
         val settings = collapsibleGroup(sections, "settingsChanges", getString(R.string.lockdown_settings_changes),
-            getString(R.string.lockdown_n_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size),
+            getString(R.string.n_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size),
             getString(R.string.info_lockdown_settings_changes), locks.map { lockRow(it) })
         return Rows(listOf(
             row(getString(R.string.lockdown_apps_and_sites), blockedValue(items), R.string.info_lockdown_blocks) { open(LockdownPageFragment.BLOCKS) }
@@ -497,7 +497,7 @@ abstract class LockdownBaseFragment : CardPageFragment() {
             .setTitle(R.string.lockdown_schedule_days)
             .setMultiChoiceItems(days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) }.toTypedArray(), ticked) { _, i, on -> ticked[i] = on }
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.lockdown_next) { _, _ ->
+            .setPositiveButton(R.string.next) { _, _ ->
                 val bits = ticked.foldIndexed(0) { i, acc, on -> if (on) acc or (1 shl i) else acc }
                 if (bits == 0) return@setPositiveButton context.showToast(getString(R.string.lockdown_choose_a_day))
                 val is24 = DateFormat.is24HourFormat(context)

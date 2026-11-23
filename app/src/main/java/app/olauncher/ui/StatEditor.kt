@@ -155,9 +155,9 @@ object StatEditor {
             binding.statPhrases.findFocus()?.hideKeyboard()
             renderPhrases()
         }
-        // Terrible to Great by the face shown in each place, so an inverted stat's run the other way
+        // The check-in's mood names, Sad to Happy, by the face shown in each place, so an inverted stat's run the other way
         binding.statDefaultLabels.setOnClickListener {
-            val words = context.resources.getStringArray(R.array.default_face_labels)
+            val words = context.resources.getStringArray(R.array.mood_names)
             MoodStore.facesFor(scale).zip(rowFaces()).forEach { (place, face) -> labels[place] = words[face] }
             binding.statFaceLabels.findFocus()?.hideKeyboard()
             renderLabels()
@@ -206,7 +206,7 @@ object StatEditor {
             .setTitle(title)
             .setView(binding.root)
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(if (statId == null) R.string.add else R.string.save) { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val name = binding.statName.text?.toString().orEmpty()
                 val question = binding.statQuestion.text?.toString().orEmpty()
                 val inverted = binding.statInverted.isChecked
@@ -220,7 +220,7 @@ object StatEditor {
                 }
                 onDone(statId)
             }
-        if (stat != null) builder.setNeutralButton(R.string.delete_stat) { _, _ -> confirmDelete(context, moodStore, stat, onDone) }
+        if (stat != null) builder.setNeutralButton(R.string.action_delete) { _, _ -> confirmDelete(context, moodStore, stat, onDone) }
         val dialog = builder.show()
 
         if (!builtIn) {

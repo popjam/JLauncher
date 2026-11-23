@@ -204,7 +204,7 @@ object Report {
             heading(context.getString(R.string.report_daily_life))
             if (nights.isNotEmpty()) {
                 val asleep = nights.values.map { it.asleepMs }.average().toLong()
-                text(context.getString(R.string.report_sleep, Formats.duration(asleep), nights.size), 11f)
+                text(context.getString(R.string.report_sleep, Formats.duration(asleep), context.resources.getQuantityString(R.plurals.night_count, nights.size, nights.size)), 11f)
             }
             if (usage.isNotEmpty()) text(context.getString(R.string.report_screen, Formats.duration(usage.average().toLong())), 11f)
         }

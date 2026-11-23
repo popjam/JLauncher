@@ -41,7 +41,7 @@ internal fun StatPageFragment.musicDaysCard() {
     if (days.isEmpty()) return
     val card = Card(getString(R.string.music_each_day))
     val shades = StatKind.MUSIC.shades!!
-    card.keyItem(ColorUtils.blendARGB(shades.first, shades.second, 0.5f), getString(R.string.music_block, MUSIC_BLOCK_MINUTES))
+    card.keyItem(ColorUtils.blendARGB(shades.first, shades.second, 0.5f), getString(R.string.music_block, Formats.minutes(MUSIC_BLOCK_MINUTES.toInt())))
     fun draw() {
     val shown = stepDates(card, HABIT_DAYS, days.keys.minOrNull(), ::draw)
     val blocks = shown.map { date -> ((days[date]?.ms ?: 0L) / 60_000L / MUSIC_BLOCK_MINUTES).toInt() }
