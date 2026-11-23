@@ -1,7 +1,9 @@
 #!/bin/zsh
 # Builds "JLauncher Lockdown.app" into ~/Applications. Run from anywhere: ./mac/build.sh
 set -e
-cd "${0:A:h}"
+# Resolved before the cd, since $0 may be relative
+HERE="${0:A:h}"
+cd "$HERE"
 swift run -q LockdownChecks
 swift build -c release --product JLauncherMac
 APP="$HOME/Applications/JLauncher Lockdown.app"
@@ -11,7 +13,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/JLauncherMac "$APP/Contents/MacOS/JLauncherMac"
 # Where it was built from and which version, for the app's Update item
-REPO="${0:A:h:h}"
+REPO="${HERE:h}"
 COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
