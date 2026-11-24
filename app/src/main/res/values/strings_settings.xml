@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings' pages: what each category and row is, as holding it explains -->
+<resources>
+    <!-- The categories -->
+    <string name="info_page_home">How the home screen looks: apps, pages, the clock, text size, theme, screen time and weather.</string>
+    <string name="info_page_gestures">What swipes, double taps and the home button do on the home screen.</string>
+    <string name="info_page_apps">Hidden apps, and the app list\'s keyboard.</string>
+    <string name="info_page_check_in">The daily check-in: whether it asks, when, and what it asks about.</string>
+    <string name="info_page_money">The weekly spending limit and which spending counts as essential.</string>
+    <string name="info_page_places">Finding the places you spend time at, and the location history kept for it.</string>
+    <string name="info_page_tracking">What tracking needs to work, and anything to fix.</string>
+    <string name="info_page_stats">When the week starts, goals, home and work places, and reports.</string>
+    <string name="info_page_notes">Tidying and summarising notes with Claude.</string>
+    <string name="info_page_newsletter">Each newsletter\'s settings, and how issues are read.</string>
+    <string name="info_page_backup">Where backups are saved, and exporting or importing one.</string>
+    <string name="info_page_about">The default launcher, the tutorial, the version, updates and the last error.</string>
+
+    <!-- Rows on the pages -->
+    <string name="check_in_on">Daily check-in</string>
+    <string name="units_auto_short">Auto</string>
+    <string name="tracking_ok">OK</string>
+    <string name="locked">Locked</string>
+    <string name="info_locked_by_lockdown">Lockdown is blocking this while it\'s on: the page it opens is one lockdown keeps closed. It works again once lockdown ends, or once that block is turned off in Lockdown › Blocks.</string>
+    <string name="info_list_none">Nothing here yet.</string>
+    <string name="info_hidden_app_item">A hidden app. Tap or hold it to open it or unhide it.</string>
+    <string name="import_backup_ask">Replace everything with this backup?</string>
+    <string name="import_backup_message">Every setting, stat and list on this phone is replaced with the backup\'s.</string>
+
+    <!-- Lockdown -->
+    <string name="lockdown_rules">Rules</string>
+    <string name="lockdown_more">More</string>
+    <string name="lockdown_status">Status</string>
+    <string name="lockdown_setup_again">Run setup again</string>
+    <string name="lockdown_time_left">%1$s left</string>
+    <string name="lockdown_nothing_blocked">Nothing blocked yet</string>
+    <string name="lockdown_block_short">Block list</string>
+    <string name="lockdown_allow_short">Allow list</string>
+    <string name="info_lockdown_status">Whether lockdown is on now, until when, and why.</string>
+    <string name="info_lockdown_device_status">Whether lockdown is on for this device now.</string>
+    <string name="info_lockdown_start">Turns lockdown on now, for a set time, until a time, or until it\'s turned off.</string>
+    <string name="info_lockdown_add_time">Keeps lockdown on for longer. Time can be added but not taken off.</string>
+    <string name="info_lockdown_take_break">Lifts lockdown on every device for a while, using break time from the pool.</string>
+    <string name="info_lockdown_end_break">Ends the break now and puts the time left back in the pool.</string>
+    <string name="info_lockdown_end_early">Ends lockdown now, after what Unlock is set to need. Schedules, places and screen time still turn it on again.</string>
+    <string name="info_lockdown_keep_on">Keeps lockdown on after what turned it on ends, until it\'s ended early.</string>
+    <string name="info_lockdown_blocks_section">What lockdown blocks: apps, websites and settings changes, and whether the phone blocks a list or allows only one.</string>
+    <string name="info_lockdown_screen_time_section">Limits for single apps, and turning lockdown on after a day\'s total screen time.</string>
+    <string name="info_lockdown_on_screen">What shows lockdown: a widget on home, greyscale, and a notification.</string>
+    <string name="info_lockdown_schedule_item">A time lockdown turns on by itself. Tap or hold it to change or remove it.</string>
+    <string name="info_lockdown_place_item">A place lockdown turns on at. Tap or hold it to remove it.</string>
+    <string name="info_lockdown_add_schedule">Adds days and times for lockdown to turn on by itself.</string>
+    <string name="info_lockdown_add_place">Adds a place for lockdown to turn on at.</string>
+    <string name="info_lockdown_trigger_item">Turns lockdown on once the day\'s total screen time passes this, until the time shown. Tap or hold it to change or remove it.</string>
+    <string name="info_lockdown_trigger_running">Screen time has turned lockdown on until then.</string>
+    <string name="info_lockdown_today">Today\'s screen time so far, in total and on each device.</string>
+    <string name="info_lockdown_add_trigger">Adds an amount of screen time that turns lockdown on.</string>
+    <string name="info_lockdown_break_pool">Break time saved up now, and when more is added.</string>
+    <string name="info_lockdown_break_off_item">A time breaks can\'t be taken and the pool doesn\'t fill. Tap or hold it to change or remove it.</string>
+    <string name="info_lockdown_add_break_off">Adds a time when breaks can\'t be taken.</string>
+    <string name="info_challenge_phrase">The phrase typed out to unlock. A shorter phrase loosens lockdown, so it needs the unlock.</string>
+    <string name="info_lockdown_permissions">What lockdown needs allowed to work: accessibility, usage access and notifications.</string>
+    <string name="info_lockdown_blocked_item">Blocked during lockdown on the devices shown. Tap or hold it to remove it.</string>
+    <string name="info_lockdown_block_app">Tap to block this app during lockdown.</string>
+    <string name="info_lockdown_allowed_item">Allowed during lockdown. Tap or hold it to take it off the list.</string>
+    <string name="info_lockdown_essential_item">Always allowed, whatever the list. Tap or hold it to take it off.</string>
+    <string name="info_lockdown_fixed_app">This app can\'t be blocked, so it\'s always allowed.</string>
+    <string name="info_lockdown_allow_app">Tap to allow this app during lockdown. Allowing more loosens lockdown, so it needs the unlock.</string>
+    <string name="info_lockdown_essential_app">Tap to always allow this app. Allowing more loosens lockdown, so it needs the unlock.</string>
+    <string name="info_limits_today">Today\'s screen time across the apps, and how many are at their limit.</string>
+    <string name="info_lockdown_limit_item">An app with limits. Tap it to change them, or hold it to remove them.</string>
+    <string name="info_lockdown_limit_app">Tap to set limits for this app.</string>
+
+    <!-- The newsletter's settings -->
+    <string name="info_newsletter_subreddit_item">A subreddit the newsletter takes posts from. Tap it for its own settings; hold it to move, rename or remove it.</string>
+    <string name="info_newsletter_add_subreddit">Adds a subreddit to take posts from.</string>
+    <string name="info_newsletter_own">This subreddit\'s own setting. Default uses the newsletter\'s.</string>
+    <string name="info_nl_posts">How many posts each subreddit gives.</string>
+    <string name="info_nl_sort">Which posts are picked first: hot, new, top, rising or controversial.</string>
+    <string name="info_nl_timeframe">How far back top and controversial posts are taken from.</string>
+    <string name="info_nl_random">Puts the subreddits in a different order in each issue.</string>
+    <string name="info_nl_internal">Includes posts that link to other Reddit posts.</string>
+    <string name="info_nl_video">Includes video posts.</string>
+    <string name="info_nl_skip_images">Leaves out posts that are only an image or a gallery.</string>
+    <string name="info_nl_images_if_short">Uses image posts after all when a subreddit hasn\'t enough others.</string>
+    <string name="info_nl_skip_unfetchable">Leaves out link posts whose article can\'t be downloaded.</string>
+    <string name="info_nl_source">How posts are read from Reddit: its web pages, RSS, JSON, or whichever works.</string>
+    <string name="info_nl_comments">How many comments each post gives.</string>
+    <string name="info_nl_comment_style">How replies are laid out under each comment.</string>
+    <string name="info_nl_depth">How many levels of replies are kept under a comment.</string>
+    <string name="info_nl_min_length">Comments shorter than this many characters are left out.</string>
+    <string name="info_nl_automod">Leaves out comments by AutoModerator.</string>
+    <string name="info_nl_guides">Draws a line down the side of nested replies.</string>
+    <string name="info_nl_download_images">Puts posts\' images in the book. Off keeps it small.</string>
+    <string name="info_nl_image_quality">How much images are shrunk to keep the book small.</string>
+    <string name="info_nl_title">The book\'s title.</string>
+    <string name="info_nl_cover">Makes a cover with the issue\'s date on it.</string>
+    <string name="info_nl_toc_grouped">Groups the contents by subreddit.</string>
+    <string name="info_nl_toc_simple">Lists only post titles in the contents.</string>
+</resources>

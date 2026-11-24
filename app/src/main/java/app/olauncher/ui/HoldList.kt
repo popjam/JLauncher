@@ -85,10 +85,11 @@ class HoldList<K : Any>(
      * [selectable] (one that can't be removed) still moves, but its menu has no Select and select mode
      * passes it by.
      */
-    fun item(row: View, key: K, label: String? = null, actions: List<Action> = emptyList(), selectable: Boolean = true, onTap: (() -> Unit)? = null) {
+    fun item(row: View, key: K, label: String? = null, actions: List<Action> = emptyList(), selectable: Boolean = true, about: String? = null,
+             onTap: (() -> Unit)? = null) {
         keys[row] = key
         if (!selectable) unselectable.add(key) else unselectable.remove(key)
-        fun menu() = showMenu(row, key, label, actions)
+        fun menu() = showMenu(row, key, label, about, actions)
         row.isClickable = true
         row.setOnClickListener {
             when {
@@ -127,12 +128,31 @@ class HoldList<K : Any>(
 
     private fun rows(): List<View> = list?.let { l -> (0 until l.childCount).map { l.getChildAt(it) }.filter { keys[it] != null } }.orEmpty()
 
-    private fun showMenu(row: View, key: K, label: String?, actions: List<Action>) {
+    /** The row's menu, titled [label] with [about] (what the row is) under it */
+    private fun showMenu(row: View, key: K, label: String?, about: String?, actions: List<Action>) {
         val all = actions + listOfNotNull(if (onRemove != null && key !in unselectable) Action(row.context.getString(R.string.select)) { select(key) } else null)
         if (all.isEmpty()) return
         val dialog = AppDialog(row.context)
-        if (label != null) dialog.setTitle(label)
+        if (label != null && about != null) dialog.setCustomTitle(menuTitle(dialog.context, label, about))
+        else if (label != null) dialog.setTitle(label)
         dialog.setItems(all.map { it.label }.toTypedArray()) { _, which -> all[which].run() }.show()
+    }
+
+    private fun menuTitle(context: android.content.Context, label: String, about: String) = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(24.dpToPx(), 20.dpToPx(), 24.dpToPx(), 4.dpToPx())
+        val text = context.getColorFromAttr(android.R.attr.textColorPrimary)
+        addView(TextView(context, null, 0, R.style.TextSmall).apply {
+            this.text = label
+            textSize = Style.TEXT_TITLE
+            setTextColor(text)
+        })
+        addView(TextView(context, null, 0, R.style.TextSmall).apply {
+            this.text = about
+            textSize = Style.TEXT_SMALL
+            setTextColor(ColorUtils.setAlphaComponent(text, 170))
+            setPadding(0, 6.dpToPx(), 0, 0)
+        })
     }
 
     private fun select(first: K) {

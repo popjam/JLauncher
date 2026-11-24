@@ -1,11 +1,9 @@
 package app.olauncher.ui
 
-import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,7 +11,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.core.view.updatePadding
 import androidx.navigation.fragment.findNavController
@@ -174,11 +171,11 @@ class NewsletterSettingsFragment : CardPageFragment() {
         cardList.removeAllViews()
         if (s == null) return
         if (subIndex >= 0) {
-            if (sub != null && subs != null) subredditPage(s, subs, subIndex)
+            if (sub != null && subs != null) cardList.addView(settingsList(subredditPage(s, subs, subIndex)).view)
             return
         }
-        subredditsSection(s, subs.orEmpty())
-        section(R.string.newsletter_posts, s, listOf(
+        val items = subredditsSection(s, subs.orEmpty()).toMutableList()
+        items += section(R.string.newsletter_posts, s, listOf(
             "defaults" to Setting("postsPerSubreddit", Kind.INT),
             "defaults" to Setting("sort", Kind.CHOICE, NewsletterSync.SORTS),
             "defaults" to Setting("timeframe", Kind.CHOICE, NewsletterSync.TIMEFRAMES),
@@ -190,7 +187,7 @@ class NewsletterSettingsFragment : CardPageFragment() {
             "defaults" to Setting("skipUnfetchableArticles", Kind.BOOL),
             "reddit" to Setting("sourceMode", Kind.CHOICE, NewsletterSync.SOURCE_MODES),
         ))
-        section(R.string.newsletter_comments, s, listOf(
+        items += section(R.string.newsletter_comments, s, listOf(
             "defaults" to Setting("commentsPerPost", Kind.INT),
             "defaults" to Setting("commentStyle", Kind.CHOICE, NewsletterSync.COMMENT_STYLES),
             "defaults" to Setting("maxCommentDepth", Kind.INT),
@@ -198,34 +195,38 @@ class NewsletterSettingsFragment : CardPageFragment() {
             "defaults" to Setting("skipAutoModerator", Kind.BOOL),
             "defaults" to Setting("showNestedCommentGuideLines", Kind.BOOL),
         ))
-        section(R.string.newsletter_images, s, listOf(
+        items += section(R.string.newsletter_images, s, listOf(
             "reddit" to Setting("downloadImages", Kind.BOOL),
             "reddit" to Setting("imageOptimizationPreset", Kind.CHOICE, NewsletterSync.IMAGE_PRESETS),
         ))
-        section(R.string.newsletter_book, s, listOf(
+        items += section(R.string.newsletter_book, s, listOf(
             "epub" to Setting("title", Kind.TEXT),
             "epub" to Setting("generateDatedCover", Kind.BOOL),
             "epub" to Setting("hierarchicalTOC", Kind.BOOL),
             "epub" to Setting("simplifiedTOC", Kind.BOOL),
         ))
+        val list = settingsList(items)
+        cardList.addView(list.view)
+        // The subreddits, each opening its own settings, held to move, rename or remove
+        val rows = subs.orEmpty().indices.mapNotNull { i -> list.rows["sub.$i"] }
+        (rows.firstOrNull()?.parent as? LinearLayout)?.let { subList.attach(it, scroll) }
+        subs.orEmpty().forEachIndexed { i, sub ->
+            val view = list.rows["sub.$i"] ?: return@forEachIndexed
+            subList.item(view, sub.name, label = sub.name, about = getString(R.string.info_newsletter_subreddit_item), onTap = {
+                findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(PROFILE to profile, SUBREDDIT to i))
+            }, actions = listOf(
+                HoldList.Action(getString(R.string.rename)) { askRename(s, subs.orEmpty(), i) },
+                HoldList.Action(getString(R.string.remove)) { removeSubreddits(s, subs.orEmpty(), setOf(sub.name)) },
+            ))
+        }
     }
 
     // --- The profile ---
 
-    private fun subredditsSection(s: JSONObject, subs: List<NewsletterSync.Subreddit>) {
-        val card = Card(getString(R.string.newsletter_subreddits_count, subs.size))
-        val subRows = subs.map { sub -> settingRow(sub.name, ownSummary(sub.own), onTap = null) }
-        val list = card.rowsSection(subRows + row(getString(R.string.newsletter_add_subreddit), null, faded = true) { askAdd(s, subs) })
-        subList.attach(list, scroll)
-        subRows.forEachIndexed { i, row ->
-            subList.item(row, subs[i].name, label = subs[i].name, onTap = {
-                findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(PROFILE to profile, SUBREDDIT to i))
-            }, actions = listOf(
-                HoldList.Action(getString(R.string.rename)) { askRename(s, subs, i) },
-                HoldList.Action(getString(R.string.remove)) { removeSubreddits(s, subs, setOf(subs[i].name)) },
-            ))
-        }
-    }
+    private fun subredditsSection(s: JSONObject, subs: List<NewsletterSync.Subreddit>): List<SettingItem> =
+        listOf(SettingLabel(getString(R.string.newsletter_subreddits_count, subs.size))) +
+            subs.mapIndexed { i, sub -> SettingRow("sub.$i", sub.name, getString(R.string.info_newsletter_subreddit_item), value = ownSummary(sub.own)) } +
+            SettingRow("add", getString(R.string.newsletter_add_subreddit), getString(R.string.info_newsletter_add_subreddit), faded = true) { askAdd(s, subs) }
 
     /** Takes the subreddits named in [picked] off, keeping at least one */
     private fun removeSubreddits(s: JSONObject, subs: List<NewsletterSync.Subreddit>, picked: Set<String>) {
@@ -273,20 +274,15 @@ class NewsletterSettingsFragment : CardPageFragment() {
             .show()
     }
 
-    /** A section of settings, each read from and written to [place]: "reddit", "defaults" or "epub" */
-    private fun section(title: Int, s: JSONObject, settings: List<Pair<String, Setting>>) {
-        val card = Card(getString(title))
-        card.body(settings.map { (place, setting) ->
-            val holder = holder(s, place)
-            row(label(setting.key), shown(setting, holder.opt(setting.key))) {
-                edit(setting, holder.opt(setting.key), allowDefault = false) { value ->
-                    val next = JSONObject(s.toString())
-                    holder(next, place).apply { if (value == null) remove(setting.key) else put(setting.key, value) }
-                    changed(next)
-                }
+    /** A group of settings under [title], each read from and written to [place]: "reddit", "defaults" or "epub" */
+    private fun section(title: Int, s: JSONObject, settings: List<Pair<String, Setting>>): List<SettingItem> =
+        listOf(SettingLabel(getString(title))) + settings.map { (place, setting) ->
+            rowFor(setting, holder(s, place).opt(setting.key), allowDefault = false) { value ->
+                val next = JSONObject(s.toString())
+                holder(next, place).apply { if (value == null) remove(setting.key) else put(setting.key, value) }
+                changed(next)
             }
-        })
-    }
+        }
 
     private fun holder(s: JSONObject, place: String): JSONObject {
         fun child(o: JSONObject, key: String) = o.optJSONObject(key) ?: JSONObject().also { o.put(key, it) }
@@ -299,45 +295,62 @@ class NewsletterSettingsFragment : CardPageFragment() {
 
     // --- One subreddit ---
 
-    private fun subredditPage(s: JSONObject, subs: List<NewsletterSync.Subreddit>, index: Int) {
+    private fun subredditPage(s: JSONObject, subs: List<NewsletterSync.Subreddit>, index: Int): List<SettingItem> {
         val sub = subs[index]
         val defaults = holder(s, "defaults")
-        val card = Card(getString(R.string.newsletter_own_settings))
-        card.body(NewsletterSync.SUBREDDIT_SETTINGS.map { setting ->
+        return listOf(SettingLabel(getString(R.string.newsletter_own_settings))) + NewsletterSync.SUBREDDIT_SETTINGS.map { setting ->
             val own = sub.own.opt(setting.key)
-            val value = if (own != null) shown(setting, own) else getString(R.string.newsletter_as_default, shown(setting, defaults.opt(setting.key)))
-            row(label(setting.key), value, faded = own == null) {
-                edit(setting, own, allowDefault = true) { picked ->
-                    val ownNext = JSONObject(sub.own.toString()).apply { if (picked == null) remove(setting.key) else put(setting.key, picked) }
-                    changed(NewsletterSync.withSubreddits(s, subs.mapIndexed { i, x -> if (i == index) NewsletterSync.Subreddit(x.name, ownNext) else x }))
-                }
+            rowFor(setting, own, allowDefault = true, defaultValue = defaults.opt(setting.key)) { picked ->
+                val ownNext = JSONObject(sub.own.toString()).apply { if (picked == null) remove(setting.key) else put(setting.key, picked) }
+                changed(NewsletterSync.withSubreddits(s, subs.mapIndexed { i, x -> if (i == index) NewsletterSync.Subreddit(x.name, ownNext) else x }))
             }
-        })
+        }
     }
 
     // --- Changing one setting ---
 
-    /** Asks for [setting]'s new value and gives it to [onPicked]; null means the default */
+    /**
+     * [setting]'s row, showing [current]: on/off as a switch, a few choices side by side, four or five
+     * tapped through, and more, or a number or text, in a dialog. With [allowDefault] (a subreddit's
+     * own settings) Default is one of the choices, and [defaultValue] is what that means. [onPicked]
+     * gets the new value; null means the default.
+     */
+    private fun rowFor(setting: Setting, current: Any?, allowDefault: Boolean, defaultValue: Any? = null, onPicked: (Any?) -> Unit): SettingRow {
+        val key = setting.key
+        val title = label(key)
+        val about = getString(about(key)) + if (allowDefault) "\n\n" + getString(R.string.info_newsletter_own) else ""
+        val default = getString(R.string.newsletter_default)
+        return when (setting.kind) {
+            Kind.BOOL -> if (!allowDefault) SettingRow(key, title, about, control = Control.Switch(current == true) { onPicked(it) })
+                else SettingRow(key, title, about, control = Control.Segment(listOf(default, getString(R.string.on), getString(R.string.off)),
+                    when (current) { true -> 1; false -> 2; else -> 0 }) { onPicked(if (it == 0) null else it == 1) })
+            Kind.CHOICE -> {
+                val options = (if (allowDefault) listOf(default) else emptyList()) + setting.choices
+                val at = setting.choices.indexOf(current as? String)
+                val selected = if (allowDefault) at + 1 else at
+                fun pick(which: Int) = onPicked(setting.choices.getOrNull(if (allowDefault) which - 1 else which))
+                when {
+                    options.size <= 3 -> SettingRow(key, title, about, control = Control.Segment(options, selected) { pick(it) })
+                    options.size <= 5 -> SettingRow(key, title, about, control = Control.Cycle(options, selected.coerceAtLeast(0)) { pick(it) })
+                    else -> SettingRow(key, title, about, value = shownOrDefault(setting, current, allowDefault, defaultValue), faded = allowDefault && current == null) {
+                        choose(title, options, selected) { pick(it) }
+                    }
+                }
+            }
+            Kind.INT, Kind.TEXT -> SettingRow(key, title, about, value = shownOrDefault(setting, current, allowDefault, defaultValue),
+                faded = allowDefault && current == null) { edit(setting, current, allowDefault, onPicked) }
+        }
+    }
+
+    /** The value, or for a subreddit going by the newsletter's: "Default (10)" */
+    private fun shownOrDefault(setting: Setting, current: Any?, allowDefault: Boolean, defaultValue: Any?) =
+        if (allowDefault && current == null) getString(R.string.newsletter_as_default, shown(setting, defaultValue)) else shown(setting, current)
+
+    /** Asks for a number or text setting's new value and gives it to [onPicked]; null means the default */
     private fun edit(setting: Setting, current: Any?, allowDefault: Boolean, onPicked: (Any?) -> Unit) {
         val context = requireContext()
         when (setting.kind) {
-            Kind.BOOL -> {
-                val options = listOfNotNull(if (allowDefault) getString(R.string.newsletter_default) else null, getString(R.string.on), getString(R.string.off))
-                val selected = when (current) { true -> 0; false -> 1; else -> -1 }.let { if (allowDefault) if (it < 0) 0 else it + 1 else it }
-                choose(label(setting.key), options, selected) { which ->
-                    val i = if (allowDefault) which - 1 else which
-                    onPicked(if (i < 0) null else i == 0)
-                }
-            }
-            Kind.CHOICE -> {
-                val options = (if (allowDefault) listOf(getString(R.string.newsletter_default)) else emptyList()) + setting.choices
-                val at = setting.choices.indexOf(current as? String)
-                val selected = if (allowDefault) at + 1 else at
-                choose(label(setting.key), options, selected) { which ->
-                    val i = if (allowDefault) which - 1 else which
-                    onPicked(setting.choices.getOrNull(i))
-                }
-            }
+            Kind.BOOL, Kind.CHOICE -> {}
             Kind.INT, Kind.TEXT -> {
                 val number = setting.kind == Kind.INT
                 val field = field(if (number) InputType.TYPE_CLASS_NUMBER else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES,
@@ -364,7 +377,34 @@ class NewsletterSettingsFragment : CardPageFragment() {
                 dialog.dismiss()
                 onPick(which)
             }
+            .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun about(key: String): Int = when (key) {
+        "postsPerSubreddit" -> R.string.info_nl_posts
+        "sort" -> R.string.info_nl_sort
+        "timeframe" -> R.string.info_nl_timeframe
+        "randomizeSubredditOrder" -> R.string.info_nl_random
+        "includeInternalLinks" -> R.string.info_nl_internal
+        "includeVideoContent" -> R.string.info_nl_video
+        "skipImageAndGalleryPosts" -> R.string.info_nl_skip_images
+        "allowImagePostsIfCantFindOtherPosts" -> R.string.info_nl_images_if_short
+        "skipUnfetchableArticles" -> R.string.info_nl_skip_unfetchable
+        "sourceMode" -> R.string.info_nl_source
+        "commentsPerPost" -> R.string.info_nl_comments
+        "commentStyle" -> R.string.info_nl_comment_style
+        "maxCommentDepth" -> R.string.info_nl_depth
+        "minCommentLength" -> R.string.info_nl_min_length
+        "skipAutoModerator" -> R.string.info_nl_automod
+        "showNestedCommentGuideLines" -> R.string.info_nl_guides
+        "downloadImages" -> R.string.info_nl_download_images
+        "imageOptimizationPreset" -> R.string.info_nl_image_quality
+        "title" -> R.string.info_nl_title
+        "generateDatedCover" -> R.string.info_nl_cover
+        "hierarchicalTOC" -> R.string.info_nl_toc_grouped
+        "simplifiedTOC" -> R.string.info_nl_toc_simple
+        else -> R.string.info_newsletter_profile
     }
 
     private fun shown(setting: Setting, value: Any?): String = when {
@@ -413,10 +453,4 @@ class NewsletterSettingsFragment : CardPageFragment() {
         addView(view)
     }
 
-    private fun row(title: String, value: String?, faded: Boolean = false, onTap: () -> Unit): View =
-        settingRow(title, value, faded = faded, onTap = onTap)
-
-    private fun Card.body(rows: List<View>) {
-        rowsSection(rows)
-    }
 }

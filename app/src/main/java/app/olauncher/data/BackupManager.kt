@@ -46,7 +46,8 @@ object BackupManager {
         "LOCKDOWN_GRAYSCALE_APPLIED",     // whether this phone's grayscale was turned on by lockdown
         "HOME_PAGE",                    // page currently shown on the home screen
         "LOCK_MODE",                    // depends on accessibility/admin being enabled on this phone
-        "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone
+        "LOCK_MODE_PENDING",            // waiting on accessibility being enabled on this phone (before ACCESSIBILITY_ASKED_FOR)
+        "ACCESSIBILITY_ASKED_FOR",      // the setting waiting on accessibility being enabled on this phone
         "SCREEN_TIME_LAST_UPDATED",
         "WEATHER_DATA",                 // cached forecast and location for this phone
         "WEATHER_LAST_UPDATED",

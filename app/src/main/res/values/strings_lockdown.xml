@@ -31,7 +31,7 @@
     <string name="lockdown_now">Now</string>
     <string name="lockdown_left">%1$s left</string>
     <string name="lockdown_settings">Lockdown settings</string>
-    <string name="lockdown_stats">Stats</string>
+    <string name="lockdown_stats">Lockdown stats</string>
     <string name="info_lockdown_stats">Time in lockdown each day, breaks and blocked attempts.</string>
 
     <!-- Screen time triggers -->

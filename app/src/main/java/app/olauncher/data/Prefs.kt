@@ -25,6 +25,7 @@ class Prefs(context: Context) {
     private val USER_STATE = "USER_STATE"
     private val LOCK_MODE = "LOCK_MODE"
     private val LOCK_MODE_PENDING = "LOCK_MODE_PENDING"
+    private val ACCESSIBILITY_ASKED_FOR = "ACCESSIBILITY_ASKED_FOR"
     private val HOME_APPS_NUM = "HOME_APPS_NUM"
     private val HOME_PAGES = "HOME_PAGES"
     private val HOME_PAGE = "HOME_PAGE"
@@ -208,10 +209,14 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(LOCK_MODE, false)
         set(value) = prefs.edit { putBoolean(LOCK_MODE, value).apply() }
 
-    /** Double tap to lock was turned on while the accessibility service was off; finish once it's enabled. */
-    var lockModePending: Boolean
-        get() = prefs.getBoolean(LOCK_MODE_PENDING, false)
-        set(value) = prefs.edit { putBoolean(LOCK_MODE_PENDING, value).apply() }
+    /**
+     * The setting that asked for the accessibility service while it was off (double tap to lock, or home
+     * for recents), to turn on once it's enabled; empty when none is waiting. Before, only double tap
+     * could wait, as a flag of its own.
+     */
+    var accessibilityAskedFor: String
+        get() = prefs.getString(ACCESSIBILITY_ASKED_FOR, null) ?: if (prefs.getBoolean(LOCK_MODE_PENDING, false)) "lock" else ""
+        set(value) = prefs.edit { putString(ACCESSIBILITY_ASKED_FOR, value).remove(LOCK_MODE_PENDING).apply() }
 
     var autoShowKeyboard: Boolean
         get() = prefs.getBoolean(AUTO_SHOW_KEYBOARD, true)

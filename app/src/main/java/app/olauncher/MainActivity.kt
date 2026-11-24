@@ -141,10 +141,7 @@ class MainActivity : AppCompatActivity() {
         isResumed = true
         viewModel.isPrivateSpaceToggling = false
         viewModel.isPickingFile = false
-        if (prefs.lockModePending && isAccessServiceEnabled(this)) {
-            prefs.lockModePending = false
-            prefs.lockModeOn = true
-        }
+        app.olauncher.ui.finishAccessibilityAsk(this, prefs)
         // Backs up the day's usage, which doesn't trigger a backup itself
         BackupManager.syncIfStale(this)
         app.olauncher.helper.Limits.refresh(this)

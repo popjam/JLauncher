@@ -26,7 +26,7 @@
     <string name="change_default_launcher">Change default launcher</string>
     <string name="share">Share</string>
     <string name="swipe_up_for_apps">1. Swipe up for all apps\n2. Hold anywhere for settings</string>
-    <string name="apps_on_home_screen">Apps</string>
+    <string name="apps_on_home_screen">Apps on home</string>
     <string name="home_pages">Pages</string>
     <string name="left">Left</string>
     <string name="right">Right</string>
@@ -778,7 +778,7 @@
     <string name="swipe_down">Swipe down</string>
     <string name="accessibility">Accessibility</string>
     <string name="check_in">Check-in</string>
-    <string name="homes_and_work">Home and work</string>
+    <string name="homes_and_work">Home and work places</string>
     <string name="places_today">Today</string>
     <string name="settings_carry_over">Carry over</string>
     <string name="settings_automatic">Automatic</string>
@@ -1161,7 +1161,7 @@
         <item quantity="other">%d recordings not written out</item>
     </plurals>
     <string name="voice_note_app">Voice note</string>
-    <string name="voice_tidy">Tidy with Claude</string>
+    <string name="voice_tidy">Claude API key</string>
     <string name="voice_tidy_key">Anthropic API key</string>
     <string name="voice_tidy_off">Turn off</string>
     <string name="journal_summarise_all">Tidy and summarise notes</string>
@@ -1483,7 +1483,6 @@
     <string name="none">None</string>
     <string name="unhide">Unhide</string>
     <string name="settings_notes">Notes</string>
-    <string name="settings_lockdown_open">Lockdown settings</string>
     <string name="backup_saved_at">Saved %1$s</string>
     <string name="places_delete_title">Delete location history?</string>
     <string name="reset_layout_title">Reset layout?</string>

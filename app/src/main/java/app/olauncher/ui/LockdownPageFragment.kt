@@ -5,7 +5,6 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import app.olauncher.helper.Formats
@@ -66,7 +65,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
         else -> appLabel(pkg)
     }
 
-    override fun showIcon() = page == LIMITS
+    override fun icon() = if (page == LIMITS) StatIcons.LOCK else null
 
     override fun top(): View? = when (page) {
         BLOCKS -> box(requireContext(), R.string.lockdown_search_or_add, { query = it; render() }) { addSite(it) }
@@ -131,38 +130,42 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val sites = items.values.filter { it.kind == BlockItems.Kind.SITE && it.shown && matchesQuery(it.name) }.sortedBy { it.name }
         val fromApps = BlockItems.phoneApps(items).flatMap { pkg -> Limits.APP_SITES[pkg].orEmpty() }
         val siteRows = sites.map { it to itemRow(it) }
-        val siteCard = section(getString(R.string.lockdown_websites_count, sites.size)).rows(Rows(
-            siteRows.map { it.second } +
-                listOfNotNull(if (sites.isEmpty()) row(getString(R.string.lockdown_none), null, null, onTap = null) else null,
-                    if (fromApps.isNotEmpty()) note(getString(R.string.lockdown_sites_from_apps_line, fromApps.joinToString(", "))).apply { updatePadding(top = 10.dpToPx()) } else null)))
-        join(siteList, siteCard, siteRows)
+        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_websites_count, sites.size))) + siteRows.map { it.second } +
+            listOfNotNull(if (sites.isEmpty()) noneRow("noSites") else null,
+                if (fromApps.isNotEmpty()) SettingView(note(getString(R.string.lockdown_sites_from_apps_line, fromApps.joinToString(", ")))) else null)) { views ->
+            join(siteList, views, siteRows)
+        })
 
         val blockedApps = items.values.filter { it.kind == BlockItems.Kind.APP && it.shown && matchesQuery(it.name) }
             .filter { it.bundle != null || it.tvName != null || it.pkg == null || context.isPackageInstalled(it.pkg) }
             .sortedBy { it.name.lowercase(Locale.getDefault()) }
         val appRows = blockedApps.map { it to itemRow(it) }
-        val appCard = section(getString(R.string.lockdown_apps_count_title, blockedApps.size)).rows(Rows(
-            appRows.map { it.second } + listOfNotNull(if (blockedApps.isEmpty()) row(getString(R.string.lockdown_none), null, null, onTap = null) else null)))
-        join(appList, appCard, appRows)
+        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_apps_count_title, blockedApps.size))) + appRows.map { it.second } +
+            listOfNotNull(if (blockedApps.isEmpty()) noneRow("noApps") else null)) { views ->
+            join(appList, views, appRows)
+        })
 
         if (apps == null) return
         val shownKeys = blockedApps.map { BlockItems.key(it.name) }.toSet()
         val others = candidates().filter { BlockItems.key(it.name) !in shownKeys && items[BlockItems.idFor(BlockItems.Kind.APP, it.name)]?.shown != true && matchesQuery(it.name) }
-        section(getString(R.string.lockdown_add_apps)).rows(Rows(others.map { c ->
-            row(c.name, null, null) { block(BlockItems.Item(BlockItems.Kind.APP, c.name, c.pkg, c.bundle, tvName = c.tvName)) }
+        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_add_apps))) + others.map { c ->
+            row("add:" + c.name, c.name, R.string.info_lockdown_block_app) { block(BlockItems.Item(BlockItems.Kind.APP, c.name, c.pkg, c.bundle, tvName = c.tvName)) }
         }))
     }
 
-    /** Blocked apps or sites in [list]: a menu with Remove and Select */
-    private fun join(holdList: HoldList<String>, list: LinearLayout, rows: List<Pair<BlockItems.Item, View>>) {
+    /** Blocked apps or sites: a menu with Remove and Select */
+    private fun join(holdList: HoldList<String>, views: Map<String, View>, rows: List<Pair<BlockItems.Item, SettingRow>>) {
+        val list = rows.firstOrNull()?.let { views.listHolding(it.second.key) } ?: return
         holdList.attach(list, scrollView())
-        rows.forEach { (item, view) ->
-            holdList.item(view, item.id, label = item.name, actions = listOf(HoldList.Action(getString(R.string.remove)) { removeItems(setOf(item.id)) }))
+        rows.forEach { (item, row) ->
+            val view = views[row.key] ?: return@forEach
+            holdList.item(view, item.id, label = item.name, about = row.about,
+                actions = listOf(HoldList.Action(getString(R.string.remove)) { removeItems(setOf(item.id)) }))
         }
     }
 
     /** A blocked app or site: its name, and the switched-on devices that block it (each blocks what it can) */
-    private fun itemRow(item: BlockItems.Item): View {
+    private fun itemRow(item: BlockItems.Item): SettingRow {
         val context = requireContext()
         val where = Lockdown.deviceList(context).filter { device ->
             when (device) {
@@ -171,7 +174,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
                 Lockdown.Device.TV -> item.onTv
             }
         }
-        return row(item.name, where.joinToString(" · ") { LockdownGate.deviceName(context, it.bit) }, null, onTap = null)
+        return row("item:" + item.id, item.name, R.string.info_lockdown_blocked_item, value = where.joinToString(" · ") { LockdownGate.deviceName(context, it.bit) })
     }
 
     /** Blocks [item] on every device */
@@ -219,16 +222,21 @@ class LockdownPageFragment : LockdownBaseFragment() {
         val listed = all.filter { Lockdown.canBlock(context, it.appPackage) }
         val title = if (page == ALLOWED) R.string.lockdown_allowed_count_title else R.string.lockdown_always_allowed_count_title
         val inList = listed.filter { it.appPackage in chosen }
-        val rows = inList.map { it to row(it.appLabel, null, null, onTap = null) }
-        val list = section(getString(title, inList.size + fixed.size)).rows(Rows(
-            fixed.map { row(it.appLabel, null, null, onTap = null) } + rows.map { it.second } +
-                listOfNotNull(if (fixed.isEmpty() && rows.isEmpty()) row(getString(R.string.lockdown_none), null, null, onTap = null) else null)))
-        chosenList.attach(list, scrollView())
-        rows.forEach { (app, view) ->
-            chosenList.item(view, app.appPackage, label = app.appLabel, actions = listOf(HoldList.Action(getString(R.string.remove)) { removeChosen(setOf(app.appPackage)) }))
-        }
+        val itemAbout = if (page == ALLOWED) R.string.info_lockdown_allowed_item else R.string.info_lockdown_essential_item
+        val rows = inList.map { it to row("app:" + it.appPackage, it.appLabel, itemAbout) }
+        show(Rows(listOf(SettingLabel(getString(title, inList.size + fixed.size))) +
+            fixed.map { row("fixed:" + it.appPackage, it.appLabel, R.string.info_lockdown_fixed_app) } + rows.map { it.second } +
+            listOfNotNull(if (fixed.isEmpty() && rows.isEmpty()) noneRow("none") else null)) { views ->
+            rows.firstOrNull()?.let { views.listHolding(it.second.key) }?.let { chosenList.attach(it, scrollView()) }
+            rows.forEach { (app, row) ->
+                val view = views[row.key] ?: return@forEach
+                chosenList.item(view, app.appPackage, label = app.appLabel, about = row.about,
+                    actions = listOf(HoldList.Action(getString(R.string.remove)) { removeChosen(setOf(app.appPackage)) }))
+            }
+        })
         val matches = listed.filter { it.appPackage !in chosen && matchesQuery(it.appLabel) }
-        section(getString(R.string.add)).rows(Rows(matches.map { app -> row(app.appLabel, null, null) { addApp(app.appPackage) } }))
+        val addAbout = if (page == ALLOWED) R.string.info_lockdown_allow_app else R.string.info_lockdown_essential_app
+        show(Rows(listOf(SettingLabel(getString(R.string.add))) + matches.map { app -> row("add:" + app.appPackage, app.appLabel, addAbout) { addApp(app.appPackage) } }))
     }
 
     /** Allowing more loosens */
@@ -251,59 +259,32 @@ class LockdownPageFragment : LockdownBaseFragment() {
         AppPause.migrateIfNeeded(prefs)
         val withRules = all.filter { summary(it.appPackage).isNotEmpty() }
         // Now: today's screen time and the apps at their limit
-        val now = untitled()
         val over = withRules.count { app ->
             val rule = Limits.rule(prefs, app.appPackage)
             !rule.isEmpty && Limits.over(rule, Limits.usedToday(context, app.appPackage), Limits.opensToday(context, app.appPackage), false) != null
         }
-        now.add(android.widget.TextView(context, null, 0, R.style.TextLarge).apply {
-            text = getString(R.string.lockdown_used_today, Formats.duration(Limits.totalToday(context)))
-            textSize = Style.TEXT_LARGE
-            setTextColor(ink)
-        }, now.textView(Style.TEXT_BODY, 165).apply {
-            text = listOfNotNull(resources.getQuantityString(R.plurals.lockdown_apps_count, withRules.size, withRules.size).takeIf { withRules.isNotEmpty() },
-                getString(R.string.limits_at_limit, over).takeIf { over > 0 }).joinToString(" · ").ifEmpty { getString(R.string.limits_none_yet) }
-            updatePadding(top = 4.dpToPx())
-        })
+        show(row("today", getString(R.string.lockdown_used_today, Formats.duration(Limits.totalToday(context))), R.string.info_limits_today,
+            note = listOfNotNull(resources.getQuantityString(R.plurals.lockdown_apps_count, withRules.size, withRules.size).takeIf { withRules.isNotEmpty() },
+                getString(R.string.limits_at_limit, over).takeIf { over > 0 }).joinToString(" · ").ifEmpty { getString(R.string.limits_none_yet) }))
 
         val shown = withRules.filter { matchesQuery(it.appLabel) }
         val rows = shown.map { it to limitRow(it.appPackage, it.appLabel) }
-        val list = section(getString(R.string.lockdown_with_limits)).rows(Rows(rows.map { it.second } +
-            listOfNotNull(if (withRules.isEmpty()) row(getString(R.string.lockdown_none), null, null, onTap = null) else null)))
-        limitList.attach(list, scrollView())
-        rows.forEach { (app, view) ->
-            limitList.item(view, app.appPackage, label = app.appLabel, onTap = { appSheet(app.appPackage) }, actions = listOf(
-                HoldList.Action(getString(R.string.edit)) { appSheet(app.appPackage) },
-                HoldList.Action(getString(R.string.remove)) { removeLimits(setOf(app.appPackage)) },
-            ))
-        }
+        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_with_limits))) + rows.map { SettingView(it.second, "limit:" + it.first.appPackage) } +
+            listOfNotNull(if (withRules.isEmpty()) noneRow("none") else null)) { views ->
+            rows.firstOrNull()?.let { (it.second.parent as? LinearLayout) }?.let { limitList.attach(it, scrollView()) }
+            rows.forEach { (app, view) ->
+                limitList.item(view, app.appPackage, label = app.appLabel, about = getString(R.string.info_lockdown_limit_item), onTap = { appSheet(app.appPackage) },
+                    actions = listOf(
+                        HoldList.Action(getString(R.string.edit)) { appSheet(app.appPackage) },
+                        HoldList.Action(getString(R.string.remove)) { removeLimits(setOf(app.appPackage)) },
+                    ))
+            }
+        })
 
-        section(getString(R.string.lockdown_before_opening)).rows(Rows(listOf(
-            row(getString(R.string.pause_length), getString(R.string.seconds_value, prefs.pauseSeconds), R.string.info_pause_length) {
-                val options = listOf(5, 10, 15, 20, 30, 45, 60)
-                choose(getString(R.string.pause_length), options.map { getString(R.string.seconds_value, it) }, options.indexOf(prefs.pauseSeconds)) {
-                    val seconds = options[it]
-                    if (seconds < prefs.pauseSeconds) gate.loosen { prefs.pauseSeconds = seconds; render() } else { prefs.pauseSeconds = seconds; render() }
-                }
-            },
-            row(getString(R.string.pause_grows), onOff(prefs.pauseGrows), R.string.info_pause_grows) {
-                // Not growing any more is shorter, so it loosens
-                if (prefs.pauseGrows) gate.loosen { prefs.pauseGrows = false; render() } else { prefs.pauseGrows = true; render() }
-            },
-            row(getString(R.string.use_for_lengths), AppPause.useForLengths(context).joinToString(", ") { getString(R.string.minutes_short, it) },
-                R.string.info_use_for_lengths) {
-                val sets = AppPause.USE_FOR_SETS
-                choose(getString(R.string.use_for_lengths), sets.map { set -> set.joinToString(", ") { getString(R.string.minutes_short, it) } },
-                    sets.indexOf(AppPause.useForLengths(context))) {
-                    val change = { AppPause.setUseForSet(context, it); render() }
-                    // Longer times loosen
-                    if (sets[it].max() > AppPause.useForLengths(context).max()) gate.loosen(change) else change()
-                }
-            },
-        )))
+        show(beforeOpeningRows())
 
-        section(getString(R.string.limits_add)).rows(Rows(all.filter { it !in withRules && Lockdown.canBlock(context, it.appPackage) && matchesQuery(it.appLabel) }
-            .map { app -> row(app.appLabel, null, null) { appSheet(app.appPackage) } }))
+        show(Rows(listOf(SettingLabel(getString(R.string.limits_add))) + all.filter { it !in withRules && Lockdown.canBlock(context, it.appPackage) && matchesQuery(it.appLabel) }
+            .map { app -> row("add:" + app.appPackage, app.appLabel, R.string.info_lockdown_limit_app) { appSheet(app.appPackage) } }))
     }
 
     /** Takes every limit, the pause and use for a set time off the apps in [pkgs]; that loosens */

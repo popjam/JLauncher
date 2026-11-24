@@ -5,7 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.GradientDrawable
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,24 +15,18 @@ import android.provider.Settings
 import android.text.InputType
 import android.text.format.DateFormat
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.PopupWindow
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
-import androidx.core.view.updatePadding
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.NavOptions
 import androidx.navigation.fragment.findNavController
-import app.olauncher.helper.Formats
 import app.olauncher.BuildConfig
 import app.olauncher.MainViewModel
 import app.olauncher.R
@@ -41,12 +35,10 @@ import app.olauncher.data.Constants
 import app.olauncher.data.MoodStore
 import app.olauncher.data.Prefs
 import app.olauncher.helper.AppUpdate
-import app.olauncher.helper.AppPause
 import app.olauncher.helper.Arrangement
-import app.olauncher.helper.Lockdown
-import androidx.core.view.isVisible
-import app.olauncher.helper.Limits
 import app.olauncher.helper.AutoStats
+import app.olauncher.helper.Formats
+import app.olauncher.helper.Lockdown
 import app.olauncher.helper.People
 import app.olauncher.helper.Places
 import app.olauncher.helper.Social
@@ -59,28 +51,31 @@ import app.olauncher.helper.dpToPx
 import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.isAccessServiceEnabled
 import app.olauncher.helper.isOlauncherDefault
-import app.olauncher.helper.isPackageInstalled
 import app.olauncher.helper.isTablet
 import app.olauncher.helper.openAppInfo
 import app.olauncher.helper.showToast
 import app.olauncher.listener.DeviceAdmin
 import org.json.JSONObject
 import java.time.LocalDate
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Every setting on one page, in sections that open and close, one open at a time: lockdown, the home
- * screen, gestures, apps, the check-in, money, places, tracking, stats, notes, the newsletter, backup
- * and about. Each section's header shows a short summary of it. A setting's own options only show
- * (indented) while it's on, and holding any setting explains it in a line or two. Searching shows the
- * matching settings and opens the first section with one.
+ * Settings: a list of categories, each a page of its own ([PAGE]), with a search over every page's
+ * settings (Lockdown's included) above it. Lockdown is the first category and opens its own page.
+ *
+ * On a page: on/off settings are switches, two or three short choices a segmented control, four or
+ * five a value tapped through, and anything else opens a list or a box to type in. A setting that
+ * depends on another is indented under it, and greyed while that one's off. Holding any row explains
+ * it. A row lockdown is blocking says Locked. Red rows (Reset, Delete, Import) are last on their page
+ * and ask first.
  */
-class SettingsFragment : CardPageFragment() {
+class SettingsFragment : LockdownBaseFragment() {
 
     companion object {
-        /** Argument: the section to open at, one of the keys below ([MONEY], [TRACKING]) */
+        /** Argument: the page to show, one of the keys below; none for the list of them */
+        const val PAGE = "page"
+
+        /** Argument: as [PAGE], from pages that open Settings at their own settings ([MONEY], [TRACKING]) */
         const val OPEN = "open"
 
         const val LOCKDOWN = "lockdown"
@@ -96,14 +91,22 @@ class SettingsFragment : CardPageFragment() {
         const val NEWSLETTER = "newsletter"
         const val BACKUP = "backup"
         const val ABOUT = "about"
+
+        /** Apps' list of hidden apps */
+        const val HIDDEN_APPS = "hiddenApps"
+
+        val CATEGORIES = listOf(LOCKDOWN, HOME, GESTURES, APPS, CHECK_IN, MONEY, PLACES, TRACKING, STATS, NOTES, NEWSLETTER, BACKUP, ABOUT)
+
+        /** Which setting asked for the accessibility service, to turn on once it's allowed */
+        const val ASKED_FOR_LOCK = "lock"
+        const val ASKED_FOR_RECENTS = "recents"
     }
 
-    private lateinit var prefs: Prefs
     private lateinit var viewModel: MainViewModel
-    private lateinit var cardList: LinearLayout
-    override val cards: LinearLayout get() = cardList
     private val moodStore by lazy { MoodStore(requireContext()) }
-    private var recoveryTaps = 0
+
+    /** The page shown; null for the list of categories */
+    private val page: String? get() = (arguments?.getString(PAGE) ?: arguments?.getString(OPEN))?.takeIf { it in CATEGORIES || it == HIDDEN_APPS }
 
     // --- Things picked or allowed elsewhere ---
 
@@ -142,7 +145,7 @@ class SettingsFragment : CardPageFragment() {
             val backup = runCatching { BackupManager.read(context, uri) }.getOrNull()
             main.post {
                 if (!isAdded) return@post
-                if (backup == null) context.showToast(getString(R.string.import_failed)) else restoreBackup(backup)
+                if (backup == null) context.showToast(getString(R.string.import_failed)) else confirmImport(backup)
             }
         }.start()
     }
@@ -171,17 +174,19 @@ class SettingsFragment : CardPageFragment() {
             return
         }
         // Don't silently overwrite either side: ask which to keep
-        val savedAt = BackupManager.savedAt(existing)?.let {
-            "\n\n" + getString(R.string.backup_saved_on, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(it))
-        }.orEmpty()
         AppDialog(requireContext())
             .setTitle(R.string.backup_folder)
-            .setMessage(getString(R.string.backup_found_message) + savedAt)
+            .setMessage(getString(R.string.backup_found_message) + savedAt(existing))
             .setCancelable(false)
             .setPositiveButton(R.string.restore) { _, _ -> restoreBackup(existing, link) }
             .setNegativeButton(R.string.keep_current) { _, _ -> link() }
             .show()
     }
+
+    /** "Saved on 3 Nov 2026, 09:12", after a blank line, or nothing when the backup doesn't say */
+    private fun savedAt(backup: JSONObject) = BackupManager.savedAt(backup)?.let {
+        "\n\n" + getString(R.string.backup_saved_on, java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(it))
+    }.orEmpty()
 
     private val createReport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         uri ?: return@registerForActivityResult
@@ -193,64 +198,32 @@ class SettingsFragment : CardPageFragment() {
         }.start()
     }
     private var reportDays = 30
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // --- The page ---
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun title() = page?.let { pageTitle(it) } ?: getString(R.string.settings)
+
+    override fun icon() = if (page == null) StatIcons.GEAR else null
+
+    /** On the list of categories: the search box and the hint under it */
+    override fun top(): View? {
+        if (page != null) return null
         val context = requireContext()
-        prefs = Prefs(context)
-        viewModel = ViewModelProvider(requireActivity())[MainViewModel::class.java]
-        cardList = LinearLayout(context).apply {
+        return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            updatePadding(bottom = 64.dpToPx())
-        }
-        val content = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            updatePadding(top = 48.dpToPx())
-            addView(pageHeader(context, StatIcons.GEAR, getString(R.string.settings)) { findNavController().popBackStack() })
-            addView(searchBox(context), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(12.dpToPx(), 0, 12.dpToPx(), 10.dpToPx())
-            })
+            addView(box(context, R.string.settings_search_hint, { query = it; render() }).apply { setText(query) })
             addView(TextView(context, null, 0, R.style.TextSmall).apply {
                 setText(R.string.settings_hold_hint)
                 textSize = Style.TEXT_SMALL
-                setTextColor(context.getColorFromAttr(R.attr.primaryColor))
-                alpha = 0.45f
-                setPadding(28.dpToPx(), 0, 28.dpToPx(), 4.dpToPx())
+                setTextColor(faint(115))
+                setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
             })
-            // Kept from the page before, when coming back from a page opened here, so it's taken off that first
-            (noMatches.parent as? ViewGroup)?.removeView(noMatches)
-            addView(noMatches)
-            addView(cardList)
-        }
-        val page = FrameLayout(context).apply {
-            setBackgroundColor(context.getColorFromAttr(R.attr.primaryShadeDarkColor))
-            isClickable = true
-            addView(ScrollView(context).apply {
-                overScrollMode = View.OVER_SCROLL_NEVER
-                isVerticalScrollBarEnabled = false
-                addView(content)
-                scroll = this
-            })
-        }
-        return PullDismissLayout(context).apply {
-            addView(page)
-            onDismiss = { if (isAdded) findNavController().popBackStack() }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        checkUpdate()
-        viewModel.getHiddenApps()
-        // Permissions and services may have changed in the system's settings
-        viewModel.isOlauncherDefault()
-        if (prefs.lockModePending && isAccessServiceEnabled(requireContext())) {
-            prefs.lockModePending = false
-            prefs.lockModeOn = true
-        }
-        render()
+    override fun onCreateView(inflater: android.view.LayoutInflater, container: android.view.ViewGroup?, savedInstanceState: Bundle?): View {
+        viewModel = ViewModelProvider(requireActivity())[MainViewModel::class.java]
+        return super.onCreateView(inflater, container, savedInstanceState)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -261,243 +234,218 @@ class SettingsFragment : CardPageFragment() {
         }
     }
 
-    override fun onPause() {
-        hiddenList.end()
-        super.onPause()
+    override fun onResume() {
+        if (page == null || page == ABOUT) checkUpdate()
+        viewModel.getHiddenApps()
+        // Permissions and services may have changed in the system's settings
+        viewModel.isOlauncherDefault()
+        finishAccessibilityAsk(requireContext(), Prefs(requireContext()))
+        super.onResume()
+        showRestoreSummary()
     }
 
-    /** Which section is open: one at a time, kept while the page rebuilds and after coming back to it */
-    private val sections = OneOpen()
+    override val holdLists: List<HoldList<*>> get() = super.holdLists + hiddenList
 
-    /** Rows that open inside a section (the hidden apps), apart from [sections] so opening one keeps its section open */
-    private val groups = OneOpen()
-
-    private var scroll: ScrollView? = null
-
-    /** Where the page was scrolled to, kept while a page opened from it is on top */
-    private var savedScroll = -1
-
-    private fun render() {
-        if (!isAdded) return
-        restoreScrollSoon()
-        searchable.clear()
-        cardList.removeAllViews()
-        lockdownSection()
-        homeSection()
-        gesturesSection()
-        appsSection()
-        checkInSection()
-        moneySection()
-        placesSection()
-        trackingSection()
-        statsSection()
-        notesSection()
-        newsletterSection()
-        backupSection()
-        aboutSection()
-        applySearch()
-        // Opened at a section (the Money page's limit, a problem on the stat list), once
-        arguments?.getString(OPEN)?.let { key ->
-            arguments?.remove(OPEN)
-            sections.show(key)
+    override fun build() {
+        when (val shown = page) {
+            null -> if (query.isBlank()) show(categoryRows()) else show(searchRows())
+            else -> show(pageRows(shown))
         }
+    }
+
+    private fun pageTitle(key: String) = getString(when (key) {
+        LOCKDOWN -> R.string.lockdown
+        HOME -> R.string.home_screen
+        GESTURES -> R.string.gestures
+        APPS -> R.string.apps
+        CHECK_IN -> R.string.check_in
+        MONEY -> R.string.settings_spending
+        PLACES -> R.string.places_title_short
+        TRACKING -> R.string.tracking
+        STATS -> R.string.stats_title
+        NOTES -> R.string.settings_notes
+        NEWSLETTER -> R.string.newsletter
+        BACKUP -> R.string.backup
+        HIDDEN_APPS -> R.string.hidden_apps
+        else -> R.string.about
+    })
+
+    private fun pageAbout(key: String) = when (key) {
+        LOCKDOWN -> R.string.info_lockdown
+        HOME -> R.string.info_page_home
+        GESTURES -> R.string.info_page_gestures
+        APPS -> R.string.info_page_apps
+        CHECK_IN -> R.string.info_page_check_in
+        MONEY -> R.string.info_page_money
+        PLACES -> R.string.info_page_places
+        TRACKING -> R.string.info_page_tracking
+        STATS -> R.string.info_page_stats
+        NOTES -> R.string.info_page_notes
+        NEWSLETTER -> R.string.info_page_newsletter
+        BACKUP -> R.string.info_page_backup
+        else -> R.string.info_page_about
+    }
+
+    private fun pageRows(key: String): Rows = when (key) {
+        HOME -> homeRows()
+        GESTURES -> gesturesRows()
+        APPS -> appsRows()
+        HIDDEN_APPS -> hiddenAppsRows()
+        CHECK_IN -> checkInRows()
+        MONEY -> moneyRows()
+        PLACES -> placesRows()
+        TRACKING -> trackingRows()
+        STATS -> statsRows()
+        NOTES -> notesRows()
+        NEWSLETTER -> newsletterRows()
+        BACKUP -> backupRows()
+        ABOUT -> aboutRows()
+        else -> lockdownRows()
+    }
+
+    /** Each category, opening its page; nothing on the right but › */
+    private fun categoryRows() = Rows(CATEGORIES.map { key ->
+        row("category.$key", pageTitle(key), pageAbout(key), control = Control.Opens) { openPage(key) }
+    })
+
+    /** A category's page, lighting up the row [highlight] if given; Lockdown's is a page of its own */
+    private fun openPage(key: String, highlight: String? = null) {
+        runCatching {
+            if (key == LOCKDOWN) findNavController().navigate(R.id.lockdownFragment, bundleOf(HIGHLIGHT to highlight))
+            else findNavController().navigate(R.id.settingsFragment, bundleOf(PAGE to key, HIGHLIGHT to highlight))
+        }
+    }
+
+    /** Builds this page again from scratch, with the theme and text size as they are now, without leaving it */
+    private fun rebuildPage() {
+        val nav = findNavController()
+        val id = nav.currentDestination?.id ?: return
+        runCatching { nav.navigate(id, arguments, NavOptions.Builder().setPopUpTo(id, true).build()) }
+    }
+
+    /** Whether lockdown keeps JLauncher's own system pages (app info, accessibility, usage access) from opening now */
+    private fun systemPagesLocked(): Boolean {
+        val context = requireContext()
+        return Lockdown.isLocked(context, Lockdown.Lock.PROTECT, prefs) || Lockdown.isLocked(context, Lockdown.Lock.SYSTEM_SETTINGS, prefs)
     }
 
     // --- Search ---
 
-    /** Each section's key, card, title, and its rows with the words each is found by */
-    private class Section(val key: String, val root: View, val title: String, val rows: List<Pair<View, String>>)
-    private val searchable = mutableListOf<Section>()
     private var query = ""
-    private val searchText = java.util.WeakHashMap<View, String>()
-    private val noMatches by lazy {
-        TextView(requireContext(), null, 0, R.style.TextSmall).apply {
-            textSize = Style.TEXT_BODY
-            setTextColor(ink)
-            alpha = 0.55f
-            gravity = Gravity.CENTER
-            setPadding(28.dpToPx(), 32.dpToPx(), 28.dpToPx(), 0)
-            visibility = View.GONE
-        }
-    }
 
-    private fun searchBox(context: Context) = EditText(context, null, 0, R.style.TextSmall).apply {
-        hint = getString(R.string.settings_search_hint)
-        textSize = Style.TEXT_BODY
-        setTextColor(ink)
-        setHintTextColor(faint(110))
-        isSingleLine = true
-        imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
-        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_FILTER
-        background = GradientDrawable().apply {
-            cornerRadius = Style.radiusLarge
-            // Solid like the sections, so it reads over a light wallpaper
-            setColor(panelColor)
+    /** A setting found by search: its row, the page it's on ("Lockdown › Screen time"), and how to open that page at it */
+    private class Found(val row: SettingRow, val path: String, val open: (String) -> Unit)
+
+    /** Every setting on every page, Lockdown's included */
+    private fun everything(): List<Found> {
+        val found = mutableListOf<Found>()
+        fun add(rows: Rows, path: String, open: (String) -> Unit) = rows.items.filterIsInstance<SettingRow>().forEach { found += Found(it, path, open) }
+        val lockdown = getString(R.string.lockdown)
+        add(lockdownRows(), lockdown) { openPage(LOCKDOWN, it) }
+        SECTIONS.forEach { section -> add(sectionRows(section), lockdown + " › " + sectionTitle(section)) { openSection(section, it) } }
+        add(beforeOpeningRows(), listOf(lockdown, sectionTitle(SCREEN_TIME), getString(R.string.limits)).joinToString(" › ")) {
+            open(LockdownPageFragment.LIMITS, highlight = it)
         }
-        setPadding(18.dpToPx(), 11.dpToPx(), 18.dpToPx(), 11.dpToPx())
-        setText(query)
-        // Built without the usual text box style, so it has to be told it can take focus from a tap
-        isFocusable = true
-        isFocusableInTouchMode = true
-        setOnClickListener {
-            requestFocus()
-            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(this, 0)
-        }
-        addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                query = s?.toString().orEmpty()
-                applySearch()
-            }
-        })
-        setOnEditorActionListener { view, _, _ ->
-            view.clearFocus()
-            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(view.windowToken, 0)
-            true
-        }
+        CATEGORIES.filter { it != LOCKDOWN }.forEach { key -> add(pageRows(key), pageTitle(key)) { openPage(key, it) } }
+        return found
     }
 
     /**
-     * Shows only the settings matching the search: by their name, what holding them says, or their
-     * section's name (which shows the whole section). A match under another setting keeps its line.
-     * Sections without a match go, and unless the open section has one, the first that does opens.
+     * The settings matching the search, by name, what holding them says, or their page's name, each
+     * with its page under it. Switches work here; tapping anything else opens its page at it.
      */
-    private fun applySearch() {
+    private fun searchRows(): Rows {
         val words = query.trim().lowercase(Locale.getDefault()).split(Regex("\\s+")).filter { it.isNotEmpty() }
         fun matches(text: String) = text.lowercase(Locale.getDefault()).let { t -> words.all { it in t } }
-        var any = false
-        val matching = mutableListOf<String>()
-        searchable.forEach { section ->
-            val whole = words.isEmpty() || matches(section.title)
-            var shown = 0
-            section.rows.forEach { (view, text) ->
-                val show = whole || matches(text)
-                view.visibility = if (show) View.VISIBLE else View.GONE
-                if (show) shown++
+        val found = everything().filter { matches(it.row.title + "\n" + it.row.about + "\n" + it.path) }
+        if (found.isEmpty()) return Rows(SettingView(note(getString(R.string.settings_search_none, query.trim())).apply { gravity = Gravity.CENTER }))
+        return Rows(found.mapIndexed { i, f ->
+            val row = f.row
+            val control = row.control
+            val base = row.copy(key = "found.$i", level = 0, note = f.path)
+            when {
+                control is Control.Switch && row.enabled -> base
+                control is Control.Switch -> base.copy(control = Control.Opens, value = onOff(control.on), onTap = { f.open(row.key) })
+                control is Control.Segment -> base.copy(control = Control.Opens, value = control.options.getOrNull(control.selected), onTap = { f.open(row.key) })
+                control is Control.Cycle -> base.copy(control = Control.Opens, value = control.options.getOrNull(control.selected), onTap = { f.open(row.key) })
+                else -> base.copy(control = Control.Opens, enabled = true, onTap = { f.open(row.key) })
             }
-            section.root.visibility = if (shown > 0) View.VISIBLE else View.GONE
-            if (shown > 0) {
-                any = true
-                matching += section.key
-            }
-        }
-        noMatches.visibility = if (any || words.isEmpty()) View.GONE else View.VISIBLE
-        if (!any && words.isNotEmpty()) noMatches.text = getString(R.string.settings_search_none, query.trim())
-        if (words.isNotEmpty() && matching.isNotEmpty() && sections.open !in matching) sections.show(matching.first())
-    }
-
-    private fun onOff(on: Boolean) = getString(if (on) R.string.on else R.string.off)
-
-    /** A [settingRow] that holding explains with [about], found by search by its name and that */
-    private fun row(card: Card, title: String, value: String?, about: Int, level: Int = 0, onTap: (() -> Unit)?): View =
-        settingRow(title, value, getString(about), level, onTap = onTap).also { searchText[it] = title + "\n" + getString(about) }
-
-    /** Makes [this] the section kept as [key], opening and closing, its header showing [value]; returns its rows' list */
-    private fun Card.body(key: String, value: String?, vararg rows: View?): LinearLayout {
-        val shown = rows.filterNotNull()
-        val list = collapsibleSection(sections, key, value, null, shown)
-        searchable.add(Section(key, root, titleView.text.toString(), shown.map { it to (searchText[it] ?: rowText(it)) }))
-        return list
-    }
-
-    /** The words in a row made some other way than [row], like Tracking's status lines */
-    private fun rowText(view: View): String = when (view) {
-        is TextView -> view.text.toString()
-        is ViewGroup -> (0 until view.childCount).joinToString(" ") { rowText(view.getChildAt(it)) }
-        else -> ""
-    }
-
-    private fun choose(title: Int, options: List<String>, selected: Int, onPick: (Int) -> Unit) {
-        AppDialog(requireContext())
-            .setTitle(title)
-            .setSingleChoiceItems(options.toTypedArray(), selected) { dialog, which ->
-                dialog.dismiss()
-                onPick(which)
-                render()
-            }
-            .show()
+        })
     }
 
     // --- Home screen ---
 
-    private fun homeSection() {
+    private fun homeRows(): Rows {
         val context = requireContext()
-        val card = Card(getString(R.string.home_screen))
         val alignments = listOf(Gravity.START, Gravity.CENTER, Gravity.END)
-        val alignNames = listOf(R.string.left, R.string.center, R.string.right).map { getString(it) }
         val clock = listOf(Constants.DateTime.ON, Constants.DateTime.DATE_ONLY, Constants.DateTime.OFF)
-        val clockNames = listOf(R.string.on, R.string.date_only, R.string.off).map { getString(it) }
         val themes = listOf(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.MODE_NIGHT_NO, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        val themeNames = listOf(R.string.dark, R.string.light, R.string.system_default).map { getString(it) }
         val screenTime = context.appUsagePermissionGranted()
-        val units = listOf(getString(R.string.units_auto), "°C", "°F")
         val screenTimeShown = screenTime && Arrangement.SCREEN_TIME !in Arrangement.hidden(context, Arrangement.HOME)
-        card.body(HOME, null,
-            row(card, getString(R.string.apps_on_home_screen), prefs.homeAppsNum.toString(), R.string.info_home_apps) {
-                choose(R.string.apps_on_home_screen, (0..8).map { it.toString() }, prefs.homeAppsNum) {
+        val weather = Weather.isEnabled(context)
+        val sizes = TEXT_SIZES.map { it.first } + if (isTablet(context)) listOf(1.6f, 2.0f) else emptyList()
+        val size = sizes.indexOfFirst { Math.abs(it - prefs.textSizeScale) < 0.05f }
+        return Rows(
+            row("appsOnHome", getString(R.string.apps_on_home_screen), R.string.info_home_apps, value = prefs.homeAppsNum.toString()) {
+                choose(getString(R.string.apps_on_home_screen), (0..8).map { it.toString() }, prefs.homeAppsNum) {
                     prefs.homeAppsNum = it
                     viewModel.refreshHome(true)
+                    render()
                 }
             },
-            row(card, getString(R.string.home_pages), prefs.homePages.toString(), R.string.info_home_pages) {
-                choose(R.string.home_pages, (1..5).map { it.toString() }, prefs.homePages - 1) {
-                    prefs.homePages = it + 1
-                    if (prefs.homePage >= prefs.homePages) prefs.homePage = prefs.homePages - 1
-                    viewModel.refreshHome(true)
-                }
+            cycle("homePages", getString(R.string.home_pages), R.string.info_home_pages, (1..5).map { it.toString() }, prefs.homePages - 1) {
+                prefs.homePages = it + 1
+                if (prefs.homePage >= prefs.homePages) prefs.homePage = prefs.homePages - 1
+                viewModel.refreshHome(true)
+                render()
             },
-            row(card, getString(R.string.clock), clockNames[clock.indexOf(prefs.dateTimeVisibility).coerceAtLeast(0)], R.string.info_clock) {
-                choose(R.string.clock, clockNames, clock.indexOf(prefs.dateTimeVisibility)) {
-                    prefs.dateTimeVisibility = clock[it]
-                    viewModel.toggleDateTime()
-                }
+            segment("clock", getString(R.string.clock), R.string.info_clock, listOf(R.string.on, R.string.date_only, R.string.off).map { getString(it) },
+                clock.indexOf(prefs.dateTimeVisibility)) {
+                prefs.dateTimeVisibility = clock[it]
+                viewModel.toggleDateTime()
+                render()
             },
-            row(card, getString(R.string.home_layout_alignment), alignNames[alignments.indexOf(prefs.homeAlignment).coerceAtLeast(0)], R.string.info_alignment) {
-                choose(R.string.home_layout_alignment, alignNames, alignments.indexOf(prefs.homeAlignment)) {
-                    viewModel.updateHomeAlignment(alignments[it])
-                }
+            segment("alignment", getString(R.string.home_layout_alignment), R.string.info_alignment,
+                listOf(R.string.left, R.string.center, R.string.right).map { getString(it) }, alignments.indexOf(prefs.homeAlignment)) {
+                viewModel.updateHomeAlignment(alignments[it])
+                render()
             },
-            row(card, getString(R.string.apps_at_bottom), onOff(prefs.homeBottomAlignment), R.string.info_bottom, level = 1) {
-                prefs.homeBottomAlignment = !prefs.homeBottomAlignment
+            switch("bottom", getString(R.string.apps_at_bottom), R.string.info_bottom, prefs.homeBottomAlignment) {
+                prefs.homeBottomAlignment = it
                 viewModel.updateHomeAlignment(prefs.homeAlignment)
                 render()
             },
-            row(card, getString(R.string.text_size), sizeName(prefs.textSizeScale), R.string.info_text_size) {
-                val sizes = TEXT_SIZES.map { it.first } + if (isTablet(context)) listOf(1.6f, 2.0f) else emptyList()
-                choose(R.string.text_size, sizes.map { sizeName(it) }, sizes.indexOfFirst { Math.abs(it - prefs.textSizeScale) < 0.05f }) {
-                    if (Math.abs(sizes[it] - prefs.textSizeScale) < 0.05f) return@choose
-                    prefs.textSizeScale = sizes[it]
-                    requireActivity().recreate()
-                }
+            if (sizes.size <= 5) cycle("textSize", getString(R.string.text_size), R.string.info_text_size, sizes.map { sizeName(it) }, size) { setTextSize(sizes[it]) }
+            else row("textSize", getString(R.string.text_size), R.string.info_text_size, value = sizeName(prefs.textSizeScale)) {
+                choose(getString(R.string.text_size), sizes.map { sizeName(it) }, size) { setTextSize(sizes[it]) }
             },
-            row(card, getString(R.string.theme_mode), themeNames[themes.indexOf(prefs.appTheme).coerceAtLeast(0)], R.string.info_theme) {
-                choose(R.string.theme_mode, themeNames, themes.indexOf(prefs.appTheme)) {
-                    if (prefs.appTheme == themes[it]) return@choose
-                    prefs.appTheme = themes[it]
-                    requireActivity().recreate()
-                }
-            },
-            row(card, getString(R.string.notification_bar), onOff(prefs.showStatusBar), R.string.info_status_bar) {
-                prefs.showStatusBar = !prefs.showStatusBar
-                showStatusBar(prefs.showStatusBar)
+            segment("theme", getString(R.string.theme_mode), R.string.info_theme, listOf(R.string.dark, R.string.light, R.string.system_default).map { getString(it) },
+                themes.indexOf(prefs.appTheme)) { setTheme(themes[it]) },
+            switch("statusBar", getString(R.string.notification_bar), R.string.info_status_bar, prefs.showStatusBar) {
+                prefs.showStatusBar = it
+                showStatusBar(it)
                 render()
             },
-            row(card, getString(R.string.screen_time), onOff(screenTimeShown), R.string.info_screen_time) {
-                if (!screenTime) return@row startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                val hidden = Arrangement.hidden(context, Arrangement.HOME)
-                Arrangement.save(context, Arrangement.HOME, Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS),
-                    if (screenTimeShown) hidden + Arrangement.SCREEN_TIME else hidden - Arrangement.SCREEN_TIME)
+            // Off and not allowed yet: turning it on asks for usage access, which lockdown may block
+            switch("screenTime", getString(R.string.screen_time), R.string.info_screen_time, screenTimeShown, locked = !screenTime && systemPagesLocked()) { on ->
+                if (!screenTime) return@switch runCatching { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }.let {}
+                val change = {
+                    val hidden = Arrangement.hidden(context, Arrangement.HOME)
+                    Arrangement.save(context, Arrangement.HOME, Arrangement.order(context, Arrangement.HOME, Arrangement.HOME_ITEMS),
+                        if (on) hidden - Arrangement.SCREEN_TIME else hidden + Arrangement.SCREEN_TIME)
+                    render()
+                }
+                // Hiding it loosens lockdown
+                if (on) change() else gate.loosen(change)
+            },
+            switch("weather", getString(R.string.weather), R.string.info_weather, weather) { toggleWeather() },
+            segment("temperature", getString(R.string.temperature), R.string.info_temperature, listOf(getString(R.string.units_auto_short), "°C", "°F"),
+                Weather.unit(context), level = 1, enabled = weather) {
+                Weather.setUnit(context, it)
+                viewModel.getWeather(force = true)
                 render()
             },
-            row(card, getString(R.string.weather), onOff(Weather.isEnabled(context)), R.string.info_weather) { toggleWeather() },
-            if (Weather.isEnabled(context)) row(card, getString(R.string.temperature), units[Weather.unit(context)], R.string.info_temperature, level = 1) {
-                choose(R.string.temperature, units, Weather.unit(context)) {
-                    Weather.setUnit(context, it)
-                    viewModel.getWeather(force = true)
-                }
-            } else null,
-            row(card, getString(R.string.settings_reset_layout), null, R.string.info_reset_layout) {
+            row("resetLayout", getString(R.string.settings_reset_layout), R.string.info_reset_layout, danger = true) {
                 AppDialog(context)
                     .setTitle(R.string.reset_layout_title)
                     .setMessage(R.string.reset_layout_ask)
@@ -519,6 +467,31 @@ class SettingsFragment : CardPageFragment() {
 
     private val TEXT_SIZES = listOf(0.8f to R.string.size_smallest, 0.9f to R.string.size_small, 1.0f to R.string.size_normal,
         1.15f to R.string.size_large, 1.3f to R.string.size_larger)
+
+    /**
+     * A new text size, without starting the app again: the activity's text scale changes in place and
+     * this page is built again with it; pages opened after it (home too) are built with it as well.
+     */
+    private fun setTextSize(scale: Float) {
+        if (Math.abs(scale - prefs.textSizeScale) < 0.05f) return
+        prefs.textSizeScale = scale
+        val resources = requireActivity().resources
+        val config = Configuration(resources.configuration).apply { fontScale = scale }
+        @Suppress("DEPRECATION")
+        resources.updateConfiguration(config, resources.displayMetrics)
+        rebuildPage()
+    }
+
+    /**
+     * A new theme, without starting the app again: JLauncher's activity takes the change of night mode
+     * itself (it handles uiMode), so its views are only built again: this page now, the rest as they open.
+     */
+    private fun setTheme(mode: Int) {
+        if (prefs.appTheme == mode) return
+        prefs.appTheme = mode
+        AppCompatDelegate.setDefaultNightMode(mode)
+        rebuildPage()
+    }
 
     private fun showStatusBar(show: Boolean) {
         val window = requireActivity().window
@@ -548,9 +521,8 @@ class SettingsFragment : CardPageFragment() {
 
     // --- Gestures ---
 
-    private fun gesturesSection() {
+    private fun gesturesRows(): Rows {
         val context = requireContext()
-        val card = Card(getString(R.string.gestures))
         fun swipeName(left: Boolean): String {
             if (!(if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled)) return getString(R.string.nothing)
             return when (SwipeTargets.get(context, left)) {
@@ -559,60 +531,392 @@ class SettingsFragment : CardPageFragment() {
                 SwipeTargets.Target.STATS_HOME -> getString(R.string.swipe_stats_home)
             }
         }
-        fun pickSwipe(left: Boolean) {
-            val options = listOf(getString(R.string.stats_title), getString(R.string.swipe_stats_home), getString(R.string.swipe_an_app), getString(R.string.nothing))
-            val enabled = if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled
-            val current = if (!enabled) 3 else when (SwipeTargets.get(context, left)) {
-                SwipeTargets.Target.STATS -> 0
-                SwipeTargets.Target.STATS_HOME -> 1
-                SwipeTargets.Target.APP -> 2
-            }
-            choose(if (left) R.string.swipe_left_opens else R.string.swipe_right_opens, options, current) { which ->
-                if (left) prefs.swipeLeftEnabled = which != 3 else prefs.swipeRightEnabled = which != 3
-                when (which) {
-                    0 -> SwipeTargets.set(context, left, SwipeTargets.Target.STATS)
-                    1 -> SwipeTargets.set(context, left, SwipeTargets.Target.STATS_HOME)
-                    2 -> {
-                        SwipeTargets.set(context, left, SwipeTargets.Target.APP)
-                        viewModel.getAppList(true)
-                        findNavController().navigate(R.id.appListFragment,
-                            bundleOf(Constants.Key.FLAG to if (left) Constants.FLAG_SET_SWIPE_LEFT_APP else Constants.FLAG_SET_SWIPE_RIGHT_APP))
-                    }
-                }
-            }
-        }
-        val downNames = listOf(getString(R.string.notifications), getString(R.string.search))
         val downs = listOf(Constants.SwipeDownAction.NOTIFICATIONS, Constants.SwipeDownAction.SEARCH)
-        val lockOn = prefs.lockModeOn && (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || isAccessServiceEnabled(context))
-        card.body(GESTURES, null,
-            row(card, getString(R.string.swipe_left), swipeName(true), R.string.info_swipe_left) { pickSwipe(true) },
-            row(card, getString(R.string.swipe_right), swipeName(false), R.string.info_swipe_right) { pickSwipe(false) },
-            row(card, getString(R.string.swipe_down), downNames[downs.indexOf(prefs.swipeDownAction).coerceAtLeast(0)], R.string.info_swipe_down) {
-                choose(R.string.swipe_down, downNames, downs.indexOf(prefs.swipeDownAction)) { prefs.swipeDownAction = downs[it] }
+        val service = isAccessServiceEnabled(context)
+        val needsService = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+        // Shown on only while the service that does it is on too, so a tap on one that looks off always turns it on
+        val lockOn = prefs.lockModeOn && (!needsService || service)
+        val recentsOn = prefs.homeButtonShowRecents && service
+        return Rows(
+            row("swipeLeft", getString(R.string.swipe_left), R.string.info_swipe_left, value = swipeName(true)) { pickSwipe(true) },
+            row("swipeRight", getString(R.string.swipe_right), R.string.info_swipe_right, value = swipeName(false)) { pickSwipe(false) },
+            segment("swipeDown", getString(R.string.swipe_down), R.string.info_swipe_down, listOf(getString(R.string.notifications), getString(R.string.search)),
+                downs.indexOf(prefs.swipeDownAction)) {
+                prefs.swipeDownAction = downs[it]
+                render()
             },
-            row(card, getString(R.string.double_tap_to_lock_screen), onOff(lockOn), R.string.info_double_tap) { toggleLock() },
-            row(card, getString(R.string.home_button_show_recents), onOff(prefs.homeButtonShowRecents && isAccessServiceEnabled(context)), R.string.info_home_recents) {
-                if (!prefs.homeButtonShowRecents && !isAccessServiceEnabled(context)) return@row askAccessibility()
-                prefs.homeButtonShowRecents = !prefs.homeButtonShowRecents
+            switch("doubleTap", getString(R.string.double_tap_to_lock_screen), R.string.info_double_tap, lockOn,
+                locked = needsService && !service && systemPagesLocked()) { on -> setLockMode(on) },
+            switch("homeRecents", getString(R.string.home_button_show_recents), R.string.info_home_recents, recentsOn,
+                locked = !service && systemPagesLocked()) { on ->
+                when {
+                    !on -> prefs.homeButtonShowRecents = false
+                    service -> prefs.homeButtonShowRecents = true
+                    else -> return@switch askAccessibility(ASKED_FOR_RECENTS)
+                }
                 render()
             },
         )
     }
 
-    // --- Notes ---
-
-    private fun notesSection() {
+    private fun pickSwipe(left: Boolean) {
         val context = requireContext()
-        val card = Card(getString(R.string.settings_notes))
-        val tidy = app.olauncher.helper.AiTidy.isOn(context)
-        card.body(NOTES, null,
-            row(card, getString(R.string.voice_tidy), onOff(tidy), R.string.info_voice_tidy) { setTidyKey() },
-            if (tidy) row(card, getString(R.string.journal_summarise_all), summarising, R.string.info_journal_summarise_all, level = 1) { summariseAll() }
-            else null,
+        val options = listOf(getString(R.string.stats_title), getString(R.string.swipe_stats_home), getString(R.string.swipe_an_app), getString(R.string.nothing))
+        val enabled = if (left) prefs.swipeLeftEnabled else prefs.swipeRightEnabled
+        val current = if (!enabled) 3 else when (SwipeTargets.get(context, left)) {
+            SwipeTargets.Target.STATS -> 0
+            SwipeTargets.Target.STATS_HOME -> 1
+            SwipeTargets.Target.APP -> 2
+        }
+        // Picking "An app" again picks another app
+        choose(getString(if (left) R.string.swipe_left_opens else R.string.swipe_right_opens), options, current, suggested = true) { which ->
+            if (left) prefs.swipeLeftEnabled = which != 3 else prefs.swipeRightEnabled = which != 3
+            when (which) {
+                0 -> SwipeTargets.set(context, left, SwipeTargets.Target.STATS)
+                1 -> SwipeTargets.set(context, left, SwipeTargets.Target.STATS_HOME)
+                2 -> {
+                    SwipeTargets.set(context, left, SwipeTargets.Target.APP)
+                    viewModel.getAppList(true)
+                    findNavController().navigate(R.id.appListFragment,
+                        bundleOf(Constants.Key.FLAG to if (left) Constants.FLAG_SET_SWIPE_LEFT_APP else Constants.FLAG_SET_SWIPE_RIGHT_APP))
+                }
+            }
+            render()
+        }
+    }
+
+    /** Double tap to lock on or off: with the accessibility service from Android 9, a device admin before */
+    private fun setLockMode(on: Boolean) {
+        val context = requireContext()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (on && !isAccessServiceEnabled(context)) return askAccessibility(ASKED_FOR_LOCK)
+            prefs.lockModeOn = on
+        } else {
+            val manager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val admin = ComponentName(context, DeviceAdmin::class.java)
+            if (!on) {
+                if (manager.isAdminActive(admin)) runCatching { manager.removeActiveAdmin(admin) }
+                prefs.lockModeOn = false
+            } else if (manager.isAdminActive(admin)) prefs.lockModeOn = true
+            else {
+                @Suppress("DEPRECATION")
+                requireActivity().startActivityForResult(Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                    .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
+                    .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.admin_permission_message)), Constants.REQUEST_CODE_ENABLE_ADMIN)
+            }
+        }
+        render()
+    }
+
+    /**
+     * Double tap and home for recents need the accessibility service: asks for it, remembering [forWhat]
+     * ([ASKED_FOR_LOCK] or [ASKED_FOR_RECENTS]) so that one, and only that one, turns on once it's allowed
+     */
+    private fun askAccessibility(forWhat: String) {
+        AppDialog(requireContext())
+            .setTitle(R.string.accessibility)
+            .setMessage(R.string.accessibility_disclosure)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.enable) { _, _ ->
+                prefs.accessibilityAskedFor = forWhat
+                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            }
+            .show()
+    }
+
+    // --- Apps ---
+
+    /** The hidden apps, once looked up ([MainViewModel.getHiddenApps]) */
+    private var hiddenAppModels: List<app.olauncher.data.AppModel> = emptyList()
+
+    /** The hidden apps' list: tap or hold one for Open / Unhide, or select several to unhide */
+    private val hiddenList = HoldList<app.olauncher.data.AppModel>(onRemove = { unhide(it) }, tapOpensMenu = true, removeLabel = R.string.unhide)
+
+    private fun hiddenApps() = hiddenAppModels.filterIsInstance<app.olauncher.data.AppModel.App>().sortedBy { it.appLabel.lowercase(Locale.getDefault()) }
+
+    private fun appsRows(): Rows {
+        val context = requireContext()
+        // Until they're looked up, as many as are kept
+        val count = hiddenApps().size.takeIf { it > 0 } ?: prefs.hiddenApps.size
+        return Rows(
+            row("hiddenApps", getString(R.string.hidden_apps), R.string.info_hidden_apps, value = if (count == 0) getString(R.string.none) else count.toString(),
+                control = Control.Opens, locked = Lockdown.isLocked(context, Lockdown.Lock.HIDDEN_APPS, prefs)) { openPage(HIDDEN_APPS) },
+            switch("keyboard", getString(R.string.auto_show_keyboard), R.string.info_keyboard, prefs.autoShowKeyboard) {
+                prefs.autoShowKeyboard = it
+                render()
+            },
         )
     }
 
-    /** Shown beside "Summarise all notes" while it's going */
+    /** Apps' hidden apps, each opened or unhidden from its menu */
+    private fun hiddenAppsRows(): Rows {
+        val apps = hiddenApps()
+        val rows = apps.map { it to row("app:" + it.appPackage + "|" + it.user, it.appLabel, R.string.info_hidden_app_item) }
+        if (rows.isEmpty()) return Rows(noneRow("none"))
+        return Rows(rows.map { it.second }) { views ->
+            views.listHolding(rows.first().second.key)?.let { hiddenList.attach(it, scrollView()) }
+            rows.forEach { (app, row) ->
+                val view = views[row.key] ?: return@forEach
+                hiddenList.item(view, app, label = app.appLabel, about = row.about, actions = listOf(
+                    HoldList.Action(getString(R.string.open_app)) { viewModel.selectedApp(app, Constants.FLAG_HIDDEN_APPS) },
+                    HoldList.Action(getString(R.string.unhide)) { unhide(setOf(app)) },
+                ))
+            }
+        }
+    }
+
+    /** Puts [apps] back in the app list */
+    private fun unhide(apps: Set<app.olauncher.data.AppModel>) {
+        val context = requireContext()
+        if (LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)) return
+        val keys = apps.flatMap { listOf(it.appPackage, it.appPackage + "|" + it.user.toString()) }.toSet()
+        prefs.hiddenApps = prefs.hiddenApps.filter { it !in keys }.toMutableSet()
+        hiddenAppModels = hiddenAppModels.filter { it !in apps }
+        viewModel.getAppList()
+        viewModel.getHiddenApps()
+        render()
+    }
+
+    // --- Check-in ---
+
+    private fun checkInRows(): Rows {
+        val data = moodStore.load()
+        val on = data.promptEnabled
+        fun time(minutes: Int) = Formats.time(requireContext(), Formats.minutesOfDay(minutes))
+        val asks = data.dailyStats.size + 1
+        return Rows(
+            switch("checkIn", getString(R.string.check_in_on), R.string.info_check_in, on) { enable ->
+                moodStore.update {
+                    it.promptEnabled = enable
+                    it.promptSnoozedUntil = ""
+                }
+                render()
+            },
+            row("time", getString(R.string.prompt_time), R.string.info_check_in_time, value = time(data.promptMinutes), level = 1, enabled = on) {
+                pickTime(data.promptMinutes) { moodStore.setPromptTimes(promptMinutes = it) }
+            },
+            row("asks", getString(R.string.check_in_asks), R.string.info_check_in_asks, value = resources.getQuantityString(R.plurals.stat_count, asks, asks),
+                level = 1, enabled = on) { pickCheckInStats() },
+            switch("missed", getString(R.string.ask_missed_day), R.string.info_missed_day, data.catchUpEnabled, level = 1, enabled = on) {
+                moodStore.setPromptTimes(catchUpEnabled = it)
+                render()
+            },
+            row("until", getString(R.string.ask_missed_day_until), R.string.info_missed_until, value = time(data.catchUpMinutes), level = 2,
+                enabled = on && data.catchUpEnabled) {
+                pickTime(data.catchUpMinutes) { moodStore.setPromptTimes(catchUpMinutes = it) }
+            },
+        )
+    }
+
+    /** The stats the check-in asks after the mood */
+    private fun pickCheckInStats() {
+        val stats = moodStore.load().stats.filter { it.id != MoodStore.USAGE }
+        val asked = stats.map { it.daily }.toBooleanArray()
+        AppDialog(requireContext())
+            .setTitle(R.string.check_in_asks)
+            .setMultiChoiceItems(stats.map { it.name }.toTypedArray(), asked) { _, i, on -> asked[i] = on }
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ ->
+                moodStore.setDaily(stats.filterIndexed { i, _ -> asked[i] }.map { it.id }.toSet())
+                render()
+            }
+            .show()
+    }
+
+    private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
+        TimePickerDialog(requireContext(), { _, hour, minute ->
+            onPicked(hour * 60 + minute)
+            render()
+        }, minutes / 60, minutes % 60, DateFormat.is24HourFormat(requireContext())).show()
+    }
+
+    // --- Money ---
+
+    /** The weekly limit and what goes with it are set only here; the Money page's limit opens this page */
+    private fun moneyRows(): Rows {
+        val context = requireContext()
+        val limit = Spending.weekLimitCents(context)
+        val on = limit > 0
+        return Rows(
+            row("limit", getString(R.string.week_limit), R.string.info_week_limit, value = if (on) moneyShort(limit) else getString(R.string.off)) { askWeekLimit() },
+            switch("carryOver", getString(R.string.settings_carry_over), R.string.info_carry_over, Spending.carryOver(context), level = 1, enabled = on) {
+                // Not carrying over what's left lets a bad week be forgotten, so it loosens
+                if (it) { Spending.setCarryOver(context, true); render() } else gate.loosen { Spending.setCarryOver(context, false); render() }
+            },
+            switch("onHome", getString(R.string.money_left_on_home), R.string.info_money_left, Spending.showOnHome(context), level = 1, enabled = on) {
+                Spending.setShowOnHome(context, it)
+                render()
+            },
+            row("essentials", getString(R.string.settings_essentials), R.string.info_essentials,
+                value = Spending.groupRules(context).size.takeIf { it > 0 }?.toString() ?: getString(R.string.settings_automatic)) { askRules() },
+        )
+    }
+
+    /** The most to spend in a week; Turn off takes the limit away, which loosens lockdown */
+    private fun askWeekLimit() {
+        val context = requireContext()
+        val current = Spending.weekLimitCents(context)
+        val input = EditText(context).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            hint = "$"
+            if (current > 0) setText(if (current % 100 == 0L) (current / 100).toString() else String.format(Locale.US, "%.2f", current / 100.0))
+            setSelection(text.length)
+        }
+        AppDialog(context)
+            .setTitle(R.string.week_limit)
+            .setView(FrameLayout(context).apply {
+                setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+                addView(input)
+            })
+            .setPositiveButton(R.string.save) { _, _ ->
+                val dollars = input.text.toString().replace("$", "").replace(",", "").trim().toDoubleOrNull()
+                if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, Math.round(dollars * 100))
+                if (isAdded) render()
+            }
+            .apply {
+                if (current > 0) setNeutralButton(R.string.turn_off) { _, _ ->
+                    gate.loosen { Spending.setWeekLimitCents(context, 0); if (isAdded) render() }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+            .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+        input.requestFocus()
+    }
+
+    /** Each category set by hand: change it or put it back to automatic */
+    private fun askRules() {
+        val context = requireContext()
+        val rules = Spending.groupRules(context).entries.toList()
+        if (rules.isEmpty()) {
+            AppDialog(context).setMessage(R.string.settings_essentials_how).setPositiveButton(R.string.okay, null).show()
+            return
+        }
+        AppDialog(context)
+            .setTitle(R.string.settings_essentials)
+            .setItems(rules.map { (group, essential) -> group + " · " + getString(if (essential) R.string.essential else R.string.settings_not_essential) }.toTypedArray()) { _, i ->
+                val (group, essential) = rules[i]
+                AppDialog(context)
+                    .setTitle(group)
+                    .setItems(arrayOf(getString(if (essential) R.string.essential_not_group else R.string.essential_group, group),
+                        getString(R.string.essential_reset_group, group))) { _, which ->
+                        Spending.setGroupEssential(context, group, if (which == 0) !essential else null)
+                        render()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    // --- Places ---
+
+    private fun placesRows(): Rows {
+        val context = requireContext()
+        val (checks, scans) = Places.todayCounts(context)
+        val on = Places.enabled(context)
+        return Rows(
+            switch("find", getString(R.string.places_find), R.string.info_places, on) {
+                // Not finding places any more loosens lockdown, which can turn on at them
+                if (it) { Places.setEnabled(context, true); render() } else gate.loosen { Places.setEnabled(context, false); render() }
+            },
+            row("today", getString(R.string.places_today), R.string.info_places_today, level = 1, enabled = on,
+                value = resources.getQuantityString(R.plurals.places_checks, checks, checks) + " · " + resources.getQuantityString(R.plurals.places_scans, scans, scans)),
+            row("delete", getString(R.string.places_delete), R.string.info_places_delete, level = 1, enabled = on, danger = true) {
+                AppDialog(context)
+                    .setTitle(R.string.places_delete_title)
+                    .setMessage(R.string.places_delete_ask)
+                    .setNegativeButton(R.string.cancel, null)
+                    .setPositiveButton(R.string.action_delete) { _, _ -> Places.deleteHistory(context); render() }
+                    .show()
+            },
+        )
+    }
+
+    // --- Tracking ---
+
+    /** Each thing tracking needs, OK or to fix, then counting calls */
+    private fun trackingRows(): Rows {
+        val context = requireContext()
+        val calls = People.hasCallLog(context)
+        return Rows(Tracking.items(context).mapIndexed { i, item ->
+            SettingRow("item.$i", item.title, item.detail, onTap = item.fix?.let { fix -> { fix(context) } },
+                value = getString(if (item.ok) R.string.tracking_ok else if (item.fix != null) R.string.tracking_fix else R.string.tracking_check),
+                valueColor = if (item.ok) null else Style.WARNING)
+        } + listOf(
+            // On: tapping goes to app info to take the permission back, which lockdown may block
+            switch("calls", getString(R.string.people_count_calls), R.string.info_calls, calls, locked = calls && systemPagesLocked()) {
+                if (calls) openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
+                else askCallLog.launch(android.Manifest.permission.READ_CALL_LOG)
+            },
+        ))
+    }
+
+    // --- Stats ---
+
+    private fun statsRows(): Rows {
+        val context = requireContext()
+        val newOnHome = StatsHomeFragment.showsNewStats(context)
+        val days = listOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.SUNDAY, java.time.DayOfWeek.SATURDAY)
+        val homes = Social.homes(context)
+        val work = Social.work(context)
+        val goals = listOf(5_000, 6_000, 8_000, 10_000, 12_000, 15_000)
+        return Rows(
+            segment("weekStarts", getString(R.string.week_starts), R.string.info_week_starts,
+                days.map { it.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }, days.indexOf(app.olauncher.helper.Week.first)) {
+                app.olauncher.helper.Week.set(context, days[it])
+                render()
+            },
+            if (app.olauncher.helper.Steps.hasSensor(context)) row("stepGoal", getString(R.string.step_goal), R.string.info_step_goal,
+                value = String.format(Locale.getDefault(), "%,d", app.olauncher.helper.Steps.goal(context))) {
+                choose(getString(R.string.step_goal), goals.map { String.format(Locale.getDefault(), "%,d", it) }, goals.indexOf(app.olauncher.helper.Steps.goal(context))) {
+                    app.olauncher.helper.Steps.setGoal(context, goals[it])
+                    render()
+                }
+            } else null,
+            switch("newOnHome", getString(R.string.settings_new_on_home), R.string.info_new_on_home, newOnHome) {
+                StatsHomeFragment.setShowsNewStats(context, it)
+                render()
+            },
+            row("homes", getString(R.string.homes_and_work), R.string.info_homes, control = Control.Opens,
+                value = listOfNotNull(homes.firstOrNull()?.name, homes.getOrNull(1)?.name, work?.name).joinToString(", ").ifEmpty { getString(R.string.none) }) {
+                AutoStats.id(context, AutoStats.SOCIAL)?.let { id -> runCatching { findNavController().navigate(R.id.statFragment, bundleOf(StatFragment.STAT_ID to id)) } }
+            },
+            row("report", getString(R.string.report_make), R.string.info_report) { askReport() },
+            if (app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.MAC) > 0)
+                switch("pornFromMac", getString(R.string.porn_from_mac), R.string.info_porn_from_mac, app.olauncher.helper.DeviceTime.pornOn(context)) {
+                    app.olauncher.helper.DeviceTime.setPornOn(context, it)
+                    render()
+                } else null,
+        )
+    }
+
+    private fun askReport() {
+        val spans = listOf(30, 90, 180)
+        AppDialog(requireContext())
+            .setTitle(R.string.report_make)
+            .setItems(spans.map { getString(R.string.last_days, it) }.toTypedArray()) { _, i ->
+                reportDays = spans[i]
+                // So the launcher stays here while the file is picked, instead of going home
+                viewModel.isPickingFile = true
+                createReport.launch(getString(R.string.report_file, LocalDate.now().toString()))
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    // --- Notes ---
+
+    private fun notesRows(): Rows {
+        val tidy = app.olauncher.helper.AiTidy.isOn(requireContext())
+        return Rows(
+            row("claudeKey", getString(R.string.voice_tidy), R.string.info_voice_tidy, value = onOff(tidy)) { setTidyKey() },
+            row("summarise", getString(R.string.journal_summarise_all), R.string.info_journal_summarise_all, value = summarising, level = 1, enabled = tidy) { summariseAll() },
+        )
+    }
+
+    /** Shown beside "Tidy and summarise notes" while it's going */
     private var summarising: String? = null
 
     /** Summarises every long journal note again, after saying how many that is */
@@ -651,13 +955,13 @@ class SettingsFragment : CardPageFragment() {
         val input = EditText(context).apply {
             hint = getString(R.string.voice_tidy_key)
             isSingleLine = true
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setText(app.olauncher.helper.AiTidy.key(context).orEmpty())
         }
         val builder = AppDialog(context)
             .setTitle(R.string.voice_tidy)
             .setMessage(R.string.info_voice_tidy)
-            .setView(android.widget.FrameLayout(context).apply {
+            .setView(FrameLayout(context).apply {
                 setPadding(20.dpToPx(), 0, 20.dpToPx(), 0)
                 addView(input)
             })
@@ -673,409 +977,34 @@ class SettingsFragment : CardPageFragment() {
         builder.show()
     }
 
-    private fun toggleLock() {
-        val context = requireContext()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            if (!prefs.lockModeOn && !isAccessServiceEnabled(context)) return askAccessibility()
-            prefs.lockModeOn = !prefs.lockModeOn
-        } else {
-            val manager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val admin = ComponentName(context, DeviceAdmin::class.java)
-            if (manager.isAdminActive(admin)) {
-                runCatching { manager.removeActiveAdmin(admin) }
-                prefs.lockModeOn = false
-            } else {
-                @Suppress("DEPRECATION")
-                requireActivity().startActivityForResult(Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                    .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
-                    .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.admin_permission_message)), Constants.REQUEST_CODE_ENABLE_ADMIN)
-            }
-        }
-        render()
-    }
-
-    /** Double tap, home for recents and pausing apps opened elsewhere all need the accessibility service */
-    private fun askAccessibility() {
-        AppDialog(requireContext())
-            .setTitle(R.string.accessibility)
-            .setMessage(R.string.accessibility_disclosure)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.enable) { _, _ ->
-                prefs.lockModePending = true
-                runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-            }
-            .show()
-    }
-
-    // --- Apps ---
-
-    /** The hidden apps, once looked up ([MainViewModel.getHiddenApps]) */
-    private var hiddenAppModels: List<app.olauncher.data.AppModel> = emptyList()
-
-    /** The hidden apps' list: tap or hold one for Open / Unhide, or select several to unhide */
-    private val hiddenList = HoldList<app.olauncher.data.AppModel>(onRemove = { unhide(it) }, tapOpensMenu = true, removeLabel = R.string.unhide)
-
-    private fun appsSection() {
-        val context = requireContext()
-        val card = Card(getString(R.string.apps))
-        val apps = hiddenAppModels.filterIsInstance<app.olauncher.data.AppModel.App>().sortedBy { it.appLabel.lowercase(Locale.getDefault()) }
-        // Until they're looked up, as many as are kept
-        val count = if (apps.isNotEmpty()) apps.size else prefs.hiddenApps.size
-        val countText = if (count == 0) getString(R.string.none) else count.toString()
-        val locked = Lockdown.isLocked(context, Lockdown.Lock.HIDDEN_APPS, prefs)
-        val hiddenRows = apps.map { settingRow(it.appLabel, null, level = 1, onTap = null) }
-        // While lockdown keeps hidden apps hidden, the row only says so; otherwise it opens to the list
-        val hidden: View = if (locked || apps.isEmpty()) row(card, getString(R.string.hidden_apps), countText, R.string.info_hidden_apps) {
-            LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)
-        } else collapsibleGroup(groups, "hidden", getString(R.string.hidden_apps), countText, getString(R.string.info_hidden_apps), hiddenRows).also { group ->
-            hiddenList.attach(group.rows, scroll)
-            hiddenRows.forEachIndexed { i, row ->
-                val app = apps[i]
-                hiddenList.item(row, app, label = app.appLabel, actions = listOf(
-                    HoldList.Action(getString(R.string.open_app)) { viewModel.selectedApp(app, Constants.FLAG_HIDDEN_APPS) },
-                    HoldList.Action(getString(R.string.unhide)) { unhide(setOf(app)) },
-                ))
-            }
-        }.view
-        card.body(APPS, if (count == 0) null else resources.getQuantityString(R.plurals.hidden_count, count, count),
-            hidden,
-            row(card, getString(R.string.auto_show_keyboard), onOff(prefs.autoShowKeyboard), R.string.info_keyboard) {
-                prefs.autoShowKeyboard = !prefs.autoShowKeyboard
-                render()
-            },
-        )
-    }
-
-    /** Puts [apps] back in the app list */
-    private fun unhide(apps: Set<app.olauncher.data.AppModel>) {
-        val context = requireContext()
-        if (LockdownGate.stopIfLocked(context, Lockdown.Lock.HIDDEN_APPS)) return
-        val keys = apps.flatMap { listOf(it.appPackage, it.appPackage + "|" + it.user.toString()) }.toSet()
-        prefs.hiddenApps = prefs.hiddenApps.filter { it !in keys }.toMutableSet()
-        hiddenAppModels = hiddenAppModels.filter { it !in apps }
-        viewModel.getAppList()
-        viewModel.getHiddenApps()
-        render()
-    }
-
-    /** Anything that weakens a limit needs lockdown's unlock while lockdown is on */
-    private fun loosen(action: () -> Unit) = gate.loosen(action)
-
-    // --- Check-in ---
-
-    private fun checkInSection() {
-        val data = moodStore.load()
-        val card = Card(getString(R.string.check_in))
-        fun time(minutes: Int) = Formats.time(requireContext(), Formats.minutesOfDay(minutes))
-        card.body(CHECK_IN, if (data.promptEnabled) time(data.promptMinutes) else getString(R.string.off),
-            row(card, getString(R.string.daily_mood_prompt), onOff(data.promptEnabled), R.string.info_check_in) {
-                val enable = !data.promptEnabled
-                moodStore.update {
-                    it.promptEnabled = enable
-                    it.promptSnoozedUntil = ""
-                }
-                render()
-            },
-            if (data.promptEnabled) row(card, getString(R.string.prompt_time), time(data.promptMinutes), R.string.info_check_in_time, level = 1) {
-                pickTime(data.promptMinutes) { moodStore.setPromptTimes(promptMinutes = it) }
-            } else null,
-            if (data.promptEnabled) row(card, getString(R.string.check_in_asks), resources.getQuantityString(R.plurals.stat_count, data.dailyStats.size + 1, data.dailyStats.size + 1),
-                R.string.info_check_in_asks, level = 1) { pickCheckInStats() } else null,
-            if (data.promptEnabled) row(card, getString(R.string.ask_missed_day), onOff(data.catchUpEnabled), R.string.info_missed_day, level = 1) {
-                moodStore.setPromptTimes(catchUpEnabled = !data.catchUpEnabled)
-                render()
-            } else null,
-            if (data.promptEnabled && data.catchUpEnabled) row(card, getString(R.string.ask_missed_day_until), time(data.catchUpMinutes), R.string.info_missed_until, level = 2) {
-                pickTime(data.catchUpMinutes) { moodStore.setPromptTimes(catchUpMinutes = it) }
-            } else null,
-        )
-    }
-
-    /** The stats the check-in asks after the mood */
-    private fun pickCheckInStats() {
-        val stats = moodStore.load().stats.filter { it.id != MoodStore.USAGE }
-        val asked = stats.map { it.daily }.toBooleanArray()
-        AppDialog(requireContext())
-            .setTitle(R.string.check_in_asks)
-            .setMultiChoiceItems(stats.map { it.name }.toTypedArray(), asked) { _, i, on -> asked[i] = on }
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.save) { _, _ ->
-                moodStore.setDaily(stats.filterIndexed { i, _ -> asked[i] }.map { it.id }.toSet())
-                render()
-            }
-            .show()
-    }
-
-    private fun pickTime(minutes: Int, onPicked: (Int) -> Unit) {
-        TimePickerDialog(requireContext(), { _, hour, minute ->
-            onPicked(hour * 60 + minute)
-            render()
-        }, minutes / 60, minutes % 60, DateFormat.is24HourFormat(requireContext())).show()
-    }
-
-    // --- Tracking ---
-
-    private fun trackingSection() {
-        val context = requireContext()
-        val items = Tracking.items(context)
-        val card = Card(getString(R.string.tracking))
-        val problems = items.count { !it.ok }
-        val status = items.map { item ->
-            LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(4.dpToPx(), 9.dpToPx(), 4.dpToPx(), 9.dpToPx())
-                setBackgroundResource(android.R.drawable.list_selector_background)
-                item.fix?.let { fix -> setOnClickListener { fix(context) } }
-                setOnLongClickListener {
-                    explainSetting(this, item.title, item.detail)
-                    true
-                }
-                addView(View(context).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(if (item.ok) Style.GOOD else Style.WARNING)
-                    }
-                }, LinearLayout.LayoutParams(8.dpToPx(), 8.dpToPx()).apply { marginEnd = 12.dpToPx() })
-                addView(card.textView(Style.TEXT_BODY, 240).apply { text = item.title }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                if (!item.ok) addView(card.textView(Style.TEXT_BODY, 150).apply {
-                    text = getString(if (item.fix != null) R.string.tracking_fix else R.string.tracking_check)
-                })
-            }
-        }
-        card.body(TRACKING, if (problems == 0) getString(R.string.tracking_all_ok) else resources.getQuantityString(R.plurals.tracking_problems, problems, problems),
-            *status.toTypedArray(),
-            row(card, getString(R.string.people_count_calls), onOff(People.hasCallLog(context)), R.string.info_calls) {
-                if (People.hasCallLog(context)) openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
-                else askCallLog.launch(android.Manifest.permission.READ_CALL_LOG)
-            },
-        )
-    }
-
-    private fun placesSection() {
-        val context = requireContext()
-        val card = Card(getString(R.string.places_title_short))
-        val social = AutoStats.id(context, AutoStats.SOCIAL)
-        val homes = Social.homes(context)
-        val work = Social.work(context)
-        val (checks, scans) = Places.todayCounts(context)
-        val placesOn = Places.enabled(context)
-        card.body(PLACES, onOff(placesOn),
-            row(card, getString(R.string.homes_and_work), listOfNotNull(homes.firstOrNull()?.name, homes.getOrNull(1)?.name, work?.name)
-                .joinToString(", ").ifEmpty { getString(R.string.none) }, R.string.info_homes) {
-                social?.let { id -> runCatching { findNavController().navigate(R.id.statFragment, bundleOf(StatFragment.STAT_ID to id)) } }
-            },
-            row(card, getString(R.string.places_find), onOff(placesOn), R.string.info_places) {
-                Places.setEnabled(context, !placesOn)
-                render()
-            },
-            if (placesOn) row(card, getString(R.string.places_today), resources.getQuantityString(R.plurals.places_checks, checks, checks) + " · " +
-                resources.getQuantityString(R.plurals.places_scans, scans, scans), R.string.info_places_today, level = 1, onTap = null) else null,
-            if (placesOn) row(card, getString(R.string.places_delete), null, R.string.info_places_delete, level = 1) {
-                AppDialog(context)
-                    .setTitle(R.string.places_delete_title)
-                    .setMessage(R.string.places_delete_ask)
-                    .setNegativeButton(R.string.cancel, null)
-                    .setPositiveButton(R.string.action_delete) { _, _ -> Places.deleteHistory(context); render() }
-                    .show()
-            } else null,
-        )
-    }
-
-    // --- Money ---
-
-    /** The weekly limit and what goes with it are set only here; the Money page's limit opens this section */
-    private fun moneySection() {
-        val context = requireContext()
-        val card = Card(getString(R.string.settings_spending))
-        val limit = Spending.weekLimitCents(context)
-        val limitText = if (limit <= 0) getString(R.string.off) else moneyShort(limit)
-        card.body(MONEY, limitText,
-            row(card, getString(R.string.week_limit), limitText, R.string.info_week_limit) { askWeekLimit() },
-            if (limit > 0) row(card, getString(R.string.settings_carry_over), onOff(Spending.carryOver(context)), R.string.info_carry_over, level = 1) {
-                Spending.setCarryOver(context, !Spending.carryOver(context))
-                render()
-            } else null,
-            if (limit > 0) row(card, getString(R.string.money_left_on_home), onOff(Spending.showOnHome(context)), R.string.info_money_left, level = 1) {
-                Spending.setShowOnHome(context, !Spending.showOnHome(context))
-                render()
-            } else null,
-            row(card, getString(R.string.settings_essentials), Spending.groupRules(context).size.takeIf { it > 0 }?.toString() ?: getString(R.string.settings_automatic),
-                R.string.info_essentials) { askRules() },
-        )
-    }
-
-    /** The most to spend in a week; Turn off takes the limit away */
-    private fun askWeekLimit() {
-        val context = requireContext()
-        val current = Spending.weekLimitCents(context)
-        val input = EditText(context).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            hint = "$"
-            if (current > 0) setText(if (current % 100 == 0L) (current / 100).toString() else String.format(Locale.US, "%.2f", current / 100.0))
-            setSelection(text.length)
-        }
-        AppDialog(context)
-            .setTitle(R.string.week_limit)
-            .setView(FrameLayout(context).apply {
-                setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
-                addView(input)
-            })
-            .setPositiveButton(R.string.save) { _, _ ->
-                val dollars = input.text.toString().replace("$", "").replace(",", "").trim().toDoubleOrNull()
-                if (dollars != null && dollars > 0) Spending.setWeekLimitCents(context, Math.round(dollars * 100))
-                if (isAdded) render()
-            }
-            .apply { if (current > 0) setNeutralButton(R.string.turn_off) { _, _ -> Spending.setWeekLimitCents(context, 0); if (isAdded) render() } }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-            .window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-        input.requestFocus()
-    }
-
-    /** Each category set by hand: change it or put it back to automatic */
-    private fun askRules() {
-        val context = requireContext()
-        val rules = Spending.groupRules(context).entries.toList()
-        if (rules.isEmpty()) {
-            AppDialog(context).setMessage(R.string.settings_essentials_how).setPositiveButton(R.string.okay, null).show()
-            return
-        }
-        AppDialog(context)
-            .setTitle(R.string.settings_essentials)
-            .setItems(rules.map { (group, essential) -> group + " · " + getString(if (essential) R.string.essential else R.string.settings_not_essential) }.toTypedArray()) { _, i ->
-                val (group, essential) = rules[i]
-                AppDialog(context)
-                    .setTitle(group)
-                    .setItems(arrayOf(getString(if (essential) R.string.essential_not_group else R.string.essential_group, group),
-                        getString(R.string.essential_reset_group, group))) { _, which ->
-                        Spending.setGroupEssential(context, group, if (which == 0) !essential else null)
-                        render()
-                    }
-                    .show()
-            }
-            .show()
-    }
-
-    // --- Stats ---
-
-    private fun statsSection() {
-        val context = requireContext()
-        val card = Card(getString(R.string.stats_title))
-        val newOnHome = StatsHomeFragment.showsNewStats(context)
-        card.body(STATS, null,
-            row(card, getString(R.string.week_starts), app.olauncher.helper.Week.first.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()),
-                R.string.info_week_starts) {
-                val days = listOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.SUNDAY, java.time.DayOfWeek.SATURDAY)
-                choose(R.string.week_starts, days.map { it.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault()) },
-                    days.indexOf(app.olauncher.helper.Week.first)) { app.olauncher.helper.Week.set(context, days[it]) }
-            },
-            if (app.olauncher.helper.Steps.hasSensor(context)) row(card, getString(R.string.step_goal),
-                String.format(Locale.getDefault(), "%,d", app.olauncher.helper.Steps.goal(context)), R.string.info_step_goal) {
-                val goals = listOf(5_000, 6_000, 8_000, 10_000, 12_000, 15_000)
-                choose(R.string.step_goal, goals.map { String.format(Locale.getDefault(), "%,d", it) }, goals.indexOf(app.olauncher.helper.Steps.goal(context))) {
-                    app.olauncher.helper.Steps.setGoal(context, goals[it])
-                }
-            } else null,
-            row(card, getString(R.string.settings_new_on_home), onOff(newOnHome), R.string.info_new_on_home) {
-                StatsHomeFragment.setShowsNewStats(context, !newOnHome)
-                render()
-            },
-            row(card, getString(R.string.report_make), null, R.string.info_report) { askReport() },
-            if (app.olauncher.helper.DeviceTime.updated(context, app.olauncher.helper.DeviceTime.Device.MAC) > 0)
-                row(card, getString(R.string.porn_from_mac), onOff(app.olauncher.helper.DeviceTime.pornOn(context)), R.string.info_porn_from_mac) {
-                    app.olauncher.helper.DeviceTime.setPornOn(context, !app.olauncher.helper.DeviceTime.pornOn(context))
-                    render()
-                } else null,
-        )
-    }
-
-    private fun askReport() {
-        val spans = listOf(30, 90, 180)
-        AppDialog(requireContext())
-            .setTitle(R.string.report_make)
-            .setItems(spans.map { getString(R.string.last_days, it) }.toTypedArray()) { _, i ->
-                reportDays = spans[i]
-                // So the launcher stays here while the file is picked, instead of going home
-                viewModel.isPickingFile = true
-                createReport.launch(getString(R.string.report_file, LocalDate.now().toString()))
-            }
-            .show()
-    }
-
-    // --- Lockdown ---
-
-    private val gate by lazy { LockdownGate(this) { render() } }
-
-    /**
-     * Lockdown has its own page (Limits is in it, under Screen time); here it's the first section,
-     * its header saying whether it's on, with a red dot while it's in force, and a row opening the page.
-     */
-    private fun lockdownSection() {
-        val context = requireContext()
-        val card = Card(getString(R.string.lockdown))
-        val on = Lockdown.isActive(context, prefs)
-        card.body(LOCKDOWN, LockdownGate.status(context),
-            row(card, getString(R.string.settings_lockdown_open), null, R.string.info_lockdown) {
-                findNavController().navigate(R.id.lockdownFragment)
-            },
-        )
-        if (on) card.headerEnd.valueDot(Style.DANGER, first = true)
-    }
-
     // --- Newsletter ---
 
     /** Each newsletter's settings page, and how issues are read */
-    private fun newsletterSection() {
+    private fun newsletterRows(): Rows {
         val context = requireContext()
-        val card = Card(getString(R.string.newsletter))
-        card.body(NEWSLETTER, null,
-            *app.olauncher.helper.NewsletterSync.PROFILES.map { profile ->
-                row(card, getString(if (profile == app.olauncher.helper.NewsletterSync.WEEKLY) R.string.newsletter_weekly else R.string.newsletter_daily),
-                    null, R.string.info_newsletter_profile) {
-                    findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(NewsletterSettingsFragment.PROFILE to profile))
-                }
-            }.toTypedArray(),
-            row(card, getString(R.string.newsletter_reader_mode), getString(
-                if (NewsletterReaderFragment.paged(context)) R.string.newsletter_pages else R.string.newsletter_scrolling), R.string.info_newsletter_reader) {
-                NewsletterReaderFragment.setPaged(context, !NewsletterReaderFragment.paged(context))
-                render()
-            },
-        )
-    }
-
-    /** A small dot before a row's value (its last text), or before the first text with [first] */
-    private fun View.valueDot(color: Int, first: Boolean = false) {
-        val group = this as? ViewGroup ?: return
-        val value = group.getChildAt(if (first) 0 else group.childCount - 1) as? android.widget.TextView ?: return
-        val size = 7.dpToPx()
-        value.setCompoundDrawablesRelative(GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(color)
-            setSize(size, size)
-            setBounds(0, 0, size, size)
-        }, null, null, null)
-        value.compoundDrawablePadding = 7.dpToPx()
+        return Rows(app.olauncher.helper.NewsletterSync.PROFILES.map { profile ->
+            row("profile.$profile", getString(if (profile == app.olauncher.helper.NewsletterSync.WEEKLY) R.string.newsletter_weekly else R.string.newsletter_daily),
+                R.string.info_newsletter_profile, control = Control.Opens) {
+                findNavController().navigate(R.id.newsletterSettingsFragment, bundleOf(NewsletterSettingsFragment.PROFILE to profile))
+            }
+        } + segment("reader", getString(R.string.newsletter_reader_mode), R.string.info_newsletter_reader,
+            listOf(getString(R.string.newsletter_scrolling), getString(R.string.newsletter_pages)), if (NewsletterReaderFragment.paged(context)) 1 else 0) {
+            NewsletterReaderFragment.setPaged(context, it == 1)
+            render()
+        })
     }
 
     // --- Backup ---
 
-    private fun backupSection() {
+    private fun backupRows(): Rows {
         val context = requireContext()
-        val card = Card(getString(R.string.backup))
         val folder = BackupManager.backupFolder(context)
-        val saved = BackupManager.lastSaved(context)
-        card.body(BACKUP, when {
-                folder.isEmpty() -> getString(R.string.off)
-                BackupManager.isFolderFailing(context) -> getString(R.string.backup_not_saving)
-                saved > 0 -> getString(R.string.backup_saved_at, Formats.timeOrDate(context, saved))
-                else -> getString(R.string.on)
-            },
-            row(card, getString(R.string.backup_folder), when {
+        return Rows(
+            row("folder", getString(R.string.backup_folder), R.string.info_backup_folder, value = when {
                 folder.isEmpty() -> getString(R.string.off)
                 BackupManager.isFolderFailing(context) -> getString(R.string.backup_not_saving)
                 else -> folderName(folder)
-            }, R.string.info_backup_folder) {
+            }) {
                 if (folder.isEmpty()) return@row pickFolder()
                 AppDialog(context)
                     .setTitle(R.string.backup_folder)
@@ -1085,13 +1014,14 @@ class SettingsFragment : CardPageFragment() {
                             render()
                         }
                     }
+                    .setNegativeButton(R.string.cancel, null)
                     .show()
             },
-            row(card, getString(R.string.export_backup), null, R.string.info_export) {
+            row("export", getString(R.string.export_backup), R.string.info_export) {
                 viewModel.isPickingFile = true
                 exportBackup.launch(BackupManager.BACKUP_FILE_NAME)
             },
-            row(card, getString(R.string.import_backup), null, R.string.info_import) {
+            row("import", getString(R.string.import_backup), R.string.info_import, danger = true) {
                 viewModel.isPickingFile = true
                 importBackup.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
             },
@@ -1135,15 +1065,31 @@ class SettingsFragment : CardPageFragment() {
 
     private var lookingUpFolder: String? = null
 
-    /** Replaces everything with a backup. Loosens lockdown, since it could undo it. */
+    /** A backup's been picked to import: it replaces everything, so that's asked first */
+    private fun confirmImport(backup: JSONObject) {
+        AppDialog(requireContext())
+            .setTitle(R.string.import_backup_ask)
+            .setMessage(getString(R.string.import_backup_message) + savedAt(backup))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.restore) { _, _ -> restoreBackup(backup) }
+            .show()
+    }
+
+    /**
+     * Replaces everything with a backup. Loosens lockdown, since it could undo it. The app starts again
+     * after, as every setting and list it holds has changed underneath it.
+     */
     private fun restoreBackup(backup: JSONObject, afterRestore: () -> Unit = {}) {
-        loosen {
+        loosenThen {
             BackupManager.restore(requireContext(), backup)
             afterRestore()
             requireContext().showToast(getString(R.string.backup_restored))
             requireActivity().recreate()
         }
     }
+
+    /** Anything that weakens a limit needs lockdown's unlock while lockdown is on */
+    private fun loosenThen(action: () -> Unit) = gate.loosen(action)
 
     private fun showRestoreSummary() {
         val summary = BackupManager.takeRestoreSummary(requireContext()) ?: return
@@ -1156,27 +1102,23 @@ class SettingsFragment : CardPageFragment() {
 
     // --- About ---
 
-    private fun aboutSection() {
+    private fun aboutRows(): Rows {
         val context = requireContext()
-        val card = Card(getString(R.string.about))
-        val isDefault = isOlauncherDefault(context)
-        card.body(ABOUT, BuildConfig.VERSION_NAME,
-            if (!Lockdown.isLocked(context, Lockdown.Lock.LAUNCHER, prefs)) row(card, getString(if (isDefault) R.string.change_default_launcher else R.string.set_as_default_launcher),
-                null, R.string.info_default) { viewModel.resetLauncherLiveData.call() } else null,
-            row(card, getString(R.string.tutorial), null, R.string.info_tutorial) { Tutorial.show(requireActivity()) },
-            row(card, getString(R.string.app_info), null, R.string.info_app_info) {
+        return Rows(
+            row("launcher", getString(if (isOlauncherDefault(context)) R.string.change_default_launcher else R.string.set_as_default_launcher), R.string.info_default,
+                locked = Lockdown.isLocked(context, Lockdown.Lock.LAUNCHER, prefs)) { viewModel.resetLauncherLiveData.call() },
+            row("tutorial", getString(R.string.tutorial), R.string.info_tutorial) { Tutorial.show(requireActivity()) },
+            row("appInfo", getString(R.string.app_info), R.string.info_app_info, locked = systemPagesLocked()) {
                 openAppInfo(context, Process.myUserHandle(), BuildConfig.APPLICATION_ID)
             },
-            row(card, getString(R.string.version), BuildConfig.VERSION_NAME, R.string.info_version, onTap = null),
-            updateRow(card),
+            row("version", getString(R.string.version), R.string.info_version, value = BuildConfig.VERSION_NAME),
+            updateRow(),
             app.olauncher.helper.CrashLog.last(context)?.let { text ->
-                row(card, getString(R.string.last_error), text.substringBefore(" · ").replace('T', ' '), R.string.info_last_error) {
-                    startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND)
-                        .setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text), getString(R.string.last_error)))
+                row("lastError", getString(R.string.last_error), R.string.info_last_error, value = text.substringBefore(" · ").replace('T', ' ')) {
+                    startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), getString(R.string.last_error)))
                 }
             },
         )
-        showRestoreSummary()
     }
 
     // --- Updating from the build on Drive ---
@@ -1193,7 +1135,7 @@ class SettingsFragment : CardPageFragment() {
         val context = requireContext().applicationContext
         Thread {
             val state = AppUpdate.check(context)
-            view?.post {
+            main.post {
                 checking = false
                 update = state
                 if (thenInstall) {
@@ -1213,10 +1155,10 @@ class SettingsFragment : CardPageFragment() {
     }
 
     /** A newer build installs; otherwise a tap looks on Drive again */
-    private fun updateRow(card: Card): View? {
+    private fun updateRow(): SettingRow {
         val context = requireContext()
         val state = update.takeIf { !checking }
-        return row(card, getString(R.string.app_update), updateValue(state), R.string.info_app_update) {
+        return row("update", getString(R.string.app_update), R.string.info_app_update, value = updateValue(state)) {
             when (state) {
                 null -> {}
                 is AppUpdate.State.Newer -> runCatching { AppUpdate.install(context, state.uri) }
@@ -1224,19 +1166,19 @@ class SettingsFragment : CardPageFragment() {
             }
         }
     }
+}
 
-    /** Back from a page opened here, the page goes back to where it was, once it's laid out again */
-    private fun restoreScrollSoon() {
-        if (savedScroll < 0) return
-        val y = savedScroll
-        savedScroll = -1
-        scroll?.let { view -> view.post { view.scrollTo(0, y) } }
-    }
-
-    override fun onDestroyView() {
-        scroll?.let { savedScroll = it.scrollY }
-        scroll = null
-        super.onDestroyView()
+/**
+ * The setting that asked for the accessibility service turns on once it's allowed: double tap to lock
+ * or home for recents, only the one that asked. Called when JLauncher or Settings comes back.
+ */
+internal fun finishAccessibilityAsk(context: Context, prefs: Prefs) {
+    val asked = prefs.accessibilityAskedFor
+    if (asked.isEmpty() || !isAccessServiceEnabled(context)) return
+    prefs.accessibilityAskedFor = ""
+    when (asked) {
+        SettingsFragment.ASKED_FOR_LOCK -> prefs.lockModeOn = true
+        SettingsFragment.ASKED_FOR_RECENTS -> prefs.homeButtonShowRecents = true
     }
 }
 
@@ -1265,6 +1207,6 @@ fun pageHeader(context: android.content.Context, icon: String?, title: String, o
             setTextColor(ink)
             isSingleLine = true
             ellipsize = android.text.TextUtils.TruncateAt.END
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }, LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
 }
