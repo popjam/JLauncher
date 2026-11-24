@@ -57,6 +57,15 @@ class FormatsTest {
         assertEquals("1h 30m", Formats.minutes(90))
     }
 
+    @Test fun biggestUnits() {
+        assertEquals("0m", Formats.biggestUnit(0))
+        assertEquals("<1m", Formats.biggestUnit(59_999))
+        assertEquals("59m", Formats.biggestUnit(3_599_999))
+        assertEquals("1h", Formats.biggestUnit(3_600_000))
+        assertEquals("2h", Formats.biggestUnit(2 * 3_600_000L + 40 * 60_000L))
+        assertEquals("24h", Formats.biggestUnit(24 * 3_600_000L + 56 * 60_000L))
+    }
+
     @Test fun percents() {
         assertEquals("<1%", Formats.percent(0.4f))
         assertEquals("0%", Formats.percent(0f))

@@ -215,6 +215,7 @@
     <string name="taken">Taken</string>
     <string name="dose_number">Dose %1$d</string>
     <string name="hours_short">%1$dh</string>
+    <string name="days_short">%1$dd</string>
     <string name="needs_more_days">Not enough days yet</string>
     <string name="filter_days">%1$s on %2$d of %3$d days</string>
     <string-array name="usage_faces">

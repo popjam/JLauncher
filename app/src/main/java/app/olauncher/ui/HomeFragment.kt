@@ -488,18 +488,13 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private val lockdownGate by lazy { LockdownGate(this) { populateLockdownWidget() } }
 
     /**
-     * The widget's own way of writing a duration, kept as it always was (rounded up to the minute,
-     * never under 1m) rather than [Formats.duration]
+     * The widget's own way of writing a duration: only the biggest unit, so the column stays centred
+     * ("23h", "12m"); minutes are rounded up, never under 1m
      */
     private fun widgetDuration(ms: Long): String {
         val minutes = ((ms + 59_999) / 60_000).coerceAtLeast(1)
-        val hours = minutes / 60
-        val rest = minutes % 60
-        return when {
-            hours == 0L -> getString(R.string.minutes_short, rest.toInt())
-            rest == 0L -> getString(R.string.hours_short, hours.toInt())
-            else -> getString(R.string.hours_short, hours.toInt()) + " " + getString(R.string.minutes_short, rest.toInt())
-        }
+        return if (minutes >= 60) getString(R.string.hours_short, (minutes / 60).toInt())
+            else getString(R.string.minutes_short, minutes.toInt())
     }
 
     /** Off: a faded lock and what a tap adds. On: how long until it opens. On a break: the lock open, counting down the break. */
@@ -866,9 +861,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         binding.moneyLeft.color = PixelMoneyView.colorFor(context, left, allowance)
         val today = LocalDate.now()
         val days = java.time.temporal.ChronoUnit.DAYS.between(today, today.with(java.time.temporal.TemporalAdjusters.next(app.olauncher.helper.Week.first))).toInt()
-        binding.tvMoneyDays.text = resources.getQuantityString(R.plurals.days_left, days, days)
+        binding.tvMoneyDays.text = getString(R.string.days_short, days)
         binding.tvMoneyDays.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size) * 0.88f)
-        binding.moneyWidget.contentDescription = getString(R.string.money_left_description, PixelMoneyView.figure(left), binding.tvMoneyDays.text)
+        binding.moneyWidget.contentDescription = getString(R.string.money_left_description, PixelMoneyView.figure(left), resources.getQuantityString(R.plurals.days_left, days, days))
     }
 
     /**

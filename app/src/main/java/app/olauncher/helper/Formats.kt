@@ -71,6 +71,12 @@ object Formats {
         }
     }
 
+    /** Only the biggest unit, for the home screen: "2h" for 2h 40m, "45m", "<1m", or "0m"; rounded down */
+    fun biggestUnit(ms: Long): String {
+        val minutes = ms / 60_000L
+        return if (minutes >= 60) "${minutes / 60}h" else duration(ms)
+    }
+
     /** [minutes] as a duration: "1h 30m" */
     fun minutes(minutes: Int) = duration(minutes * 60_000L)
 

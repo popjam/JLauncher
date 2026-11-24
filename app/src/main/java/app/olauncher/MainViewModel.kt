@@ -607,7 +607,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun postCombinedScreenTime(phoneMs: Long) {
         val total = runCatching { moodStore.load().days[LocalDate.now().toString()]?.totalUsageMs }.getOrNull() ?: phoneMs
         if (screenTimeMillis.value == total) return
-        screenTimeValue.postValue(Formats.duration(total))
+        screenTimeValue.postValue(Formats.biggestUnit(total))
         screenTimeMillis.postValue(total)
     }
 
