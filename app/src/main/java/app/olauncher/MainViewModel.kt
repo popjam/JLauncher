@@ -82,6 +82,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var isPrivateSpaceToggling = false
     // Set while a system file/folder picker is open, so Settings isn't closed underneath it
     var isPickingFile = false
+    // Set by Settings' Move widgets: home starts moving its widgets when it next shows
+    var moveHomeWidgets = false
 
     val showDialog = SingleLiveEvent<String>()
     val checkForMessages = SingleLiveEvent<Unit?>()

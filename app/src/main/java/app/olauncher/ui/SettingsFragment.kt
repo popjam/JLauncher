@@ -415,6 +415,12 @@ class SettingsFragment : LockdownBaseFragment() {
                 viewModel.updateHomeAlignment(prefs.homeAlignment)
                 render()
             },
+            // Back to home, to drag them there
+            row("moveWidgets", getString(R.string.move_widgets), R.string.info_move_widgets,
+                value = if (Arrangement.widgetsAt(context) != null) getString(R.string.widgets_moved) else null, control = Control.Opens) {
+                viewModel.moveHomeWidgets = true
+                runCatching { findNavController().popBackStack(R.id.mainFragment, false) }
+            },
             if (sizes.size <= 5) cycle("textSize", getString(R.string.text_size), R.string.info_text_size, sizes.map { sizeName(it) }, size) { setTextSize(sizes[it]) }
             else row("textSize", getString(R.string.text_size), R.string.info_text_size, value = sizeName(prefs.textSizeScale)) {
                 choose(getString(R.string.text_size), sizes.map { sizeName(it) }, size) { setTextSize(sizes[it]) }

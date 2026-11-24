@@ -96,4 +96,9 @@
     <string name="info_nl_cover">Makes a cover with the issue\'s date on it.</string>
     <string name="info_nl_toc_grouped">Groups the contents by subreddit.</string>
     <string name="info_nl_toc_simple">Lists only post titles in the contents.</string>
+    <string name="move_widgets">Move widgets</string>
+    <string name="info_move_widgets">Drag the weather, screen time, lockdown and money widgets anywhere on the home screen. Reset puts them back by the clock.</string>
+    <string name="widgets_moved">Moved</string>
+    <string name="move_widgets_none">No widgets on the home screen</string>
+    <string name="done">Done</string>
 </resources>

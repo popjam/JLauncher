@@ -31,6 +31,25 @@ object Arrangement {
         BackupManager.requestSync(context)
     }
 
+    /**
+     * Where the widgets by the clock were moved to (Settings › Home screen › Move widgets): the top left
+     * of the row beside the clock (of the row under it when that's all there is), as fractions of the
+     * home screen's width and height. Null while they sit by the clock.
+     */
+    fun widgetsAt(context: Context): Pair<Float, Float>? {
+        val prefs = prefs(context)
+        if (!prefs.contains("$HOME.widgetsX")) return null
+        return prefs.getFloat("$HOME.widgetsX", 0f) to prefs.getFloat("$HOME.widgetsY", 0f)
+    }
+
+    fun setWidgetsAt(context: Context, at: Pair<Float, Float>?) {
+        prefs(context).edit().apply {
+            if (at == null) remove("$HOME.widgetsX").remove("$HOME.widgetsY")
+            else putFloat("$HOME.widgetsX", at.first).putFloat("$HOME.widgetsY", at.second)
+        }.apply()
+        BackupManager.requestSync(context)
+    }
+
     /** The clock at the bottom of the home screen rather than the top */
     fun clockAtBottom(context: Context) = prefs(context).getBoolean("$HOME.clockBottom", false)
 

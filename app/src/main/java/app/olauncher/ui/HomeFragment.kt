@@ -47,6 +47,7 @@ import app.olauncher.helper.uninstall
 import app.olauncher.helper.Weather
 import app.olauncher.helper.appUsagePermissionGranted
 import app.olauncher.helper.dpToPx
+import app.olauncher.helper.getColorFromAttr
 import app.olauncher.helper.expandNotificationDrawer
 import app.olauncher.helper.getChangedAppTheme
 import app.olauncher.helper.getUserHandleFromString
@@ -104,6 +105,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         appsPadding = binding.homeAppsLayout.paddingTop to binding.homeAppsLayout.paddingBottom
         clockMarginTop = (binding.dateTimeLayout.layoutParams as FrameLayout.LayoutParams).topMargin
         initObservers()
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, endMovingOnBack)
         setHomeAlignment(prefs.homeAlignment)
         initSwipeTouchListener()
         initClickListeners()
@@ -129,9 +131,15 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         else hideStatusBar()
         showMoodPromptIfDue()
         scheduleMidnightRefresh()
+        if (viewModel.moveHomeWidgets) {
+            viewModel.moveHomeWidgets = false
+            // Once the widgets have been laid out
+            handler.postDelayed({ if (_binding != null) startMovingWidgets() }, 400)
+        }
     }
 
     override fun onPause() {
+        stopMovingWidgets()
         runCatching { requireContext().unregisterReceiver(batteryChanged) }
         handler.removeCallbacks(midnightRefresh)
         handler.removeCallbacks(moodPromptCheck)
@@ -827,14 +835,21 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         // column jump down and back on every refresh
         val alignedTop = (binding.screenTimeLayout.layoutParams as FrameLayout.LayoutParams).topMargin
             .takeIf { binding.dateTimeLayout.isVisible && binding.dateTimeLayout.height > 0 }
+        val movedTo = widgetsAt(binding.screenTimeLayout)
         val params = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = alignedTop ?: marginTop
-            marginStart = horizontalMargin
-            marginEnd = horizontalMargin
-            gravity = if (prefs.homeAlignment == Gravity.END) Gravity.START else Gravity.END
+            if (movedTo != null) {
+                gravity = Gravity.TOP or Gravity.LEFT
+                leftMargin = movedTo.first
+                topMargin = movedTo.second
+            } else {
+                topMargin = alignedTop ?: marginTop
+                marginStart = horizontalMargin
+                marginEnd = horizontalMargin
+                gravity = if (prefs.homeAlignment == Gravity.END) Gravity.START else Gravity.END
+            }
         }
         binding.screenTimeLayout.layoutParams = params
         binding.tvScreenTime.setPadding(10.dpToPx(), 4.dpToPx(), 10.dpToPx(), 10.dpToPx())
@@ -870,11 +885,17 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val above = outer(layout).takeIf { layout.isVisible && layout.height > 0 }
         val mine = outer(row) ?: return
         val clockBottom = Arrangement.clockAtBottom(requireContext())
+        val movedTo = if (above == null) widgetsAt(row) else null
         val top: Int
         val centre: Int
         if (above != null) {
-            top = if (clockBottom) layout.top - row.height else layout.top + layout.height
+            // Moved somewhere, it goes under the row rather than off the top of the screen
+            val over = clockBottom && (Arrangement.widgetsAt(requireContext()) == null || layout.top - row.height >= 0)
+            top = if (over) layout.top - row.height else layout.top + layout.height
             centre = layout.left + above.left + above.width / 2
+        } else if (movedTo != null) {
+            top = movedTo.second
+            centre = movedTo.first + mine.left + mine.width / 2
         } else {
             val margin = 10.dpToPx() + mine.width / 2
             top = if (clockBottom) binding.mainLayout.height - 64.dpToPx() - row.height else 72.dpToPx()
@@ -940,12 +961,188 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         val binding = _binding ?: return
         val dateTime = binding.dateTimeLayout
         val screenTime = binding.screenTimeLayout
+        if (widgetMover != null) placeWidgetOutline()
+        // Moved somewhere: kept there, within the screen as its size changes
+        widgetsAt(screenTime)?.let { (left, top) ->
+            val params = screenTime.layoutParams as FrameLayout.LayoutParams
+            if (params.leftMargin != left || params.topMargin != top || params.gravity != (Gravity.TOP or Gravity.LEFT))
+                // New ones: a start margin left from sitting by the clock would win over the left one
+                screenTime.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP or Gravity.LEFT).apply { leftMargin = left; topMargin = top }
+            return
+        }
         if (!screenTime.isVisible || !dateTime.isVisible || dateTime.height == 0) return
         val top = (dateTime.top + (dateTime.height - screenTime.height) / 2).coerceAtLeast(0)
         val params = screenTime.layoutParams as FrameLayout.LayoutParams
         if (params.topMargin != top) {
             params.topMargin = top
             screenTime.layoutParams = params
+        }
+    }
+
+    // --- Moving the widgets anywhere (Settings › Home screen › Move widgets) ---
+
+    /**
+     * Where [view] (the row beside the clock, or the one under it when that's all that shows) goes
+     * once the widgets have been moved, in pixels, kept on screen; null while they sit by the clock.
+     */
+    private fun widgetsAt(view: View): Pair<Int, Int>? {
+        val (x, y) = Arrangement.widgetsAt(requireContext()) ?: return null
+        val main = _binding?.mainLayout ?: return null
+        if (main.width == 0) return null
+        return (x * main.width).toInt().coerceIn(0, maxOf(0, main.width - view.width)) to
+            (y * main.height).toInt().coerceIn(0, maxOf(0, main.height - view.height))
+    }
+
+    /** The widgets showing: the row beside the clock, then the one under it */
+    private fun widgetRows() = listOf(binding.screenTimeLayout, underRow).filter { it.isVisible && it.width > 0 && it.height > 0 }
+
+    /** Both rows together, where they're laid out (without any dragging) */
+    private fun widgetBounds(): android.graphics.Rect? {
+        val rows = widgetRows().ifEmpty { return null }
+        return android.graphics.Rect(rows[0].left, rows[0].top, rows[0].right, rows[0].bottom).apply {
+            rows.drop(1).forEach { union(it.left, it.top, it.right, it.bottom) }
+        }
+    }
+
+    /** Covers home while the widgets are being moved: their outline, and Reset and Done */
+    private var widgetMover: FrameLayout? = null
+    private var widgetOutline: View? = null
+    private var widgetsDx = 0f
+    private var widgetsDy = 0f
+    private val endMovingOnBack = object : androidx.activity.OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = stopMovingWidgets()
+    }
+
+    /** Lets the widgets be dragged anywhere on home, until Done (or back, or leaving home) keeps them there */
+    private fun startMovingWidgets() {
+        val binding = _binding ?: return
+        if (widgetMover != null || !isResumed) return
+        val context = requireContext()
+        if (widgetBounds() == null) {
+            context.showToast(getString(R.string.move_widgets_none))
+            return
+        }
+        val ink = context.getColorFromAttr(R.attr.primaryColor)
+        val back = context.getColorFromAttr(R.attr.primaryShadeDarkColor)
+        val mover = FrameLayout(context).apply {
+            isClickable = true
+            translationZ = 24.dpToPx().toFloat()
+        }
+        val outline = View(context).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = Style.radiusSmall
+                setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 18))
+                setStroke(2.dpToPx(), androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 200), 6.dpToPx().toFloat(), 4.dpToPx().toFloat())
+            }
+        }
+        mover.addView(outline, FrameLayout.LayoutParams(0, 0, Gravity.TOP or Gravity.LEFT))
+        fun button(label: Int, side: Int, onTap: () -> Unit) = TextView(context, null, 0, R.style.TextSmall).apply {
+            setText(label)
+            textSize = Style.TEXT_BODY
+            setTextColor(ink)
+            gravity = Gravity.CENTER
+            setPadding(28.dpToPx(), 12.dpToPx(), 28.dpToPx(), 12.dpToPx())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = Style.radiusLarge
+                setColor(androidx.core.graphics.ColorUtils.blendARGB(back, ink, 0.08f))
+                setStroke(1.dpToPx(), androidx.core.graphics.ColorUtils.setAlphaComponent(ink, 80))
+            }
+            setOnClickListener { onTap() }
+            mover.addView(this, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or side).apply {
+                setMargins(24.dpToPx(), 0, 24.dpToPx(), 56.dpToPx())
+            })
+        }
+        button(R.string.reset, Gravity.START) { resetWidgetsPosition() }
+        button(R.string.done, Gravity.END) { stopMovingWidgets() }
+        // Dragging anywhere moves them, kept on screen
+        var lastX = 0f
+        var lastY = 0f
+        mover.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    lastX = event.rawX
+                    lastY = event.rawY
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val bounds = widgetBounds()
+                    if (bounds != null) {
+                        val main = binding.mainLayout
+                        widgetsDx = (widgetsDx + event.rawX - lastX).coerceIn(-bounds.left.toFloat(), (main.width - bounds.right).toFloat())
+                        widgetsDy = (widgetsDy + event.rawY - lastY).coerceIn(-bounds.top.toFloat(), (main.height - bounds.bottom).toFloat())
+                        showWidgetsDragged()
+                    }
+                    lastX = event.rawX
+                    lastY = event.rawY
+                }
+            }
+            true
+        }
+        widgetMover = mover
+        widgetOutline = outline
+        widgetsDx = 0f
+        widgetsDy = 0f
+        binding.mainLayout.addView(mover, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        endMovingOnBack.isEnabled = true
+        placeWidgetOutline()
+    }
+
+    /** The outline around the widgets, a little out from them, where they've been dragged to */
+    private fun placeWidgetOutline() {
+        val outline = widgetOutline ?: return
+        val bounds = widgetBounds() ?: return
+        val pad = 8.dpToPx()
+        val params = outline.layoutParams as FrameLayout.LayoutParams
+        if (params.width != bounds.width() + 2 * pad || params.height != bounds.height() + 2 * pad) {
+            params.width = bounds.width() + 2 * pad
+            params.height = bounds.height() + 2 * pad
+            outline.layoutParams = params
+        }
+        showWidgetsDragged()
+    }
+
+    private fun showWidgetsDragged() {
+        val bounds = widgetBounds() ?: return
+        val pad = 8.dpToPx()
+        widgetOutline?.translationX = bounds.left - pad + widgetsDx
+        widgetOutline?.translationY = bounds.top - pad + widgetsDy
+        widgetRows().forEach {
+            it.translationX = widgetsDx
+            it.translationY = widgetsDy
+        }
+    }
+
+    /** Back by the clock, still moving */
+    private fun resetWidgetsPosition() {
+        Arrangement.setWidgetsAt(requireContext(), null)
+        clearWidgetsDrag()
+        populateScreenTime()
+    }
+
+    /** Keeps them where they've been dragged to, and stops moving them */
+    private fun stopMovingWidgets() {
+        val binding = _binding ?: return
+        val mover = widgetMover ?: return
+        if (widgetsDx != 0f || widgetsDy != 0f) {
+            val main = binding.mainLayout
+            val anchor = widgetRows().firstOrNull()
+            if (anchor != null && main.width > 0 && main.height > 0)
+                Arrangement.setWidgetsAt(requireContext(), (anchor.left + widgetsDx) / main.width to (anchor.top + widgetsDy) / main.height)
+        }
+        clearWidgetsDrag()
+        widgetMover = null
+        widgetOutline = null
+        endMovingOnBack.isEnabled = false
+        binding.mainLayout.removeView(mover)
+        populateScreenTime()
+    }
+
+    private fun clearWidgetsDrag() {
+        widgetsDx = 0f
+        widgetsDy = 0f
+        listOf(binding.screenTimeLayout, underRow).forEach {
+            it.translationX = 0f
+            it.translationY = 0f
         }
     }
 
@@ -1505,6 +1702,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
 
     override fun onDestroyView() {
         super.onDestroyView()
+        widgetMover = null
+        widgetOutline = null
+        endMovingOnBack.isEnabled = false
         _binding = null
     }
 
