@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lockdown: its sections (Blocks, Turns on, Screen time, Breaks, Unlock, On screen, Devices), Limits, and what unlocking needs -->
+<!-- Lockdown: apps and websites, its sections (Settings changes, Turns on, Screen time, Breaks, Unlock, On screen, Devices), Limits, and what unlocking needs -->
 <resources>
     <!-- Devices -->
     <string name="lockdown_devices">Devices</string>
@@ -12,12 +12,11 @@
 
     <!-- What it blocks -->
     <string name="lockdown_apps_and_sites">Apps and websites</string>
-    <string name="info_lockdown_blocks">The apps and websites blocked during lockdown. Each switched-on device blocks the ones it can: the TV blocks apps only.</string>
+    <string name="info_lockdown_blocks">The apps and websites blocked during lockdown, on each device.</string>
+    <string name="info_lockdown_item_devices">Lit on a device: blocked there during lockdown. Tap a device to change it. An app\'s websites, under its name, are blocked with it. Unblocking loosens lockdown, so it needs the unlock.</string>
     <string name="lockdown_search_or_add">Search apps or add a site</string>
     <string name="lockdown_websites_count">Websites · %1$d</string>
     <string name="lockdown_apps_count_title">Apps · %1$d</string>
-    <string name="lockdown_add_apps">Add apps</string>
-    <string name="lockdown_sites_from_apps_line">Also blocked with their apps: %1$s</string>
     <string name="lockdown_during_phone">On the phone</string>
     <plurals name="lockdown_sites_count">
         <item quantity="one">%d site</item>
@@ -138,9 +137,6 @@
     <string name="info_lockdown_unlock">What you have to do to end lockdown early or loosen it, including from the Mac. Options run from just tapping, to typing a phrase or password, to not being allowed at all.</string>
     <string name="lockdown_break_needs">Break needs</string>
     <string name="lockdown_on_screen">On screen</string>
-    <string name="lockdown_always_allowed">Always allowed</string>
-    <string name="lockdown_always_allowed_count_title">Always allowed · %1$d</string>
-    <string name="info_lockdown_always_allowed">Apps that always work during lockdown when it\'s set to Only allow these, as well as the allowed apps. The phone app always works.</string>
     <string name="lockdown_greyscale">Greyscale</string>
     <string name="lockdown_greyscale_setup">Needs a one-time permission. Run this on a computer connected to the phone:</string>
     <string name="info_lockdown_greyscale">Turns the screen grey during lockdown. Needs a one-time permission given from a computer.</string>

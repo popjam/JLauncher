@@ -24,13 +24,12 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * Lockdown's long lists, each a page of its own, by [PAGE]: the blocked apps and websites; the
- * allowed and always allowed apps; and Limits, each app's limits ([APP] opens one app's straight away).
+ * Lockdown's long lists, each a page of its own, by [PAGE]: the apps and websites, with a button for
+ * each device on each; and Limits, each app's limits ([APP] opens one app's straight away).
  *
- * In each, anything that makes lockdown stricter is done straight away, and anything that loosens it
- * goes through the unlock (while lockdown is on). Things added here by mistake can be taken off again
- * while the page is open. Holding (or tapping) something in a list gives its menu: Edit where it can
- * be changed, Remove, and Select to remove several.
+ * Anything that makes lockdown stricter is done straight away, and anything that loosens it goes through
+ * the unlock (while lockdown is on). Things blocked here by mistake can be unblocked again while the page
+ * is open.
  */
 class LockdownPageFragment : LockdownBaseFragment() {
 
@@ -38,29 +37,22 @@ class LockdownPageFragment : LockdownBaseFragment() {
         const val PAGE = "page"
         const val PKG = "pkg"
         const val BLOCKS = "blocks"
-        const val ALLOWED = "allowed"
-        const val ESSENTIALS = "essentials"
         const val LIMITS = "limits"
         const val APP = "app"
     }
 
-    private val page get() = arguments?.getString(PAGE)?.takeIf { it in listOf(BLOCKS, ALLOWED, ESSENTIALS, LIMITS, APP) } ?: BLOCKS
+    private val page get() = arguments?.getString(PAGE)?.takeIf { it in listOf(BLOCKS, LIMITS, APP) } ?: BLOCKS
     private val pkg get() = arguments?.getString(PKG).orEmpty()
 
     /** Every app, once read */
     private var apps: List<AppModel.App>? = null
     private var query = ""
 
-    private val siteList = HoldList<String>(onRemove = { removeItems(it) }, tapOpensMenu = true)
-    private val appList = HoldList<String>(onRemove = { removeItems(it) }, tapOpensMenu = true)
-    private val chosenList = HoldList<String>(onRemove = { removeChosen(it) }, tapOpensMenu = true)
     private val limitList = HoldList<String>(onRemove = { removeLimits(it) })
-    override val holdLists: List<HoldList<*>> get() = listOf(siteList, appList, chosenList, limitList)
+    override val holdLists: List<HoldList<*>> get() = listOf(limitList)
 
     override fun title(): String = when (page) {
         BLOCKS -> getString(R.string.lockdown_apps_and_sites)
-        ALLOWED -> getString(R.string.lockdown_allowed_apps)
-        ESSENTIALS -> getString(R.string.lockdown_always_allowed)
         LIMITS -> getString(R.string.limits)
         else -> appLabel(pkg)
     }
@@ -69,7 +61,7 @@ class LockdownPageFragment : LockdownBaseFragment() {
 
     override fun top(): View? = when (page) {
         BLOCKS -> box(requireContext(), R.string.lockdown_search_or_add, { query = it; render() }) { addSite(it) }
-        ALLOWED, ESSENTIALS, LIMITS -> box(requireContext(), R.string.lockdown_search_apps, { query = it; render() })
+        LIMITS -> box(requireContext(), R.string.lockdown_search_apps, { query = it; render() })
         else -> null
     }
 
@@ -92,7 +84,6 @@ class LockdownPageFragment : LockdownBaseFragment() {
     override fun build() {
         when (page) {
             BLOCKS -> blocksPage()
-            ALLOWED, ESSENTIALS -> appsPage()
             LIMITS, APP -> limitsPage()
         }
     }
@@ -101,153 +92,133 @@ class LockdownPageFragment : LockdownBaseFragment() {
 
     // --- Apps and websites ---
 
-    /** An app that can be blocked: its name, and where it is */
-    private data class Candidate(val name: String, val pkg: String?, val bundle: String?, val tvName: String? = null)
-
-    /** Every app on the phone, the Mac and the TV, one per name */
-    private fun candidates(): List<Candidate> {
-        val context = requireContext()
-        val byKey = linkedMapOf<String, Candidate>()
-        apps.orEmpty().filter { Lockdown.canBlock(context, it.appPackage) }.forEach {
-            byKey[BlockItems.key(it.appLabel)] = Candidate(it.appLabel, it.appPackage, null)
-        }
-        if (Lockdown.macPaired(context)) LockdownSync.macInstalled(context).forEach { (bundle, name) ->
-            val key = BlockItems.key(name)
-            byKey[key] = byKey[key]?.copy(bundle = bundle) ?: Candidate(name, null, bundle)
-        }
-        LockdownSync.tvInstalled(context).forEach { name ->
-            val key = BlockItems.key(name)
-            byKey[key] = byKey[key]?.copy(tvName = name) ?: Candidate(name, null, null, name)
-        }
-        return byKey.values.sortedBy { it.name.lowercase(Locale.getDefault()) }
+    /** An app or site on the page: where it is, and its item in the list if it has one */
+    private data class Entry(val kind: BlockItems.Kind, val name: String, val pkg: String?, val bundle: String?, val tvName: String?, val item: BlockItems.Item?) {
+        val id get() = BlockItems.idFor(kind, name)
     }
 
-    private fun effectiveItems() = requireContext().let { BlockItems.effective(prefs.lockdownItems, LockdownSync.macInstalled(it), LockdownSync.tvInstalled(it)) }
+    /** What was blocked anywhere when the page opened, which goes first; kept so rows don't move while they're changed */
+    private var blockedAtOpen: Set<String>? = null
+
+    /** Sites shown since the page opened, so one turned off everywhere stays until the page is left */
+    private val sitesShown = mutableSetOf<String>()
+
+    /** The list, with apps found on the Mac and the TV by name */
+    private fun knownItems() = requireContext().let { BlockItems.known(prefs.lockdownItems, LockdownSync.macInstalled(it), LockdownSync.tvInstalled(it)) }
+
+    /** The apps the phone allows during lockdown when it allows only a list */
+    private fun allowed() = prefs.lockdownAllowedApps + prefs.lockdownEssentials
+
+    /** Every site on the list, and every app on the phone, the Mac and the TV, one per name */
+    private fun entries(items: Map<String, BlockItems.Item>): List<Entry> {
+        val context = requireContext()
+        val byId = linkedMapOf<String, Entry>()
+        fun add(kind: BlockItems.Kind, name: String, pkg: String? = null, bundle: String? = null, tvName: String? = null) {
+            val id = BlockItems.idFor(kind, name)
+            val old = byId[id]
+            byId[id] = old?.copy(pkg = old.pkg ?: pkg, bundle = old.bundle ?: bundle, tvName = old.tvName ?: tvName)
+                ?: Entry(kind, items[id]?.name ?: name, pkg, bundle, tvName, items[id])
+        }
+        items.values.filter { it.kind == BlockItems.Kind.SITE && (it.shown || it.id in sitesShown) }.forEach { add(it.kind, it.name) }
+        apps.orEmpty().filter { Lockdown.canBlock(context, it.appPackage) }.forEach { add(BlockItems.Kind.APP, it.appLabel, pkg = it.appPackage) }
+        if (Lockdown.macPaired(context)) LockdownSync.macInstalled(context).forEach { (bundle, name) -> add(BlockItems.Kind.APP, name, bundle = bundle) }
+        if (Lockdown.tvPaired(context)) LockdownSync.tvInstalled(context).forEach { add(BlockItems.Kind.APP, it, tvName = it) }
+        return byId.values.map { e -> e.copy(pkg = e.pkg ?: e.item?.pkg, bundle = e.bundle ?: e.item?.bundle, tvName = e.tvName ?: e.item?.tvName) }
+    }
+
+    /** Whether [entry] is blocked on [device] now */
+    private fun blockedOn(entry: Entry, device: Lockdown.Device): Boolean = when (device) {
+        Lockdown.Device.PHONE -> if (entry.kind == BlockItems.Kind.APP && prefs.lockdownAppMode == Lockdown.ALLOW) entry.pkg != null && entry.pkg !in allowed()
+            else entry.item?.phone == true
+        Lockdown.Device.MAC -> entry.item?.mac == true
+        Lockdown.Device.TV -> entry.item?.tv == true
+    }
+
+    /**
+     * Whether [entry] can be blocked on [device]: sites on the phone and the Mac, apps where they are. A
+     * phone app with a website (Instagram) can be blocked on the Mac too, which blocks its website there.
+     * An app blocked on a device it isn't on gets no button there (it's blocked if it's put there).
+     */
+    private fun canBlockOn(entry: Entry, device: Lockdown.Device): Boolean {
+        val context = requireContext()
+        val site = entry.kind == BlockItems.Kind.SITE
+        val pkg = entry.pkg
+        return when (device) {
+            Lockdown.Device.PHONE -> site || (pkg != null && context.isPackageInstalled(pkg) && Lockdown.canBlock(context, pkg))
+            Lockdown.Device.MAC -> site || entry.bundle != null || Limits.APP_SITES[pkg].orEmpty().isNotEmpty()
+            Lockdown.Device.TV -> !site && entry.tvName != null
+        }
+    }
 
     private fun blocksPage() {
         val context = requireContext()
-        val items = effectiveItems()
-        val sites = items.values.filter { it.kind == BlockItems.Kind.SITE && it.shown && matchesQuery(it.name) }.sortedBy { it.name }
-        val fromApps = BlockItems.phoneApps(items).flatMap { pkg -> Limits.APP_SITES[pkg].orEmpty() }
-        val siteRows = sites.map { it to itemRow(it) }
-        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_websites_count, sites.size))) + siteRows.map { it.second } +
-            listOfNotNull(if (sites.isEmpty()) noneRow("noSites") else null,
-                if (fromApps.isNotEmpty()) SettingView(note(getString(R.string.lockdown_sites_from_apps_line, fromApps.joinToString(", ")))) else null)) { views ->
-            join(siteList, views, siteRows)
-        })
+        val items = knownItems()
+        val devices = Lockdown.deviceList(context)
+        val all = entries(items)
+        fun blocked(e: Entry) = devices.any { canBlockOn(e, it) && blockedOn(e, it) }
+        val first = blockedAtOpen ?: all.filter { blocked(it) }.map { it.id }.toSet().also { if (apps != null) blockedAtOpen = it }
+        sitesShown += all.filter { it.kind == BlockItems.Kind.SITE }.map { it.id }
+        fun ordered(kind: BlockItems.Kind) = all.filter { it.kind == kind && matchesQuery(it.name) && devices.any { d -> canBlockOn(it, d) } }
+            .sortedWith(compareBy<Entry>({ it.id !in first }, { it.name.lowercase(Locale.getDefault()) }))
+        fun count(list: List<Entry>) = list.count { blocked(it) }
 
-        val blockedApps = items.values.filter { it.kind == BlockItems.Kind.APP && it.shown && matchesQuery(it.name) }
-            .filter { it.bundle != null || it.tvName != null || it.pkg == null || context.isPackageInstalled(it.pkg) }
-            .sortedBy { it.name.lowercase(Locale.getDefault()) }
-        val appRows = blockedApps.map { it to itemRow(it) }
-        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_apps_count_title, blockedApps.size))) + appRows.map { it.second } +
-            listOfNotNull(if (blockedApps.isEmpty()) noneRow("noApps") else null)) { views ->
-            join(appList, views, appRows)
-        })
+        show(segment("mode", getString(R.string.lockdown_during_phone), R.string.info_lockdown_during,
+            listOf(getString(R.string.lockdown_block_short), getString(R.string.lockdown_allow_short)), prefs.lockdownAppMode) { pickMode(it) })
+
+        val sites = ordered(BlockItems.Kind.SITE)
+        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_websites_count, count(sites)))) + sites.map { entryRow(it, devices) } +
+            listOfNotNull(if (sites.isEmpty()) noneRow("noSites") else null)))
 
         if (apps == null) return
-        val shownKeys = blockedApps.map { BlockItems.key(it.name) }.toSet()
-        val others = candidates().filter { BlockItems.key(it.name) !in shownKeys && items[BlockItems.idFor(BlockItems.Kind.APP, it.name)]?.shown != true && matchesQuery(it.name) }
-        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_add_apps))) + others.map { c ->
-            row("add:" + c.name, c.name, R.string.info_lockdown_block_app) { block(BlockItems.Item(BlockItems.Kind.APP, c.name, c.pkg, c.bundle, tvName = c.tvName)) }
-        }))
+        val appEntries = ordered(BlockItems.Kind.APP)
+        show(Rows(listOf(SettingLabel(getString(R.string.lockdown_apps_count_title, count(appEntries)))) + appEntries.map { entryRow(it, devices) } +
+            listOfNotNull(if (appEntries.isEmpty()) noneRow("noApps") else null)))
     }
 
-    /** Blocked apps or sites: a menu with Remove and Select */
-    private fun join(holdList: HoldList<String>, views: Map<String, View>, rows: List<Pair<BlockItems.Item, SettingRow>>) {
-        val list = rows.firstOrNull()?.let { views.listHolding(it.second.key) } ?: return
-        holdList.attach(list, scrollView())
-        rows.forEach { (item, row) ->
-            val view = views[row.key] ?: return@forEach
-            holdList.item(view, item.id, label = item.name, about = row.about,
-                actions = listOf(HoldList.Action(getString(R.string.remove)) { removeItems(setOf(item.id)) }))
-        }
-    }
-
-    /** A blocked app or site: its name, and the switched-on devices that block it (each blocks what it can) */
-    private fun itemRow(item: BlockItems.Item): SettingRow {
+    /** An app or site: its name (an app's websites under it, blocked with it), and a button for each switched-on device, lit where it's blocked */
+    private fun entryRow(entry: Entry, devices: List<Lockdown.Device>): SettingRow {
         val context = requireContext()
-        val where = Lockdown.deviceList(context).filter { device ->
-            when (device) {
-                Lockdown.Device.PHONE -> item.onPhone
-                Lockdown.Device.MAC -> item.onMac
-                Lockdown.Device.TV -> item.onTv
-            }
+        val buttons = devices.map { device ->
+            if (!canBlockOn(entry, device)) null
+            else DeviceButton(LockdownGate.deviceName(context, device.bit), blockedOn(entry, device)) { toggle(entry, device) }
         }
-        return row("item:" + item.id, item.name, R.string.info_lockdown_blocked_item, value = where.joinToString(" · ") { LockdownGate.deviceName(context, it.bit) })
+        val sites = Limits.APP_SITES[entry.pkg].orEmpty().takeIf { entry.kind == BlockItems.Kind.APP }.orEmpty()
+        return row("item:" + entry.id, entry.name, R.string.info_lockdown_item_devices, control = Control.Devices(buttons),
+            note = sites.joinToString(", ").ifEmpty { null })
     }
 
-    /** Blocks [item] on every device */
-    private fun block(item: BlockItems.Item) {
-        prefs.lockdownItems = BlockItems.block(prefs.lockdownItems, item.kind, item.name, true, System.currentTimeMillis(), item.pkg, item.bundle, item.tvName)
-        addedHere += item.id
-        render()
-        if (item.onPhone && !isAccessServiceEnabled(requireContext())) runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-    }
-
-    /** Unblocks the items with [ids] everywhere; that loosens, unless they were all added here */
-    private fun removeItems(ids: Set<String>) {
+    /** Blocks or unblocks [entry] on [device]: blocking is done straight away; unblocking needs the unlock, unless it was blocked here */
+    private fun toggle(entry: Entry, device: Lockdown.Device) {
+        val context = requireContext()
+        val key = entry.id + ":" + device.name
+        val on = !blockedOn(entry, device)
         val change = {
-            val items = effectiveItems()
-            ids.mapNotNull { items[it] }.forEach { item ->
-                prefs.lockdownItems = BlockItems.block(prefs.lockdownItems, item.kind, item.name, false, System.currentTimeMillis(), item.pkg, item.bundle, item.tvName)
-            }
-            addedHere -= ids
+            val pkg = entry.pkg
+            if (device == Lockdown.Device.PHONE && entry.kind == BlockItems.Kind.APP && prefs.lockdownAppMode == Lockdown.ALLOW) {
+                if (pkg != null) {
+                    if (on) {
+                        prefs.lockdownAllowedApps = prefs.lockdownAllowedApps - pkg
+                        prefs.lockdownEssentials = prefs.lockdownEssentials - pkg
+                    } else prefs.lockdownAllowedApps = prefs.lockdownAllowedApps + pkg
+                }
+            } else prefs.lockdownItems = BlockItems.set(prefs.lockdownItems, entry.kind, entry.name,
+                phone = on.takeIf { device == Lockdown.Device.PHONE }, mac = on.takeIf { device == Lockdown.Device.MAC },
+                now = System.currentTimeMillis(), pkg = pkg, bundle = entry.bundle,
+                tv = on.takeIf { device == Lockdown.Device.TV }, tvName = entry.tvName)
+            if (on) addedHere += key else addedHere -= key
             render()
+            if (on && device == Lockdown.Device.PHONE && !isAccessServiceEnabled(context)) runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
-        if (ids.all { it in addedHere }) change() else gate.loosen(change)
+        if (on || key in addedHere) change() else gate.loosen(change)
     }
 
+    /** A site typed in: blocked on every device that blocks sites */
     private fun addSite(text: String) {
         val site = Limits.cleanSite(text) ?: return requireContext().showToast(getString(R.string.lockdown_not_a_site))
         prefs.lockdownItems = BlockItems.block(prefs.lockdownItems, BlockItems.Kind.SITE, site, true, System.currentTimeMillis())
-        addedHere += BlockItems.idFor(BlockItems.Kind.SITE, site)
+        Lockdown.Device.values().forEach { addedHere += BlockItems.idFor(BlockItems.Kind.SITE, site) + ":" + it.name }
         (view?.findFocus() as? android.widget.EditText)?.setText("")
         query = ""
-        render()
-    }
-
-    // --- Allowed and always allowed apps ---
-
-    private fun chosen(): Set<String> = if (page == ALLOWED) prefs.lockdownAllowedApps else prefs.lockdownEssentials
-
-    private fun setChosen(apps: Set<String>) = if (page == ALLOWED) prefs.lockdownAllowedApps = apps else prefs.lockdownEssentials = apps
-
-    private fun appsPage() {
-        val context = requireContext()
-        val all = apps ?: return
-        val chosen = chosen()
-        // Apps that can't be blocked are always allowed, and can't be taken off
-        val fixed = if (page == ESSENTIALS) all.filter { !Lockdown.canBlock(context, it.appPackage) } else emptyList()
-        val listed = all.filter { Lockdown.canBlock(context, it.appPackage) }
-        val title = if (page == ALLOWED) R.string.lockdown_allowed_count_title else R.string.lockdown_always_allowed_count_title
-        val inList = listed.filter { it.appPackage in chosen }
-        val itemAbout = if (page == ALLOWED) R.string.info_lockdown_allowed_item else R.string.info_lockdown_essential_item
-        val rows = inList.map { it to row("app:" + it.appPackage, it.appLabel, itemAbout) }
-        show(Rows(listOf(SettingLabel(getString(title, inList.size + fixed.size))) +
-            fixed.map { row("fixed:" + it.appPackage, it.appLabel, R.string.info_lockdown_fixed_app) } + rows.map { it.second } +
-            listOfNotNull(if (fixed.isEmpty() && rows.isEmpty()) noneRow("none") else null)) { views ->
-            rows.firstOrNull()?.let { views.listHolding(it.second.key) }?.let { chosenList.attach(it, scrollView()) }
-            rows.forEach { (app, row) ->
-                val view = views[row.key] ?: return@forEach
-                chosenList.item(view, app.appPackage, label = app.appLabel, about = row.about,
-                    actions = listOf(HoldList.Action(getString(R.string.remove)) { removeChosen(setOf(app.appPackage)) }))
-            }
-        })
-        val matches = listed.filter { it.appPackage !in chosen && matchesQuery(it.appLabel) }
-        val addAbout = if (page == ALLOWED) R.string.info_lockdown_allow_app else R.string.info_lockdown_essential_app
-        show(Rows(listOf(SettingLabel(getString(R.string.add))) + matches.map { app -> row("add:" + app.appPackage, app.appLabel, addAbout) { addApp(app.appPackage) } }))
-    }
-
-    /** Allowing more loosens */
-    private fun addApp(pkg: String) = gate.loosen {
-        setChosen(chosen() + pkg)
-        render()
-    }
-
-    /** Allowing fewer is stricter */
-    private fun removeChosen(pkgs: Set<String>) {
-        setChosen(chosen() - pkgs)
         render()
     }
 

@@ -101,6 +101,8 @@ public struct PhoneState: Equatable {
     public var phoneTimedUntil: Ms = 0
     public var tvTimedUntil: Ms = 0
     public var matched = false
+    /// The phone allows only a list of its apps during lockdown, so its switches on apps don't apply
+    public var allowOnly = false
     public var sites: [String] = []
     public var macApps: [String] = []
     public var challenge = Challenge(type: .nothing)
@@ -160,6 +162,7 @@ public struct PhoneState: Equatable {
             }
             if let tv = o["tv"] as? [String: Any] { tvTimedUntil = ms(tv["timedUntil"]) }
             matched = o["matched"] as? Bool ?? false
+            allowOnly = o["allowOnly"] as? Bool ?? false
             macApps = strings(o["macApps"])
             challenge = Challenge.decode(o["challenge"] as? String) ?? Challenge(type: .nothing)
             phrase = o["phrase"] as? String ?? ""

@@ -78,9 +78,15 @@ class LockdownSetupFragment : LockdownBaseFragment() {
 
     private fun blocksStep() {
         val context = requireContext()
-        show(stepLabel(R.string.lockdown_blocks) + blocksRows())
+        show(stepLabel(R.string.lockdown_blocks) + Rows(appsRow()))
+        suggestions()
+        show(Rows(SettingLabel(getString(R.string.lockdown_settings_changes))) + blocksRows())
+    }
+
+    /** The usual time sinks that are on this phone, filled in when the phone blocks them */
+    private fun suggestions() {
+        val context = requireContext()
         if (prefs.lockdownAppMode == Lockdown.ALLOW) return
-        // The usual time sinks that are on this phone, filled in when blocked
         val all = apps ?: return
         val blocked = prefs.lockdownBlockedApps
         val suggested = all.filter { Lockdown.canBlock(context, it.appPackage) && (it.appPackage in Limits.APP_SITES || it.appPackage in blocked) }

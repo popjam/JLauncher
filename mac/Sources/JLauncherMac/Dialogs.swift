@@ -277,10 +277,16 @@ struct WaitView: View {
 
 /// The one list: each app and site, blocked on every device where it can be. Adding is done at once;
 /// taking anything off during lockdown needs what ending early needs.
+/// Apps and websites: every site on the list and every app on the Mac and the phone, each with a button
+/// for each device, filled where it's blocked. Blocking is done straight away; unblocking during lockdown
+/// needs the unlock, unless it was blocked since the window opened.
 struct ItemsView: View {
     @ObservedObject private var model = Model.shared
     @State private var search = ""
+    /// What was blocked when the window opened, which goes first; kept so rows don't move while they're changed
+    @State private var firstBlocked: Set<String>?
     private let macApps = InstalledApps.list()
+    private static var blockedHere = Set<String>()
 
     private struct Row: Identifiable {
         let id: String
@@ -288,44 +294,65 @@ struct ItemsView: View {
         let name: String
         let pkg: String?
         let bundle: String?
-        let blocked: Bool
+        let tvName: String?
+        let item: BlockItem?
         let icon: NSImage?
 
         func with(pkg: String? = nil, bundle: String? = nil, icon: NSImage? = nil) -> Row {
-            Row(id: id, kind: kind, name: name, pkg: self.pkg ?? pkg, bundle: self.bundle ?? bundle, blocked: blocked, icon: self.icon ?? icon)
+            Row(id: id, kind: kind, name: name, pkg: self.pkg ?? pkg, bundle: self.bundle ?? bundle, tvName: tvName, item: item, icon: self.icon ?? icon)
         }
+    }
+
+    private var allRows: [Row] {
+        var rows: [String: Row] = [:]
+        // What's blocked, and what was when the window opened, so a site turned off everywhere stays until it's closed
+        for item in model.items.values where item.blocked || (firstBlocked?.contains(item.id) ?? false) {
+            rows[item.id] = Row(id: item.id, kind: item.kind, name: item.name, pkg: item.pkg, bundle: item.bundle, tvName: item.tvName, item: item,
+                                icon: item.bundle.flatMap { b in macApps.first { $0.id == b }?.icon })
+        }
+        for app in macApps {
+            let id = BlockItem.id(.app, app.name)
+            rows[id] = rows[id]?.with(bundle: app.id, icon: app.icon)
+                ?? Row(id: id, kind: .app, name: app.name, pkg: nil, bundle: app.id, tvName: nil, item: model.items[id], icon: app.icon)
+        }
+        for (pkg, name) in model.phoneApps {
+            let id = BlockItem.id(.app, name)
+            rows[id] = rows[id]?.with(pkg: pkg) ?? Row(id: id, kind: .app, name: name, pkg: pkg, bundle: nil, tvName: nil, item: model.items[id], icon: nil)
+        }
+        return Array(rows.values)
     }
 
     private var rows: [Row] {
-        var rows: [String: Row] = [:]
-        for item in model.items.values where item.blocked || (!search.isEmpty && matchesSearch(item.name)) {
-            guard matchesSearch(item.name) else { continue }
-            rows[item.id] = Row(id: item.id, kind: item.kind, name: item.name, pkg: item.pkg, bundle: item.bundle, blocked: item.blocked,
-                                icon: item.bundle.flatMap { b in macApps.first { $0.id == b }?.icon })
-        }
-        guard !search.isEmpty else { return sorted(rows) }
-        // Apps not on the list yet, from the Mac and the phone, one per name
-        for app in macApps where matchesSearch(app.name) {
-            let id = BlockItem.id(.app, app.name)
-            rows[id] = rows[id]?.with(bundle: app.id, icon: app.icon)
-                ?? Row(id: id, kind: .app, name: app.name, pkg: nil, bundle: app.id, blocked: false, icon: app.icon)
-        }
-        for (pkg, name) in model.phoneApps where matchesSearch(name) {
-            let id = BlockItem.id(.app, name)
-            rows[id] = rows[id]?.with(pkg: pkg) ?? Row(id: id, kind: .app, name: name, pkg: pkg, bundle: nil, blocked: false, icon: nil)
-        }
-        return sorted(rows)
-    }
-
-    private func sorted(_ rows: [String: Row]) -> [Row] {
-        rows.values.sorted { a, b in
-            let ka = (a.blocked ? 0 : 1, a.kind == .site ? 0 : 1, a.name.lowercased())
-            let kb = (b.blocked ? 0 : 1, b.kind == .site ? 0 : 1, b.name.lowercased())
+        let first = firstBlocked ?? []
+        return allRows.filter { matchesSearch($0.name) && Model.Device.allCases.contains { d in can($0, d) } }.sorted { a, b in
+            let ka = (first.contains(a.id) ? 0 : 1, a.kind == .site ? 0 : 1, a.name.lowercased())
+            let kb = (first.contains(b.id) ? 0 : 1, b.kind == .site ? 0 : 1, b.name.lowercased())
             return ka < kb
         }
     }
 
     private func matchesSearch(_ name: String) -> Bool { search.isEmpty || name.localizedCaseInsensitiveContains(search) }
+
+    /// Whether it's blocked on a device now
+    private func on(_ row: Row, _ device: Model.Device) -> Bool {
+        let item = model.items[row.id]
+        switch device {
+        case .phone: return item?.phone ?? false
+        case .mac: return item?.mac ?? false
+        case .tv: return item?.tv ?? false
+        }
+    }
+
+    /// Whether it can be blocked on a device: sites on the phone and the Mac, apps where they are (the
+    /// phone's only while it blocks a list)
+    private func can(_ row: Row, _ device: Model.Device) -> Bool {
+        let site = row.kind == .site
+        switch device {
+        case .phone: return site || (row.pkg != nil && !(model.state.allowOnly))
+        case .mac: return site || row.bundle != nil
+        case .tv: return !site && row.tvName != nil
+        }
+    }
 
     var body: some View {
         Card {
@@ -339,7 +366,10 @@ struct ItemsView: View {
                             else { Image(systemName: row.kind == .site ? "globe" : "iphone").frame(width: 20, height: 20).foregroundStyle(Style.faint) }
                             Text(row.name).font(.system(size: 15)).foregroundStyle(.white).lineLimit(1)
                             Spacer()
-                            BlockPill(on: row.blocked) { toggle(row) }
+                            ForEach(Model.Device.allCases, id: \.self) { device in
+                                if can(row, device) { DevicePill(label: device.rawValue, on: on(row, device)) { toggle(row, device) } }
+                                else { Color.clear.frame(width: 58, height: 24) }
+                            }
                         }
                         .padding(.vertical, 7)
                         Divider().overlay(Color.white.opacity(0.12))
@@ -349,25 +379,32 @@ struct ItemsView: View {
             .frame(height: 380)
             BoxButton(title: "Close") { Dialog.close() }.padding(.top, 14)
         }
-        .onAppear { model.loadPhoneApps() }
+        .onAppear {
+            model.loadPhoneApps()
+            if firstBlocked == nil { firstBlocked = Set(model.items.values.filter(\.blocked).map(\.id)) }
+        }
     }
 
-    private func toggle(_ row: Row) {
-        let on = row.blocked
-        let change = { Model.shared.block(kind: row.kind, name: row.name, on: !on, pkg: row.pkg, bundle: row.bundle) }
-        // Taking something off during lockdown loosens it; not at all while a timer runs on any device
-        if on && (Model.shared.status.on || Model.shared.phone?.phoneOn == true) {
+    private func toggle(_ row: Row, _ device: Model.Device) {
+        let blocking = !on(row, device)
+        let key = row.id + ":" + device.rawValue
+        let change = {
+            Model.shared.block(kind: row.kind, name: row.name, on: blocking, device: device, pkg: row.pkg, bundle: row.bundle, tvName: row.tvName)
+            if blocking { Self.blockedHere.insert(key) } else { Self.blockedHere.remove(key) }
+        }
+        // Unblocking during lockdown loosens it; not at all while a timer runs on any device
+        if !blocking && !Self.blockedHere.contains(key) && (Model.shared.status.on || Model.shared.phone?.phoneOn == true) {
             if let until = Lockdown.lockedUntil(Model.shared.state, now: Date().ms) {
                 return Dialog.show {
                     Card {
                         Title(text: "Locked until \(Format.time(until))")
-                        BoxButton(title: "OK") { Dialog.show(width: 460) { ItemsView() } }
+                        BoxButton(title: "OK") { Dialog.show(width: 520) { ItemsView() } }
                     }
                 }
             }
-            Unlocking.run(title: "Unblock \(row.name)?", action: "Unblock") {
+            Unlocking.run(title: "Unblock \(row.name) on the \(device.rawValue)?", action: "Unblock") {
                 change()
-                Dialog.show(width: 460) { ItemsView() }
+                Dialog.show(width: 520) { ItemsView() }
             }
         } else { change() }
     }
@@ -375,22 +412,25 @@ struct ItemsView: View {
     private func addSite() {
         guard let host = Sites.host(search) else { return }
         model.block(kind: .site, name: host, on: true)
+        for device in Model.Device.allCases { Self.blockedHere.insert(BlockItem.id(.site, host) + ":" + device.rawValue) }
         search = ""
     }
 }
 
-/// An item's switch: "Blocked", filled, while it's blocked; "Block" otherwise.
-struct BlockPill: View {
+/// A device's button on an item: filled while it's blocked there, outlined otherwise.
+struct DevicePill: View {
+    let label: String
     let on: Bool
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Text(on ? "Blocked" : "Block").font(.system(size: 12.5)).foregroundStyle(on ? Color.black : .white.opacity(0.8))
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(Capsule().fill(on ? Color(red: 0x8F / 255, green: 0xB3 / 255, blue: 1) : Color.clear))
+            Text(label).font(.system(size: 12.5)).foregroundStyle(on ? Color.black : .white.opacity(0.8))
+                .frame(width: 58, height: 24)
+                .background(Capsule().fill(on ? Style.accent : Color.clear))
                 .overlay(Capsule().strokeBorder(on ? Color.clear : Color.white.opacity(0.4), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label + (on ? ", blocked" : ""))
     }
 }
 

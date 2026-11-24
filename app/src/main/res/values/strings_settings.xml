@@ -59,13 +59,6 @@
     <string name="info_lockdown_add_break_off">Adds a time when breaks can\'t be taken.</string>
     <string name="info_challenge_phrase">The phrase typed out to unlock. A shorter phrase loosens lockdown, so it needs the unlock.</string>
     <string name="info_lockdown_permissions">What lockdown needs allowed to work: accessibility, usage access and notifications.</string>
-    <string name="info_lockdown_blocked_item">Blocked during lockdown on the devices shown. Tap or hold it to remove it.</string>
-    <string name="info_lockdown_block_app">Tap to block this app during lockdown.</string>
-    <string name="info_lockdown_allowed_item">Allowed during lockdown. Tap or hold it to take it off the list.</string>
-    <string name="info_lockdown_essential_item">Always allowed, whatever the list. Tap or hold it to take it off.</string>
-    <string name="info_lockdown_fixed_app">This app can\'t be blocked, so it\'s always allowed.</string>
-    <string name="info_lockdown_allow_app">Tap to allow this app during lockdown. Allowing more loosens lockdown, so it needs the unlock.</string>
-    <string name="info_lockdown_essential_app">Tap to always allow this app. Allowing more loosens lockdown, so it needs the unlock.</string>
     <string name="info_limits_today">Today\'s screen time across the apps, and how many are at their limit.</string>
     <string name="info_lockdown_limit_item">An app with limits. Tap it to change them, or hold it to remove them.</string>
     <string name="info_lockdown_limit_app">Tap to set limits for this app.</string>

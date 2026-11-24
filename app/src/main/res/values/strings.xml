@@ -1235,7 +1235,6 @@
     <string name="lockdown_no_places">No places</string>
     <string name="lockdown_block_these">Block these</string>
     <string name="lockdown_only_allow">Only allow these</string>
-    <string name="lockdown_allowed_apps">Allowed apps</string>
     <string name="lockdown_lock_system">System settings</string>
     <string name="lockdown_needs_setup">Needs setup</string>
     <string name="lockdown_copy">Copy</string>
@@ -1270,7 +1269,6 @@
     <string name="lockdown_n_off">%1$d off</string>
     <string name="info_usage_access">Lets Limits and Lock after see how long apps are used.</string>
     <string name="lockdown_blocked_count_title">Blocked · %1$d</string>
-    <string name="lockdown_allowed_count_title">Allowed · %1$d</string>
     <string name="lockdown_with_limits">With limits</string>
     <string name="lockdown_before_opening">Before opening</string>
     <string name="lockdown_daily_time">Daily time</string>
@@ -1302,8 +1300,7 @@
     <string name="lockdown_stat_caption">blocked today · %1$d a day this week</string>
     <!-- Held to explain -->
     <string name="info_lockdown_places">Turns lockdown on while you\'re at a chosen place, from Places.</string>
-    <string name="info_lockdown_during">Blocks the listed apps during lockdown, or allows only the listed apps and blocks the rest.</string>
-    <string name="info_allowed_apps">The apps that work during lockdown when it\'s set to Only allow these.</string>
+    <string name="info_lockdown_during">Block list: the phone blocks the apps lit for it. Allow list: it blocks every app but the ones turned off, and new apps start blocked.</string>
     <string name="info_app_limits">Each app\'s daily time and opens per day, which can differ by day of the week, plus Pause and Use for a set time.</string>
     <string name="info_lock_app_list">Hides the app list during lockdown.</string>
     <string name="info_lock_app_changes">Locks App info and Uninstall when holding an app on Home or in the app list. Swapping a Home app still works.</string>

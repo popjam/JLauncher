@@ -36,7 +36,8 @@ import java.util.Locale
 /**
  * Lockdown's rows, for its pages ([LockdownFragment], [LockdownPageFragment]), its setup, and
  * Settings' search, which finds them too: the status and its actions, then a page of rows for each
- * of its sections ([SECTIONS]: Blocks, Turns on, Screen time, Breaks, Unlock, On screen, Devices).
+ * of its sections ([SECTIONS]: Settings changes, Turns on, Screen time, Breaks, Unlock, On screen,
+ * Devices). The apps and websites are a page of their own ([LockdownPageFragment]).
  *
  * Anything that makes lockdown stricter is done straight away; anything that loosens it goes through
  * the unlock ([LockdownGate.loosen]) while lockdown is on. Things added since the page opened can be
@@ -97,7 +98,7 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
     }
 
     internal fun sectionTitle(section: String) = getString(when (section) {
-        BLOCKS -> R.string.lockdown_blocks
+        BLOCKS -> R.string.lockdown_settings_changes
         TURNS_ON -> R.string.lockdown_turns_on
         SCREEN_TIME -> R.string.lockdown_screen_time
         BREAKS -> R.string.lockdown_breaks
@@ -107,7 +108,7 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
     })
 
     private fun sectionAbout(section: String) = when (section) {
-        BLOCKS -> R.string.info_lockdown_blocks_section
+        BLOCKS -> R.string.info_lockdown_settings_changes
         TURNS_ON -> R.string.info_lockdown_turns_on
         SCREEN_TIME -> R.string.info_lockdown_screen_time_section
         BREAKS -> R.string.info_lockdown_breaks
@@ -131,7 +132,7 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
     private fun sectionValue(section: String): String? {
         val context = requireContext()
         return when (section) {
-            BLOCKS -> modeName() + " · " + blockedValue(BlockItems.effective(prefs.lockdownItems, LockdownSync.macInstalled(context), LockdownSync.tvInstalled(context)))
+            BLOCKS -> Lockdown.Lock.values().let { locks -> getString(R.string.n_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size) }
             TURNS_ON -> turnsOnValue()
             SCREEN_TIME -> Limits.appsWithRules(context, prefs).let { if (it == 0) null else resources.getQuantityString(R.plurals.lockdown_apps_count, it, it) }
             BREAKS -> breaksValue()
@@ -149,7 +150,7 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
     /** The Lockdown page: its status and what can be done now, its sections, then setup and stats */
     internal fun lockdownRows(): Rows {
         val context = requireContext()
-        return Rows(statusRows() + listOf(SettingLabel(getString(R.string.lockdown_rules))) +
+        return Rows(statusRows() + listOf(SettingLabel(getString(R.string.lockdown_rules)), appsRow()) +
             SECTIONS.map { section ->
                 row("section.$section", sectionTitle(section), sectionAbout(section), value = sectionValue(section), control = Control.Opens) { openSection(section) }
             } + listOf(
@@ -272,43 +273,43 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
      * Apps and websites, then on the phone: blocking a list or allowing only one (with the allowed and
      * always allowed apps), the settings changes locked, and accessibility when it's needed and off
      */
-    internal fun blocksRows(): Rows {
+    /** Apps and websites: what each device blocks, opening the page of them */
+    internal fun appsRow(): SettingRow {
         val context = requireContext()
         val items = BlockItems.effective(prefs.lockdownItems, LockdownSync.macInstalled(context), LockdownSync.tvInstalled(context))
         val allow = prefs.lockdownAppMode == Lockdown.ALLOW
-        val locks = Lockdown.Lock.values()
+        return row("appsAndSites", getString(R.string.lockdown_apps_and_sites), R.string.info_lockdown_blocks, value = blockedValue(items),
+            control = Control.Opens, note = getString(R.string.lockdown_nothing_blocked).takeIf { !allow && items.values.none { it.shown } }) {
+            open(LockdownPageFragment.BLOCKS)
+        }
+    }
+
+    /** Settings changes: what lockdown locks besides apps and websites */
+    internal fun blocksRows(): Rows {
+        val context = requireContext()
+        val items = BlockItems.effective(prefs.lockdownItems, LockdownSync.macInstalled(context), LockdownSync.tvInstalled(context))
         val limits = Limits.appsWithRules(context, prefs)
-        val needsService = items.values.any { it.phone } || prefs.lockdownProtect || prefs.lockdownSystemSettings || limits > 0 || allow
-        return Rows(listOf(
-            row("appsAndSites", getString(R.string.lockdown_apps_and_sites), R.string.info_lockdown_blocks, value = blockedValue(items),
-                control = Control.Opens, note = getString(R.string.lockdown_nothing_blocked).takeIf { !allow && items.values.none { it.shown } }) {
-                open(LockdownPageFragment.BLOCKS)
-            },
-            segment("mode", getString(R.string.lockdown_during_phone), R.string.info_lockdown_during,
-                listOf(getString(R.string.lockdown_block_short), getString(R.string.lockdown_allow_short)), prefs.lockdownAppMode) { pickMode(it) },
-            row("allowed", getString(R.string.lockdown_allowed_apps), R.string.info_allowed_apps, level = 1, enabled = allow, control = Control.Opens,
-                value = prefs.lockdownAllowedApps.count { context.isPackageInstalled(it) }.toString()) { open(LockdownPageFragment.ALLOWED) },
-            row("essentials", getString(R.string.lockdown_always_allowed), R.string.info_lockdown_always_allowed, level = 1, enabled = allow, control = Control.Opens,
-                value = (prefs.lockdownEssentials.count { context.isPackageInstalled(it) } + 1).toString()) { open(LockdownPageFragment.ESSENTIALS) },
-            row("settingsChanges", getString(R.string.lockdown_settings_changes), R.string.info_lockdown_settings_changes,
-                value = getString(R.string.n_of, locks.count { Lockdown.enabled(prefs, it) }, locks.size)),
-        ) + locks.map { lockRow(it) } + listOf(
+        val needsService = items.values.any { it.phone } || prefs.lockdownProtect || prefs.lockdownSystemSettings || limits > 0 ||
+            prefs.lockdownAppMode == Lockdown.ALLOW
+        return Rows(Lockdown.Lock.values().map { lockRow(it) } + listOf(
             // Only when it's needed and off, since nothing outside the launcher is blocked without it
             if (needsService && !isAccessServiceEnabled(context)) row("accessibility", getString(R.string.accessibility), R.string.info_lockdown_accessibility,
                 value = onOff(false)) { runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } } else null,
         ))
     }
 
-    /** How many apps and sites each switched-on device blocks: "12", or "Phone 12 · Mac 5 · TV 2" */
+    /** How many apps and sites each switched-on device blocks: "12", or "Phone 12 · Mac 5 · TV 2"; with the allowlist, "All but 4" on the phone */
     private fun blockedValue(items: Map<String, BlockItems.Item>): String {
         val context = requireContext()
         fun count(device: Lockdown.Device) = when (device) {
-            Lockdown.Device.PHONE -> BlockItems.phoneApps(items).count { context.isPackageInstalled(it) } + BlockItems.phoneSites(items).size
-            Lockdown.Device.MAC -> BlockItems.macApps(items).size + BlockItems.macSites(items).size
-            Lockdown.Device.TV -> BlockItems.tvApps(items).size
+            Lockdown.Device.PHONE -> if (prefs.lockdownAppMode == Lockdown.ALLOW)
+                getString(R.string.lockdown_all_but, (prefs.lockdownAllowedApps + prefs.lockdownEssentials).count { context.isPackageInstalled(it) })
+                else (BlockItems.phoneApps(items).count { context.isPackageInstalled(it) } + BlockItems.phoneSites(items).size).toString()
+            Lockdown.Device.MAC -> (BlockItems.macApps(items).size + BlockItems.macSites(items).size).toString()
+            Lockdown.Device.TV -> BlockItems.tvApps(items).size.toString()
         }
         return if (Lockdown.several(context)) Lockdown.deviceList(context).joinToString(" · ") { LockdownGate.deviceName(context, it.bit) + " " + count(it) }
-            else count(Lockdown.Device.PHONE).toString()
+            else count(Lockdown.Device.PHONE)
     }
 
     internal fun modeName() = getString(if (prefs.lockdownAppMode == Lockdown.ALLOW) R.string.lockdown_only_allow else R.string.lockdown_block_these)
@@ -317,7 +318,7 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
      * Blocking a list, or allowing only a list. Leaving the allowlist loosens; going to it is stricter
      * unless it allows an app that's blocked now.
      */
-    private fun pickMode(which: Int) {
+    internal fun pickMode(which: Int) {
         if (which == prefs.lockdownAppMode) return
         val change = { prefs.lockdownAppMode = which; addedHere.clear(); render() }
         val unblocks = (prefs.lockdownAllowedApps + prefs.lockdownEssentials).any { it in prefs.lockdownBlockedApps }

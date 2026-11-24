@@ -236,14 +236,15 @@ object LockdownSync {
         Lockdown.trackRun(context, prefs)
         val macOn = deviceOn(context, Lockdown.Device.MAC)
         val tvOn = deviceOn(context, Lockdown.Device.TV)
-        // One list: each device blocks what it can
-        val items = BlockItems.effective(prefs.lockdownItems, macInstalled(context), tvInstalled(context))
+        // Each device blocks the items switched on for it that it can
+        val stored = prefs.lockdownItems
+        val items = BlockItems.effective(stored, macInstalled(context), tvInstalled(context))
         val shared = Lockdown.sharedPlan(context, prefs)
         val macPlan = Lockdown.planFor(shared, macOn)
         val tvPlan = Lockdown.planFor(shared, tvOn)
-        // Phone apps blocked here take their sites to the Mac too
-        val phoneAppSites = if (prefs.lockdownAppMode == Lockdown.BLOCK) Lockdown.sitesOf(BlockItems.phoneApps(items)) else emptySet()
-        val sites = (BlockItems.macSites(items) + phoneAppSites).sorted()
+        // Phone apps switched on for the Mac take their sites there (Instagram's instagram.com)
+        val appSites = Lockdown.sitesOf(stored.values.filter { it.kind == BlockItems.Kind.APP && it.mac }.mapNotNull { it.pkg })
+        val sites = (BlockItems.macSites(items) + appSites).sorted()
         val phoneOn = shared.on(time)
         val challenge = Lockdown.challenge(prefs)
         val breakUntil = Lockdown.breakUntil(prefs)
@@ -266,8 +267,10 @@ object LockdownSync {
                 // When the timed lockdown ends, or 0: while it runs, nothing is unblocked one at a time
                 .put("timedUntil", Lockdown.timedEnd(context, prefs) ?: 0L)
                 .put("breakUntil", breakUntil))
-            // Always: every device blocks everything on the list it can
+            // Always, for a Mac app from before: the list's items are read from "items"
             .put("matched", true)
+            // The phone allows only a list of its apps, so its switches on apps don't apply
+            .put("allowOnly", prefs.lockdownAppMode == Lockdown.ALLOW)
             // The TV's lockdown, worked out here like the Mac's; "blocking" is now, for a TV tool from before
             .put("tv", tvJson
                 .put("blocking", tvActive && breakUntil <= now)
@@ -428,7 +431,7 @@ object LockdownSync {
             val names = macInstalled(context)
             for (i in 0 until apps.length()) {
                 val bundle = apps.optString(i).ifEmpty { null } ?: continue
-                if (local.values.none { it.bundle == bundle }) local = BlockItems.block(local, BlockItems.Kind.APP, names[bundle] ?: bundle, true, now = 1, bundle = bundle)
+                if (local.values.none { it.bundle == bundle }) local = BlockItems.set(local, BlockItems.Kind.APP, names[bundle] ?: bundle, phone = null, mac = true, now = 1, bundle = bundle)
             }
         }
         val merged = BlockItems.mergeAll(local, remote)

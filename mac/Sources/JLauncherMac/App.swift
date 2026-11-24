@@ -136,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         let count = model.items.values.filter(\.blocked).count
-        menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count)…") { Dialog.show(width: 460) { ItemsView() } })
+        menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count)…") { Dialog.show(width: 520) { ItemsView() } })
         menu.addItem(RulesMenu.item())
         if !Blocker.accessibilityOn {
             menu.addItem(action("Allow Accessibility (needed for websites)…") { Blocker.askForAccessibility() })

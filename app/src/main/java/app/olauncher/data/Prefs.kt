@@ -97,6 +97,7 @@ class Prefs(context: Context) {
     private val LOCKDOWN_ESSENTIALS = "LOCKDOWN_ESSENTIALS"
     private val LOCKDOWN_SITES = "LOCKDOWN_SITES"
     private val LOCKDOWN_ITEMS = "LOCKDOWN_ITEMS"
+    private val LOCKDOWN_ITEMS_PER_DEVICE = "LOCKDOWN_ITEMS_PER_DEVICE"
     private val LOCKDOWN_PLACES = "LOCKDOWN_PLACES"
     private val LOCKDOWN_GRAYSCALE = "LOCKDOWN_GRAYSCALE"
     private val LOCKDOWN_GRAYSCALE_APPLIED = "LOCKDOWN_GRAYSCALE_APPLIED"
@@ -408,7 +409,7 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(LOCKDOWN_PROTECT, false)
         set(value) = prefs.edit { putBoolean(LOCKDOWN_PROTECT, value) }
 
-    /** Apps that can't be opened while lockdown is on. Copies, since the set SharedPreferences returns mustn't be changed. */
+    /** The phone's apps that can't be opened while lockdown is on: their phone switches in [lockdownItems] */
     var lockdownBlockedApps: Set<String>
         get() = BlockItems.phoneApps(BlockItems.matched(lockdownItems))
         set(value) {
@@ -418,11 +419,11 @@ class Prefs(context: Context) {
             (value - old).forEach { pkg ->
                 // An item already known by this package keeps its name
                 val known = items.values.firstOrNull { it.kind == BlockItems.Kind.APP && it.pkg == pkg }
-                items = BlockItems.block(items, BlockItems.Kind.APP, known?.name ?: appName(pkg), true, now, pkg = pkg)
+                items = BlockItems.set(items, BlockItems.Kind.APP, known?.name ?: appName(pkg), phone = true, mac = null, now = now, pkg = pkg)
             }
             (old - value).forEach { pkg ->
                 items.values.filter { it.kind == BlockItems.Kind.APP && it.pkg == pkg }.forEach {
-                    items = BlockItems.block(items, it.kind, it.name, false, now)
+                    items = BlockItems.set(items, it.kind, it.name, phone = false, mac = null, now = now)
                 }
             }
             lockdownItems = items
@@ -437,23 +438,27 @@ class Prefs(context: Context) {
     }.getOrDefault(pkg)
 
     /**
-     * Apps and sites lockdown blocks ([BlockItems]): each on every switched-on device that can block it.
-     * The first time, it's made from the lists kept before.
+     * Apps and sites lockdown blocks ([BlockItems]), each with a switch for every device. The first time,
+     * it's made from the lists kept before; a list from before each device had its own switch is set to
+     * block as it did then ([BlockItems.perDevice]).
      */
     var lockdownItems: Map<String, BlockItems.Item>
         get() {
-            if (!prefs.contains(LOCKDOWN_ITEMS)) {
-                var items = emptyMap<String, BlockItems.Item>()
+            var items = if (!prefs.contains(LOCKDOWN_ITEMS)) {
+                var made = emptyMap<String, BlockItems.Item>()
                 prefs.getStringSet(LOCKDOWN_BLOCKED_APPS, emptySet())!!.forEach { pkg ->
-                    items = BlockItems.set(items, BlockItems.Kind.APP, appName(pkg), phone = true, mac = null, now = 1, pkg = pkg)
+                    made = BlockItems.set(made, BlockItems.Kind.APP, appName(pkg), phone = true, mac = null, now = 1, pkg = pkg)
                 }
                 prefs.getStringSet(LOCKDOWN_SITES, emptySet())!!.forEach { site ->
-                    items = BlockItems.set(items, BlockItems.Kind.SITE, site, phone = true, mac = true, now = 1)
+                    made = BlockItems.set(made, BlockItems.Kind.SITE, site, phone = true, mac = true, now = 1)
                 }
-                prefs.edit { putString(LOCKDOWN_ITEMS, BlockItems.encode(items)) }
-                return items
-            }
-            return BlockItems.decode(prefs.getString(LOCKDOWN_ITEMS, null))
+                made
+            } else BlockItems.decode(prefs.getString(LOCKDOWN_ITEMS, null))
+            if (!prefs.getBoolean(LOCKDOWN_ITEMS_PER_DEVICE, false)) {
+                items = BlockItems.perDevice(items, System.currentTimeMillis())
+                prefs.edit { putString(LOCKDOWN_ITEMS, BlockItems.encode(items)).putBoolean(LOCKDOWN_ITEMS_PER_DEVICE, true) }
+            } else if (!prefs.contains(LOCKDOWN_ITEMS)) prefs.edit { putString(LOCKDOWN_ITEMS, BlockItems.encode(items)) }
+            return items
         }
         set(value) = prefs.edit { putString(LOCKDOWN_ITEMS, BlockItems.encode(value)) }
 

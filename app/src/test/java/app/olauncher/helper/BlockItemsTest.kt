@@ -42,38 +42,43 @@ class BlockItemsTest {
         assertTrue(item.tv && item.phone)
         assertEquals(setOf("YouTube"), BlockItems.tvApps(mapOf(item.id to item)))
         assertEquals(tv, BlockItems.decode(BlockItems.encode(tv)))
-        // Matched, it's blocked on the TV too
-        val matched = BlockItems.matched(BlockItems.set(emptyMap(), Kind.APP, "Netflix", phone = true, mac = null, now = 1, tvName = "Netflix"))
-        assertEquals(setOf("Netflix"), BlockItems.tvApps(matched))
+        // Switched on for the phone only, it isn't blocked on the TV
+        val phoneOnly = BlockItems.matched(BlockItems.set(emptyMap(), Kind.APP, "Netflix", phone = true, mac = null, now = 1, tvName = "Netflix"))
+        assertEquals(emptySet<String>(), BlockItems.tvApps(phoneOnly))
     }
 
     @Test
-    fun matchingBlocksOnBothWhereItCan() {
+    fun eachDeviceBlocksWhatsSwitchedOnForItWhereItCan() {
         var items = BlockItems.set(emptyMap(), Kind.SITE, "youtube.com", phone = false, mac = true, now = 1)
         items = BlockItems.set(items, Kind.APP, "Instagram", phone = true, mac = null, now = 1, pkg = "com.instagram.android")
+        items = BlockItems.set(items, Kind.APP, "Slack", phone = null, mac = true, now = 1, bundle = "com.tinyspeck.slackmacgap", tv = true)
         val matched = BlockItems.matched(items)
-        assertEquals(setOf("youtube.com"), BlockItems.phoneSites(matched))
-        // Instagram isn't on the Mac
-        assertEquals(emptySet<String>(), BlockItems.macApps(matched))
-        assertFalse(matched.values.first { it.kind == Kind.APP }.mac)
+        assertEquals(emptySet<String>(), BlockItems.phoneSites(matched))
+        assertEquals(setOf("youtube.com"), BlockItems.macSites(matched))
+        assertEquals(setOf("com.instagram.android"), BlockItems.phoneApps(matched))
+        assertEquals(setOf("com.tinyspeck.slackmacgap"), BlockItems.macApps(matched))
+        // Slack isn't on the TV, so its TV switch blocks nothing
+        assertEquals(emptySet<String>(), BlockItems.tvApps(matched))
+        assertTrue(items.values.all { it.shown })
     }
 
     @Test
-    fun oneListBlocksEachItemOnEveryDeviceThatCanBlockIt() {
-        // Blocked on one device only, from before there was one list
+    fun aListFromBeforeBlocksAsItDidThen() {
+        // Before, an item was blocked on every device as its latest change left it
         var old = BlockItems.set(emptyMap(), Kind.SITE, "reddit.com", phone = false, mac = true, now = 1)
         old = BlockItems.set(old, Kind.APP, "YouTube", phone = true, mac = null, now = 1, pkg = "com.google.android.youtube", tvName = "YouTube")
-        old = BlockItems.set(old, Kind.APP, "Slack", phone = null, mac = true, now = 1, bundle = "com.tinyspeck.slackmacgap")
-        val each = BlockItems.matched(old)
-        // Sites on the phone and the Mac; apps wherever they are; the TV has apps only
-        assertEquals(setOf("reddit.com"), BlockItems.phoneSites(each))
-        assertEquals(setOf("reddit.com"), BlockItems.macSites(each))
-        assertEquals(setOf("com.google.android.youtube"), BlockItems.phoneApps(each))
-        assertEquals(setOf("YouTube"), BlockItems.tvApps(each))
-        assertEquals(setOf("com.tinyspeck.slackmacgap"), BlockItems.macApps(each))
-        assertFalse(each.getValue(BlockItems.idFor(Kind.SITE, "reddit.com")).tv)
-        // Nothing stored is lost or changed
-        assertEquals(old, BlockItems.decode(BlockItems.encode(old)))
+        old = BlockItems.block(old, Kind.APP, "Discord", true, now = 5, pkg = "com.discord")
+        old = BlockItems.set(old, Kind.APP, "Discord", phone = null, mac = false, now = 6)
+        val each = BlockItems.perDevice(old, now = 100)
+        val reddit = each.getValue(BlockItems.idFor(Kind.SITE, "reddit.com"))
+        assertTrue(reddit.phone && reddit.mac && reddit.tv)
+        assertEquals(100L, reddit.phoneAt)
+        assertEquals(1L, reddit.macAt)
+        val youtube = each.getValue(BlockItems.idFor(Kind.APP, "YouTube"))
+        assertTrue(youtube.phone && youtube.mac && youtube.tv)
+        // The Mac's later change turned Discord off
+        assertFalse(each.getValue(BlockItems.idFor(Kind.APP, "Discord")).shown)
+        assertEquals(each, BlockItems.perDevice(each, now = 200))
     }
 
     @Test
@@ -116,24 +121,13 @@ class BlockItemsTest {
     }
 
     @Test
-    fun theMacUnblockingAnItemUnblocksItEverywhere() {
-        // Blocked on the phone (every switch at 10), then the Mac turns its own and the phone's off at 20
+    fun oneDeviceCanBeUnblockedAlone() {
         val added = BlockItems.block(emptyMap(), Kind.APP, "YouTube", true, now = 10, pkg = "com.google.android.youtube", tvName = "YouTube")
-        val mac = BlockItems.set(added, Kind.APP, "YouTube", phone = false, mac = false, now = 20)
-        val merged = BlockItems.mergeAll(added, mac)
-        val item = merged.values.single()
-        // The TV's switch is still on from the older change, but the latest change says off
-        assertTrue(item.tv)
-        assertFalse(BlockItems.blocked(item))
-        assertFalse(item.shown)
+        val tvOff = BlockItems.set(added, Kind.APP, "YouTube", phone = null, mac = null, now = 20, tv = false)
+        val merged = BlockItems.mergeAll(added, tvOff)
         val matched = BlockItems.matched(merged)
-        assertEquals(emptySet<String>(), BlockItems.phoneApps(matched))
+        assertEquals(setOf("com.google.android.youtube"), BlockItems.phoneApps(matched))
         assertEquals(emptySet<String>(), BlockItems.tvApps(matched))
-        // Blocking it again later blocks it everywhere
-        val again = BlockItems.block(merged, Kind.APP, "YouTube", true, now = 30)
-        assertTrue(BlockItems.blocked(again.values.single()))
-        // The Mac turning only its own switch on still blocks it everywhere
-        val macOn = BlockItems.set(mac, Kind.APP, "YouTube", phone = null, mac = true, now = 40)
-        assertEquals(setOf("YouTube"), BlockItems.tvApps(BlockItems.matched(macOn)))
+        assertTrue(merged.values.single().shown)
     }
 }

@@ -135,8 +135,8 @@ public enum Breaks {
     }
 }
 
-/// An app or site lockdown blocks (BlockItems.kt). It keeps a switch for each device, but it's one
-/// list: an item is blocked as its most recent change left it, on every device where it can be.
+/// An app or site lockdown blocks (BlockItems.kt), with a switch for each device: each device blocks the
+/// items switched on for it, where it can.
 public struct BlockItem: Equatable {
     public enum Kind: String { case app, site }
     public var kind: Kind
@@ -158,13 +158,11 @@ public struct BlockItem: Equatable {
 
     public var id: String { Self.id(kind, name) }
     public var shown: Bool { blocked }
-    /// Blocked as its most recent change left it: switches changed at the same time count if any is on
-    public var blocked: Bool {
-        let latest = max(phoneAt, macAt, tvAt)
-        return (phone && phoneAt == latest) || (mac && macAt == latest) || (tv && tvAt == latest)
-    }
+    /// Blocked on any device
+    public var blocked: Bool { phone || mac || tv }
     public var onPhone: Bool { kind == .site || pkg != nil }
     public var onMac: Bool { kind == .site || bundle != nil }
+    public var onTv: Bool { kind == .app && tvName != nil }
 
     /// Java's String.hashCode, as the phone uses, unsigned
     public static func javaHash(_ s: String) -> UInt32 {
@@ -234,16 +232,18 @@ public enum BlockItems {
         return out
     }
 
-    /// `items` with `name` switched on or off for the phone and/or Mac at `now`.
+    /// `items` with `name` switched on or off for the phone, the Mac and/or the TV at `now`.
     public static func set(_ items: [String: BlockItem], kind: BlockItem.Kind, name: String, phone: Bool?, mac: Bool?, now: Ms,
-                           pkg: String? = nil, bundle: String? = nil) -> [String: BlockItem] {
+                           pkg: String? = nil, bundle: String? = nil, tv: Bool? = nil, tvName: String? = nil) -> [String: BlockItem] {
         let id = BlockItem.id(kind, name)
         let old = items[id] ?? BlockItem(kind: kind, name: name)
         var item = old
         item.pkg = old.pkg ?? pkg
         item.bundle = old.bundle ?? bundle
+        item.tvName = old.tvName ?? tvName
         if let phone, phone != old.phone { item.phone = phone; item.phoneAt = now }
         if let mac, mac != old.mac { item.mac = mac; item.macAt = now }
+        if let tv, tv != old.tv { item.tv = tv; item.tvAt = now }
         var out = items
         out[id] = item
         return out
@@ -258,13 +258,13 @@ public enum BlockItems {
         return out
     }
 
-    /// What each device blocks: anything blocked is blocked on every device where it can be.
+    /// What each device blocks: each item's own switch for it, where the device can block it.
     public static func matched(_ items: [String: BlockItem]) -> [String: BlockItem] {
         items.mapValues { it in
             var it = it
-            let on = it.blocked
-            it.phone = on && it.onPhone
-            it.mac = on && it.onMac
+            it.phone = it.phone && it.onPhone
+            it.mac = it.mac && it.onMac
+            it.tv = it.tv && it.onTv
             return it
         }
     }

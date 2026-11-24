@@ -72,7 +72,16 @@ internal sealed class Control {
 
     /** Four or five choices: the [selected] one in the accent, a tap moves to the next */
     class Cycle(val options: List<String>, val selected: Int, val onPick: (Int) -> Unit) : Control()
+
+    /**
+     * A button for each device, each tapped on its own and filled while it's on; a null leaves its
+     * place empty, so the buttons line up down a list
+     */
+    class Devices(val buttons: List<DeviceButton?>) : Control()
 }
+
+/** One of [Control.Devices]' buttons */
+internal class DeviceButton(val label: String, val on: Boolean, val onTap: () -> Unit)
 
 /** What [settingsList] made: the list, and each row's view by its key */
 internal class RenderedList(val view: LinearLayout, val rows: Map<String, View>)
@@ -201,6 +210,9 @@ internal fun CardPageFragment.settingRowView(row: SettingRow): LinearLayout {
             control is Control.Segment -> addView(segment(control, active).apply { alpha = dim },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = 12.dpToPx() })
             control is Control.Cycle -> addView(valueText(control.options.getOrElse(control.selected) { "" }, accent))
+            control is Control.Devices -> control.buttons.forEach { button ->
+                addView(deviceButton(button, active), LinearLayout.LayoutParams(58.dpToPx(), 32.dpToPx()).apply { marginStart = 6.dpToPx() })
+            }
             else -> {
                 if (value != null) addView(valueText(value, row.valueColor ?: if (row.danger) Style.DANGER else faint(if (row.faded) 150 else 215)))
                 if (control is Control.Opens) addView(TextView(context, null, 0, R.style.TextSmall).apply {
@@ -262,6 +274,27 @@ private fun CardPageFragment.segment(control: Control.Segment, active: Boolean):
                 if (active) setOnClickListener { if (!selected) control.onPick(i) }
             })
         }
+    }
+}
+
+/** A device's button: filled with the accent while on, outlined while off; none keeps the place empty */
+private fun CardPageFragment.deviceButton(button: DeviceButton?, active: Boolean): View {
+    val context = requireContext()
+    if (button == null) return View(context)
+    val accent = Style.accent(darkPage)
+    return TextView(context, null, 0, R.style.TextSmall).apply {
+        text = button.label
+        textSize = Style.TEXT_SMALL
+        maxLines = 1
+        gravity = Gravity.CENTER
+        setTextColor(if (button.on) Style.inkOn(darkPage) else faint(190))
+        if (button.on) typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        background = GradientDrawable().apply {
+            cornerRadius = Style.radiusSmall
+            if (button.on) setColor(accent) else setStroke(1.dpToPx(), faint(80))
+        }
+        contentDescription = button.label + if (button.on) ", " + getString(R.string.on) else ", " + getString(R.string.off)
+        if (active) setOnClickListener { button.onTap() } else alpha = 0.4f
     }
 }
 

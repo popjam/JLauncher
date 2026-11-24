@@ -67,7 +67,7 @@ final class Model: ObservableObject {
     var onBreak: Bool { paired && Lockdown.onBreak(state, now: now.ms) }
     /// Whether the Mac blocks things now: in lockdown, and not on a break
     var blocking: Bool { status.on && !onBreak }
-    /// The list as it applies: one list, each item blocked on every device where it can be
+    /// The list as it applies: each item blocked on the devices switched on for it, where they can
     var effectiveItems: [String: BlockItem] { BlockItems.matched(items) }
     var macApps: Set<String> { BlockItems.macApps(effectiveItems) }
     /// The Mac's sites, and the sites the phone adds for its own blocked apps
@@ -326,6 +326,16 @@ final class Model: ObservableObject {
         saveItems()
         pushItems()
     }
+
+    /// Blocks or unblocks an app or site on one device, from here
+    func block(kind: BlockItem.Kind, name: String, on: Bool, device: Device, pkg: String? = nil, bundle: String? = nil, tvName: String? = nil) {
+        items = BlockItems.set(items, kind: kind, name: name, phone: device == .phone ? on : nil, mac: device == .mac ? on : nil,
+                               now: Date().ms, pkg: pkg, bundle: bundle, tv: device == .tv ? on : nil, tvName: tvName)
+        saveItems()
+        pushItems()
+    }
+
+    enum Device: String, CaseIterable { case phone = "Phone", mac = "Mac", tv = "TV" }
 
     // --- What ending early needs (the phone's choice) ---
 
