@@ -586,14 +586,15 @@ class Prefs(context: Context) {
         get() = prefs.getLong("LOCKDOWN_BREAK_UNTIL", 0L)
         set(value) = prefs.edit { putLong("LOCKDOWN_BREAK_UNTIL", value) }
 
-    /** Time left over from breaks ended early, for the next break on [lockdownBreakSavedDay] */
-    var lockdownBreakSaved: Long
-        get() = prefs.getLong("LOCKDOWN_BREAK_SAVED", 0L)
-        set(value) = prefs.edit { putLong("LOCKDOWN_BREAK_SAVED", value) }
+    /** When the break taken from the pool that's running (or just ran) started, or 0 once it's been counted */
+    var lockdownBreakStart: Long
+        get() = prefs.getLong("LOCKDOWN_BREAK_START", 0L)
+        set(value) = prefs.edit { putLong("LOCKDOWN_BREAK_START", value) }
 
-    var lockdownBreakSavedDay: String
-        get() = prefs.getString("LOCKDOWN_BREAK_SAVED_DAY", "").orEmpty()
-        set(value) = prefs.edit { putString("LOCKDOWN_BREAK_SAVED_DAY", value) }
+    /** The break time saved up ([app.olauncher.helper.Breaks.Pool]) */
+    var lockdownBreakPool: String
+        get() = str("LOCKDOWN_BREAK_POOL")
+        set(value) = putStr("LOCKDOWN_BREAK_POOL", value)
 
     var lockdownMacBreakUntil: Long
         get() = prefs.getLong("LOCKDOWN_MAC_BREAK_UNTIL", 0L)

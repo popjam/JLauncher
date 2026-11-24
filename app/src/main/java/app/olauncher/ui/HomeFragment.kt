@@ -24,6 +24,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.core.view.setPadding
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
@@ -426,6 +427,9 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
     private lateinit var lockdownWidget: LinearLayout
     private lateinit var lockdownWidgetIcon: View
     private lateinit var lockdownWidgetText: TextView
+    private lateinit var lockdownWidgetPool: TextView
+    /** Whether the last look found a break running, so the home apps show locked or not as soon as that changes */
+    private var lockdownWidgetOnBreak: Boolean? = null
 
     private fun lockdownWidgetView(): LinearLayout {
         val context = requireContext()
@@ -440,6 +444,15 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size) * 0.88f)
             setPadding(10.dpToPx(), 5.dpToPx(), 10.dpToPx(), 10.dpToPx())
         }
+        // The break time saved up, under the time, the same size
+        lockdownWidgetPool = androidx.appcompat.widget.AppCompatTextView(context, null, 0).apply {
+            setTextAppearance(R.style.TextSmall)
+            gravity = Gravity.CENTER
+            isSingleLine = true
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.date_size) * 0.88f)
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 10.dpToPx())
+            visibility = View.GONE
+        }
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -449,6 +462,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             addView(lockdownWidgetIcon, LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx()).apply { topMargin = 4.dpToPx() })
             // Its own width, not the column's: a column sized to its children leaves out ones that fill it, so the time was cut to the lock's width
             addView(lockdownWidgetText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(lockdownWidgetPool, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             setOnClickListener { onLockdownWidgetTap() }
             // Held without dragging: a break, when breaks are on and lockdown is; otherwise the Lockdown page
             setOnLongClickListener {
@@ -486,17 +500,27 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         lockdownWidget.isVisible = prefs.lockdownHomeWidget
         if (!prefs.lockdownHomeWidget) return
         val on = Lockdown.isOn(context, prefs)
+        val pool = Lockdown.updatePool(context, prefs)
         val onBreak = on && Lockdown.onBreak(prefs)
-        lockdownWidgetIcon.background = StatIcons.drawable(if (onBreak) StatIcons.UNLOCK else StatIcons.LOCK, LOCKDOWN_BLUE, 24.dpToPx())
+        if (lockdownWidgetOnBreak != null && lockdownWidgetOnBreak != onBreak) populateHomeApps()
+        lockdownWidgetOnBreak = onBreak
+        lockdownWidgetIcon.background = if (onBreak) StatIcons.drawable(StatIcons.UNLOCK, Style.Palette.GREEN, 24.dpToPx())
+            else StatIcons.drawable(StatIcons.LOCK, LOCKDOWN_BLUE, 24.dpToPx())
         lockdownWidgetText.text = when {
             onBreak -> LockdownGate.clockText(Lockdown.breakUntil(prefs) - System.currentTimeMillis())
             !on -> "+" + widgetDuration(prefs.lockdownWidgetMinutes * 60_000L)
             else -> Lockdown.activeUntil(context, prefs)?.let { widgetDuration(it - System.currentTimeMillis()) }
                 ?: getString(R.string.on)
         }
-        lockdownWidget.alpha = if (on && !onBreak) 1f else if (onBreak) 0.8f else 0.45f
+        // The pool, whenever breaks are on; during a break the time above is the break's
+        val showPool = Lockdown.breaks(prefs).on && !onBreak
+        lockdownWidgetPool.isVisible = showPool
+        lockdownWidgetPool.text = "(" + LockdownGate.poolText(pool.banked) + ")"
+        lockdownWidgetText.updatePadding(bottom = if (showPool) 0 else 10.dpToPx())
+        lockdownWidget.alpha = if (on) 1f else 0.45f
         lockdownWidget.contentDescription = getString(R.string.lockdown) + ", " +
-            (if (onBreak) getString(R.string.lockdown_on_break) + " " else "") + lockdownWidgetText.text
+            (if (onBreak) getString(R.string.lockdown_on_break) + " " else "") + lockdownWidgetText.text +
+            (if (showPool) ", " + getString(R.string.lockdown_pooled, LockdownGate.poolText(pool.banked)) else "")
         // A break counts down by the second
         handler.removeCallbacks(lockdownTick)
         if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) handler.postDelayed(lockdownTick, if (onBreak) 1_000 else 30_000)

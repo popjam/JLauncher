@@ -2,19 +2,19 @@ package app.olauncher.helper
 
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.temporal.TemporalAdjusters
 
 /**
- * Short breaks from lockdown: for a few minutes, nothing lockdown blocks is blocked. How long they
- * are, how often and when they can be taken, and what has to be done to take one, are all set here.
- * Breaks are shared between the devices: one break, counted once, lifts them all. Automatic breaks
- * start by themselves at set times during any lockdown and don't count against the limits.
+ * Breaks from lockdown: for a while, nothing lockdown blocks is blocked. Break time is earned into a
+ * pool: [Config.minutes] for every [Config.every] minutes of lockdown, not counting breaks or the times
+ * breaks can't be taken. A break uses the whole pool, and ending it early puts what's left back, so
+ * another can be taken straight away. The pool can be capped and emptied at midnight. Breaks are
+ * shared between the devices: one break lifts them all. Automatic breaks start by themselves at set
+ * times during any lockdown and don't use the pool.
  *
- * The rules are plain functions of the settings, the log of breaks and the time, so they're the same
+ * The rules are plain functions of the settings, the pool and the time, so they're the same
  * everywhere and can be tested.
  */
 object Breaks {
@@ -23,20 +23,21 @@ object Breaks {
     const val MAC = "mac"
     const val TV = "tv"
 
+    /** The least the pool needs for a break */
+    const val MIN_BREAK_MS = 60_000L
+
     data class Config(
-        /** How long a break is; 0 is no breaks */
+        /** Minutes of break earned each [every] minutes of lockdown; 0 is no breaks */
         val minutes: Int = 0,
-        /** Minutes after a break ends before another can start */
-        val cooldown: Int = 0,
-        /** A break taken during a break adds to it; otherwise one has to end first */
-        val stack: Boolean = false,
-        /** A break's time is added to the end of lockdown, so it ends that much later */
+        /** Minutes of lockdown that earn [minutes] */
+        val every: Int = 60,
+        /** The most the pool holds, in minutes; 0 is no cap */
+        val cap: Int = 0,
+        /** The pool empties at midnight */
+        val reset: Boolean = false,
+        /** The time a break is used is added to the end of lockdown */
         val makeUp: Boolean = false,
-        /** At most this many breaks in an hour, a day, a week (Monday to Sunday); 0 is no limit */
-        val perHour: Int = 0,
-        val perDay: Int = 0,
-        val perWeek: Int = 0,
-        /** When breaks can't be taken */
+        /** When breaks can't be taken, and the pool doesn't fill */
         val off: List<Lockdown.Schedule> = emptyList(),
         /** What has to be done to take one */
         val challenge: Challenge = Challenge(Challenge.Type.NONE),
@@ -51,25 +52,24 @@ object Breaks {
 
         // "shared" stays in what's written, always on, for the Mac app, which reads it
         fun encode(): String = JSONObject()
-            .put("minutes", minutes).put("cooldown", cooldown).put("stack", stack).put("makeUp", makeUp)
-            .put("perHour", perHour).put("perDay", perDay).put("perWeek", perWeek)
+            .put("minutes", minutes).put("every", every).put("cap", cap).put("reset", reset).put("makeUp", makeUp)
             .put("off", Lockdown.formatSchedules(off)).put("shared", true).put("challenge", challenge.encode())
             .put("autoMinutes", autoMinutes).put("autoEvery", autoEvery)
             .toString()
 
         /**
          * Whether going from this to [new] makes breaks easier to get, so it needs lockdown's unlock:
-         * longer, sooner, more of them, fewer times off, easier to ask for, or automatic ones longer or
-         * more often.
+         * more earned or more often, a higher cap or none, no emptying at midnight, no making up, fewer
+         * times off, easier to ask for, or automatic ones longer or more often.
          */
         fun loosensTo(new: Config, phraseLength: Int = 40): Boolean {
-            fun limitLoosens(old: Int, value: Int) = old > 0 && (value <= 0 || value > old)
             val autoLoosens = new.autoOn && (!autoOn || new.autoMinutes > autoMinutes || new.autoEvery < autoEvery)
+            val capLoosens = cap > 0 && (new.cap <= 0 || new.cap > cap)
             return (new.minutes > minutes) ||
-                new.cooldown < cooldown ||
-                (new.stack && !stack) ||
+                (new.on && new.every < every) ||
+                capLoosens ||
+                (!new.reset && reset) ||
                 (!new.makeUp && makeUp) ||
-                limitLoosens(perHour, new.perHour) || limitLoosens(perDay, new.perDay) || limitLoosens(perWeek, new.perWeek) ||
                 Lockdown.coverageLost(off, new.off) ||
                 Challenge.loosens(challenge, new.challenge, phraseLength) ||
                 autoLoosens
@@ -80,12 +80,10 @@ object Breaks {
                 val o = JSONObject(text ?: return Config())
                 Config(
                     minutes = o.optInt("minutes", 0).coerceAtLeast(0),
-                    cooldown = o.optInt("cooldown", 0).coerceAtLeast(0),
-                    stack = o.optBoolean("stack", false),
+                    every = o.optInt("every", 60).coerceAtLeast(1),
+                    cap = o.optInt("cap", 0).coerceAtLeast(0),
+                    reset = o.optBoolean("reset", false),
                     makeUp = o.optBoolean("makeUp", false),
-                    perHour = o.optInt("perHour", 0).coerceAtLeast(0),
-                    perDay = o.optInt("perDay", 0).coerceAtLeast(0),
-                    perWeek = o.optInt("perWeek", 0).coerceAtLeast(0),
                     off = Lockdown.parseSchedules(o.optString("off")),
                     challenge = Challenge.decode(o.optString("challenge")) ?: Challenge(Challenge.Type.NONE),
                     autoMinutes = o.optInt("autoMinutes", 0).coerceAtLeast(0),
@@ -93,6 +91,109 @@ object Breaks {
                 )
             }.getOrDefault(Config())
         }
+    }
+
+    // --- The pool ---
+
+    /**
+     * The break time saved up ([banked], ms), the lockdown counted towards the next lot ([progress], ms),
+     * and when it was last brought up to date ([at], wall clock) and whether it was earning then
+     */
+    data class Pool(val banked: Long = 0L, val progress: Long = 0L, val at: Long = 0L, val earning: Boolean = false) {
+        fun encode(): String = JSONObject().put("banked", banked).put("progress", progress).put("at", at).put("earning", earning).toString()
+
+        companion object {
+            fun decode(text: String?): Pool = runCatching {
+                val o = JSONObject(text ?: return Pool())
+                Pool(o.optLong("banked").coerceAtLeast(0L), o.optLong("progress").coerceAtLeast(0L), o.optLong("at"), o.optBoolean("earning"))
+            }.getOrDefault(Pool())
+        }
+    }
+
+    /** Past this long between looks, time only counts when it was earning at both ends */
+    const val POOL_GAP_MS = 10 * 60_000L
+
+    /**
+     * [pool] brought up to [now]: the time since it was last brought up to date earns when it was
+     * earning ([earningNow]: lockdown on and not on a break), less the times breaks can't be taken and
+     * the automatic breaks of a lockdown that started at [runStart]. With [Config.reset] it empties at
+     * each midnight passed.
+     */
+    fun accrue(config: Config, pool: Pool, now: Long, earningNow: Boolean, runStart: Long = 0L, zone: ZoneId = ZoneId.systemDefault()): Pool {
+        val from = pool.at
+        if (from <= 0L || now <= from) return pool.copy(at = now, earning = earningNow)
+        var p = pool
+        var start = from
+        if (config.reset) {
+            val midnight = epoch(LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone).toLocalDate().atStartOfDay(), zone)
+            if (from < midnight) {
+                p = p.copy(banked = 0L, progress = 0L)
+                start = midnight
+            }
+        }
+        val counts = if (now - from <= POOL_GAP_MS) earningNow else earningNow && pool.earning
+        if (counts && config.on && now > start) {
+            val skipped = offWindows(config, start, now, zone) + autoWindows(config, runStart, start, now, zone)
+            p = credit(config, p, now - start - covered(skipped, start, now))
+        }
+        return p.copy(at = now, earning = earningNow)
+    }
+
+    /** [pool] with [ms] more lockdown counted: each [Config.every] adds [Config.minutes], up to the cap */
+    fun credit(config: Config, pool: Pool, ms: Long): Pool {
+        if (!config.on || ms <= 0L) return pool
+        val cap = config.cap * 60_000L
+        if (cap > 0L && pool.banked >= cap) return pool
+        val every = config.every * 60_000L
+        val total = pool.progress + ms
+        val banked = pool.banked + (total / every) * config.minutes * 60_000L
+        return if (cap > 0L && banked >= cap) pool.copy(banked = cap, progress = 0L)
+            else pool.copy(banked = banked, progress = total % every)
+    }
+
+    /** When the pool next gets more, if it keeps earning from [now], or null when it's full or breaks are off */
+    fun nextEarn(config: Config, pool: Pool, now: Long): Long? {
+        if (!config.on) return null
+        if (config.cap > 0 && pool.banked >= config.cap * 60_000L) return null
+        return now + (config.every * 60_000L - pool.progress).coerceAtLeast(0L)
+    }
+
+    /**
+     * How long a break taken at [now] with [banked] in the pool runs: the whole pool, but no further
+     * than when lockdown ends ([lockdownEnd], if known), breaks' next time off, or midnight when the pool
+     * empties then. What it doesn't use stays in the pool.
+     */
+    fun breakLength(config: Config, banked: Long, now: Long, lockdownEnd: Long? = null, zone: ZoneId = ZoneId.systemDefault()): Long {
+        val local = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
+        val limits = listOfNotNull(
+            now + banked,
+            lockdownEnd?.takeIf { it > now },
+            config.off.mapNotNull { it.nextStart(local) }.minOrNull()?.let { epoch(it, zone) },
+            if (config.reset) epoch(local.toLocalDate().plusDays(1).atStartOfDay(), zone) else null,
+        )
+        return (limits.minOrNull()!! - now).coerceAtLeast(0L)
+    }
+
+    /** Breaks' times off that overlap [from] to [to], as start to end */
+    private fun offWindows(config: Config, from: Long, to: Long, zone: ZoneId): List<Pair<Long, Long>> {
+        if (config.off.isEmpty()) return emptyList()
+        val first = LocalDateTime.ofInstant(Instant.ofEpochMilli(from), zone).toLocalDate()
+        val last = LocalDateTime.ofInstant(Instant.ofEpochMilli(to), zone).toLocalDate()
+        return config.off.flatMap { it.windows(first, last) }.map { epoch(it.start, zone) to epoch(it.end, zone) }
+    }
+
+    /** How much of [from] to [to] the [windows] cover, overlaps counted once */
+    fun covered(windows: List<Pair<Long, Long>>, from: Long, to: Long): Long {
+        var total = 0L
+        var reached = from
+        windows.map { maxOf(it.first, from) to minOf(it.second, to) }.filter { it.second > it.first }.sortedBy { it.first }.forEach { (s, e) ->
+            val begin = maxOf(s, reached)
+            if (e > begin) {
+                total += e - begin
+                reached = e
+            }
+        }
+        return total
     }
 
     /** One break: when it started and ended (wall clock; the end moves if it's ended early), and on which device */
@@ -122,51 +223,25 @@ object Breaks {
         /** Lockdown isn't on, so there's nothing to take a break from */
         object NotLocked : Can()
         data class OnBreak(val until: Long) : Can()
-        data class Cooldown(val until: Long) : Can()
         data class OffNow(val until: Long) : Can()
-        /** [period]: "hour", "day" or "week" */
-        data class Limit(val period: String, val count: Int, val until: Long) : Can()
+        /** Under a minute in the pool; [next] is when it next gets more, if known */
+        data class Empty(val next: Long?) : Can()
     }
 
     /**
-     * Whether a break can be taken at [now] (wall clock, in [zone]), with lockdown on ([locked]) and a
-     * break, if any, running until [breakUntil]. Breaks are shared by every device: one taken anywhere
-     * counts for all. Automatic breaks aren't in the log, so they don't count.
+     * Whether a break can be taken at [now] (wall clock, in [zone]), with lockdown on ([locked]), [pool]
+     * saved up, and a break, if any, running until [breakUntil]
      */
-    fun check(config: Config, log: List<Entry>, now: Long, locked: Boolean, breakUntil: Long,
+    fun check(config: Config, pool: Pool, now: Long, locked: Boolean, breakUntil: Long,
               zone: ZoneId = ZoneId.systemDefault()): Can {
         if (!config.on) return Can.Off
         if (!locked) return Can.NotLocked
-        if (breakUntil > now && !config.stack) return Can.OnBreak(breakUntil)
+        if (breakUntil > now) return Can.OnBreak(breakUntil)
         val local = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
         config.off.firstOrNull { it.covers(local) }?.let { return Can.OffNow(epoch(it.endAfter(local), zone)) }
-        val mine = log.filter { it.start <= now }
-        // The time between breaks runs from the end of the last one, once it's over
-        if (config.cooldown > 0 && breakUntil <= now) {
-            mine.maxOfOrNull { it.end }?.let { last ->
-                val until = last + config.cooldown * 60_000L
-                if (until > now) return Can.Cooldown(until)
-            }
-        }
-        if (config.perHour > 0) {
-            val starts = mine.map { it.start }.filter { it > now - HOUR }.sorted()
-            if (starts.size >= config.perHour) return Can.Limit("hour", config.perHour, starts[starts.size - config.perHour] + HOUR)
-        }
-        if (config.perDay > 0) {
-            val midnight = epoch(local.toLocalDate().atStartOfDay(), zone)
-            if (mine.count { it.start >= midnight } >= config.perDay)
-                return Can.Limit("day", config.perDay, epoch(local.toLocalDate().plusDays(1).atStartOfDay(), zone))
-        }
-        if (config.perWeek > 0) {
-            val monday = local.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-            if (mine.count { it.start >= epoch(monday.atStartOfDay(), zone) } >= config.perWeek)
-                return Can.Limit("week", config.perWeek, epoch(monday.plusWeeks(1).atStartOfDay(), zone))
-        }
+        if (pool.banked < MIN_BREAK_MS) return Can.Empty(nextEarn(config, pool, now))
         return Can.Yes
     }
-
-    /** How many breaks have been taken since [since] */
-    fun countSince(log: List<Entry>, since: Long) = log.count { it.start >= since }
 
     // --- Automatic breaks ---
 
@@ -212,23 +287,10 @@ object Breaks {
     private fun offAt(config: Config, time: Long, zone: ZoneId) =
         config.off.isNotEmpty() && LocalDateTime.ofInstant(Instant.ofEpochMilli(time), zone).let { local -> config.off.any { it.covers(local) } }
 
-    /**
-     * When a break taken at [now] ends: added to the running one when they stack, and with [saved] (time
-     * left over from breaks ended early) on top
-     */
-    fun newEnd(config: Config, now: Long, breakUntil: Long, saved: Long = 0L): Long =
-        (if (config.stack && breakUntil > now) breakUntil else now) + config.minutes * 60_000L + (if (config.stack) saved.coerceAtLeast(0L) else 0L)
-
-    /** The time saved for the next break after one running until [breakUntil] is ended at [now]: what's left of it is kept when they stack */
-    fun savedAfterEnd(config: Config, now: Long, breakUntil: Long, saved: Long): Long =
-        if (!config.stack) 0L else saved.coerceAtLeast(0L) + (breakUntil - now).coerceAtLeast(0L)
-
     /** [log] with a new break, or the running one ended at [now] when it's ended early */
     fun started(log: List<Entry>, id: String, now: Long, end: Long, device: String) = log + Entry(id, now, end, device)
 
     fun ended(log: List<Entry>, now: Long, devices: Set<String>) = log.map { if (it.device in devices && it.end > now && it.start <= now) it.copy(end = now) else it }
-
-    private const val HOUR = 60 * 60_000L
 
     private fun epoch(time: LocalDateTime, zone: ZoneId) = time.atZone(zone).toInstant().toEpochMilli()
 }

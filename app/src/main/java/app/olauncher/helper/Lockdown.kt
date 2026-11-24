@@ -693,33 +693,72 @@ object Lockdown {
 
     fun onBreak(prefs: Prefs) = breakUntil(prefs) > System.currentTimeMillis()
 
-    /** Whether a break can be taken now */
-    fun canBreak(context: Context, prefs: Prefs = Prefs(context)): Breaks.Can =
-        Breaks.check(breaks(prefs), breakLog(prefs), System.currentTimeMillis(), isOn(context, prefs), breakUntil(prefs))
+    /** The break time saved up, as last brought up to date (see [updatePool]) */
+    fun pool(prefs: Prefs) = Breaks.Pool.decode(prefs.lockdownBreakPool)
 
-    /** Starts a break on every device, taken on [device], with the id the Mac gave it if it came from there */
-    fun startBreak(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE, id: String = java.util.UUID.randomUUID().toString(),
-                   at: Long = System.currentTimeMillis()) {
-        val config = breaks(prefs)
-        if (!config.on) return
-        val end = Breaks.newEnd(config, at, breakUntil(prefs), savedBreak(prefs))
-        prefs.lockdownBreakUntil = end
-        prefs.lockdownBreakSaved = 0L
-        prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.trim(Breaks.started(breakLog(prefs), id, at, end, device.name.lowercase()), at))
-        // Lockdown ends a break's length later
-        if (config.makeUp) addTime(context, config.minutes * 60_000L, prefs)
+    /**
+     * Brings the pool up to now: ends a break from the pool when lockdown has turned off (what's left
+     * goes back), counts one that has run out (making up its time), then adds what lockdown since the
+     * last look has earned
+     */
+    fun updatePool(context: Context, prefs: Prefs = Prefs(context)): Breaks.Pool {
+        val now = System.currentTimeMillis()
+        val on = isOn(context, prefs)
+        val until = prefs.lockdownBreakUntil
+        val before = pool(prefs)
+        if (until > now && !on) endBreak(context, prefs)
+        else if (prefs.lockdownBreakStart > 0L && until <= now) {
+            breakDone(context, prefs, if (until > 0L) until else now)
+            // A break that ran out since the last look: lockdown from its end on earns, if it's still on
+            if (on && until in (before.at + 1)..now) prefs.lockdownBreakPool = before.copy(at = until, earning = true).encode()
+        }
+        val pool = Breaks.accrue(breaks(prefs), pool(prefs), now, on && !onBreak(prefs), prefs.lockdownOnSince)
+        prefs.lockdownBreakPool = pool.encode()
+        return pool
     }
 
-    /** Time left over from breaks ended early today, added to the next break when breaks stack */
-    fun savedBreak(prefs: Prefs): Long =
-        if (prefs.lockdownBreakSavedDay == LocalDate.now().toString() && breaks(prefs).stack) prefs.lockdownBreakSaved else 0L
+    /** A break from the pool is over at [end]: with making up on, the time it was used goes on the end of lockdown, if it's still on */
+    private fun breakDone(context: Context, prefs: Prefs, end: Long) {
+        val start = prefs.lockdownBreakStart
+        prefs.lockdownBreakStart = 0L
+        val used = end - start
+        if (start > 0L && used > 0L && breaks(prefs).makeUp && isOn(context, prefs)) addTime(context, used, prefs)
+    }
 
-    /** Ends the break now on every device, an automatic one too */
-    fun endBreak(prefs: Prefs) {
+    /** Whether a break can be taken now */
+    fun canBreak(context: Context, prefs: Prefs = Prefs(context)): Breaks.Can {
+        val pool = updatePool(context, prefs)
+        return Breaks.check(breaks(prefs), pool, System.currentTimeMillis(), isOn(context, prefs), breakUntil(prefs))
+    }
+
+    /**
+     * Starts a break on every device, taken on [device], with the id the Mac gave it if it came from
+     * there. It uses the whole pool, up to when lockdown ends, breaks' next time off, or midnight when the
+     * pool empties then; what it can't use stays in the pool.
+     */
+    fun startBreak(context: Context, prefs: Prefs = Prefs(context), device: Device = Device.PHONE, id: String = java.util.UUID.randomUUID().toString()) {
+        val config = breaks(prefs)
+        if (!config.on) return
+        val pool = updatePool(context, prefs)
         val now = System.currentTimeMillis()
-        // What's left of a break taken by hand is kept for the next one today, when breaks stack
-        prefs.lockdownBreakSaved = Breaks.savedAfterEnd(breaks(prefs), now, prefs.lockdownBreakUntil, savedBreak(prefs))
-        prefs.lockdownBreakSavedDay = LocalDate.now().toString()
+        val length = Breaks.breakLength(config, pool.banked, now, activeUntil(context, prefs))
+        if (length < 1_000L) return
+        val end = now + length
+        prefs.lockdownBreakUntil = end
+        prefs.lockdownBreakStart = now
+        prefs.lockdownBreakPool = pool.copy(banked = pool.banked - length, earning = false).encode()
+        prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.trim(Breaks.started(breakLog(prefs), id, now, end, device.name.lowercase()), now))
+    }
+
+    /** Ends the break now on every device, an automatic one too; what's left of one from the pool goes back in it */
+    fun endBreak(context: Context, prefs: Prefs = Prefs(context)) {
+        val now = System.currentTimeMillis()
+        val until = prefs.lockdownBreakUntil
+        if (until > now) {
+            val pool = pool(prefs)
+            prefs.lockdownBreakPool = pool.copy(banked = pool.banked + (until - now)).encode()
+            breakDone(context, prefs, now)
+        }
         prefs.lockdownBreakUntil = 0L
         autoBreak(prefs, now)?.let { prefs.lockdownAutoBreakSkip = it.second }
         prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.ended(breakLog(prefs), now, Device.values().map { it.name.lowercase() }.toSet()))

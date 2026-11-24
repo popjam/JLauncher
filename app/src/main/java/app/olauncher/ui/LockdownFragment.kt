@@ -260,44 +260,45 @@ class LockdownFragment : LockdownBaseFragment() {
     private fun breaksSection() {
         val context = requireContext()
         val config = Lockdown.breaks(prefs)
+        val now = System.currentTimeMillis()
+        val pool = Lockdown.updatePool(context, prefs)
+        val banked = LockdownGate.poolText(pool.banked)
         val value = if (!config.on && !config.autoOn) getString(R.string.off) else listOfNotNull(
-            Formats.duration(config.minutes * 60_000L).takeIf { config.on },
-            config.perDay.takeIf { it > 0 && config.on }?.let { getString(R.string.lockdown_n_a_day, it) },
+            getString(R.string.lockdown_pooled, banked).takeIf { config.on },
             autoBreakName(config).takeIf { config.autoOn },
         ).joinToString(" · ")
-        val rows = mutableListOf<View?>(
-            row(getString(R.string.lockdown_break_length), minutesName(config.minutes), R.string.info_break_length) {
-                val options = listOf(0, 1, 2, 5, 10, 15, 30)
-                choose(getString(R.string.lockdown_break_length), options.map { minutesName(it) },
-                    options.indexOf(config.minutes).coerceAtLeast(0)) { save(config, config.copy(minutes = options[it])) }
-            },
-            // Automatic breaks don't need manual ones to be on
-            row(getString(R.string.lockdown_auto_breaks), autoBreakName(config), R.string.info_auto_breaks) {
-                val cycles = listOf(0 to 0, 5 to 25, 5 to 50, 10 to 60, 15 to 90)
-                val current = cycles.indexOf(config.autoMinutes to config.autoEvery).coerceAtLeast(0)
-                choose(getString(R.string.lockdown_auto_breaks), cycles.map { (m, e) -> autoBreakName(config.copy(autoMinutes = m, autoEvery = e)) }, current) {
-                    val (m, e) = cycles[it]
-                    save(config, config.copy(autoMinutes = m, autoEvery = e))
-                }
-            },
-        )
+        val earnOptions = listOf(0, 1, 2, 3, 5, 10, 15, 20, 30)
+        val rows = mutableListOf<View?>()
+        if (config.on) {
+            val can = Lockdown.canBreak(context, prefs)
+            val next = Breaks.nextEarn(config, pool, now)
+            val poolValue = when {
+                Lockdown.onBreak(prefs) -> banked + " · " + LockdownGate.deviceStatus(context, Lockdown.Device.PHONE)
+                next == null -> getString(R.string.lockdown_break_pool_full, banked)
+                can is Breaks.Can.NotLocked || can is Breaks.Can.OffNow -> banked + " · " + LockdownGate.cantBreakText(context, can)
+                else -> getString(R.string.lockdown_break_pool_value, banked, Formats.minutes(config.minutes), Formats.duration(next - now))
+            }
+            rows += row(getString(R.string.lockdown_break_pool), poolValue, null, onTap = null)
+        }
+        rows += row(getString(R.string.lockdown_break_earn), minutesName(config.minutes), R.string.info_break_earn) {
+            choose(getString(R.string.lockdown_break_earn), earnOptions.map { minutesName(it) },
+                earnOptions.indexOf(config.minutes).coerceAtLeast(0)) { save(config, config.copy(minutes = earnOptions[it])) }
+        }
         val offRows = if (config.on) config.off.map { it to row(LockdownGate.scheduleName(context, it), null, null, level = 1, onTap = null) } else emptyList()
         if (config.on) {
-            val taken = Breaks.countSince(Lockdown.breakLog(prefs), Lockdown.epoch(LocalDate.now().atStartOfDay()))
-            val can = Lockdown.canBreak(context, prefs)
-            val state = when {
-                Lockdown.onBreak(prefs) -> LockdownGate.deviceStatus(context, Lockdown.Device.PHONE)
-                can == Breaks.Can.Yes -> getString(R.string.lockdown_break_ready)
-                else -> LockdownGate.cantBreakText(context, can)
-            }
+            val everyOptions = listOf(15, 30, 45, 60, 90, 120, 180, 240)
+            val capOptions = listOf(0, 10, 15, 20, 30, 45, 60, 120)
             val types = listOf(Challenge.Type.NONE, Challenge.Type.HOLD, Challenge.Type.TAPS, Challenge.Type.PHRASE, Challenge.Type.RANDOM, Challenge.Type.PASSWORD)
-            val limits = listOf(0, 1, 2, 3, 4, 5, 10)
-            fun limitName(n: Int) = if (n <= 0) getString(R.string.lockdown_none) else n.toString()
-            fun limitRow(title: Int, value: Int, set: (Int) -> Breaks.Config) = row(getString(title), limitName(value), R.string.info_break_limits) {
-                choose(getString(title), limits.map { limitName(it) }, limits.indexOf(value).coerceAtLeast(0)) { save(config, set(limits[it])) }
-            }
             rows += listOf(
-                row(getString(R.string.lockdown_today), resources.getQuantityString(R.plurals.lockdown_breaks_taken, taken, taken) + " · " + state, null, onTap = null),
+                row(getString(R.string.lockdown_break_every), getString(R.string.lockdown_break_every_value, Formats.minutes(config.every)), R.string.info_break_every) {
+                    choose(getString(R.string.lockdown_break_every), everyOptions.map { Formats.minutes(it) },
+                        everyOptions.indexOf(config.every).coerceAtLeast(0)) { save(config, config.copy(every = everyOptions[it])) }
+                },
+                row(getString(R.string.lockdown_break_cap), minutesName(config.cap), R.string.info_break_cap) {
+                    choose(getString(R.string.lockdown_break_cap), capOptions.map { minutesName(it) },
+                        capOptions.indexOf(config.cap).coerceAtLeast(0)) { save(config, config.copy(cap = capOptions[it])) }
+                },
+                row(getString(R.string.lockdown_break_reset), onOff(config.reset), R.string.info_break_reset) { save(config, config.copy(reset = !config.reset)) },
                 row(getString(R.string.lockdown_break_needs), challengeName(config.challenge) + " · " + difficultyName(difficultyOf(config.challenge)),
                     R.string.info_break_needs) {
                     pickChallenge(getString(R.string.lockdown_break_needs), config.challenge, types) { picked ->
@@ -306,19 +307,20 @@ class LockdownFragment : LockdownBaseFragment() {
                     }
                 },
                 if (config.challenge.type == Challenge.Type.PHRASE) row(getString(R.string.challenge_the_phrase), prefs.lockdownPhrase, null, level = 1) { editPhrase() } else null,
-                row(getString(R.string.lockdown_break_gap), if (config.cooldown <= 0) getString(R.string.lockdown_none) else minutesName(config.cooldown),
-                    R.string.info_break_gap) {
-                    val options = listOf(0, 5, 10, 15, 30, 60, 120, 240)
-                    choose(getString(R.string.lockdown_break_gap), options.map { if (it == 0) getString(R.string.lockdown_none) else minutesName(it) },
-                        options.indexOf(config.cooldown).coerceAtLeast(0)) { save(config, config.copy(cooldown = options[it])) }
-                },
-                limitRow(R.string.lockdown_per_hour, config.perHour) { config.copy(perHour = it) },
-                limitRow(R.string.lockdown_per_day, config.perDay) { config.copy(perDay = it) },
-                limitRow(R.string.lockdown_per_week, config.perWeek) { config.copy(perWeek = it) },
-                row(getString(R.string.lockdown_break_stack), onOff(config.stack), R.string.info_break_stack) { save(config, config.copy(stack = !config.stack)) },
                 row(getString(R.string.lockdown_break_make_up), onOff(config.makeUp), R.string.info_break_make_up) { save(config, config.copy(makeUp = !config.makeUp)) },
-                row(getString(R.string.lockdown_no_breaks_during), null, R.string.info_break_off, onTap = null),
             )
+        }
+        // Automatic breaks don't need manual ones to be on
+        rows += row(getString(R.string.lockdown_auto_breaks), autoBreakName(config), R.string.info_auto_breaks) {
+            val cycles = listOf(0 to 0, 5 to 25, 5 to 50, 10 to 60, 15 to 90)
+            val current = cycles.indexOf(config.autoMinutes to config.autoEvery).coerceAtLeast(0)
+            choose(getString(R.string.lockdown_auto_breaks), cycles.map { (m, e) -> autoBreakName(config.copy(autoMinutes = m, autoEvery = e)) }, current) {
+                val (m, e) = cycles[it]
+                save(config, config.copy(autoMinutes = m, autoEvery = e))
+            }
+        }
+        if (config.on) {
+            rows += row(getString(R.string.lockdown_no_breaks_during), null, R.string.info_break_off, onTap = null)
             rows += offRows.map { it.second }
             rows += addRow { pickSchedule(Lockdown.Schedule(Lockdown.EVERY_DAY, 22 * 60, 6 * 60)) { save(config, config.copy(off = (config.off + it).distinct())) } }
         }

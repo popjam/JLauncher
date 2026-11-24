@@ -129,13 +129,13 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
                 if (PasswordHelper.verifyPassword(password, prefs.lockdownPasswordHash)) start()
                 else context.showToast(context.getString(R.string.password_incorrect))
             } else start()
-            else -> run(challenge, context.getString(R.string.lockdown_break_title, app.olauncher.helper.Formats.minutes(config.minutes))) { start() }
+            else -> run(challenge, context.getString(R.string.lockdown_break_title, poolText(Lockdown.pool(prefs).banked))) { start() }
         }
     }
 
-    /** Ends the break now, so lockdown blocks again */
+    /** Ends the break now, so lockdown blocks again; what's left goes back in the pool */
     fun endBreak() {
-        Lockdown.endBreak(prefs)
+        Lockdown.endBreak(context, prefs)
         app.olauncher.helper.LockdownSystem.sync(context)
         onChanged()
     }
@@ -544,19 +544,18 @@ class LockdownGate(fragment: Fragment, private val onChanged: () -> Unit = {}) {
             else String.format(Locale.getDefault(), "%d:%02d", s / 60, s % 60)
         }
 
+        /** Break time in the pool, in whole minutes rounded down: "15m", "1h 5m" */
+        fun poolText(ms: Long): String = app.olauncher.helper.Formats.minutes((ms / 60_000L).toInt())
+
         /** Why a break can't be taken now */
         fun cantBreakText(context: Context, can: Breaks.Can): String = when (can) {
             Breaks.Can.Yes -> ""
             Breaks.Can.Off -> context.getString(R.string.lockdown_breaks_off)
             Breaks.Can.NotLocked -> context.getString(R.string.lockdown_break_not_locked)
             is Breaks.Can.OnBreak -> context.getString(R.string.lockdown_break_until, time(context, can.until))
-            is Breaks.Can.Cooldown -> context.getString(R.string.lockdown_break_next, time(context, can.until))
             is Breaks.Can.OffNow -> context.getString(R.string.lockdown_break_not_now, time(context, can.until))
-            is Breaks.Can.Limit -> context.resources.getQuantityString(when (can.period) {
-                "hour" -> R.plurals.lockdown_break_limit_hour
-                "day" -> R.plurals.lockdown_break_limit_day
-                else -> R.plurals.lockdown_break_limit_week
-            }, can.count, can.count) + " · " + context.getString(R.string.lockdown_break_next, time(context, can.until))
+            is Breaks.Can.Empty -> context.getString(R.string.lockdown_break_empty) +
+                (can.next?.let { " · " + context.getString(R.string.lockdown_break_more_at, time(context, it)) } ?: "")
         }
 
         /** A device's name, or the devices': "Phone", "Phone and TV", "All devices" */

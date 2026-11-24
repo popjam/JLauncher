@@ -37,6 +37,7 @@ object LockdownSystem {
         val prefs = Prefs(context)
         runCatching { Lockdown.checkTriggers(context, prefs) }
         runCatching { Lockdown.trackRun(context, prefs) }
+        runCatching { Lockdown.updatePool(context, prefs) }
         runCatching { LockdownLog.tick(context, prefs) }
         runCatching { syncGrayscale(context, prefs) }
         runCatching { syncNotification(context, prefs) }

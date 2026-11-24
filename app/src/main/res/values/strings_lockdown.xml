@@ -45,7 +45,7 @@
 
     <!-- Breaks -->
     <string name="lockdown_breaks">Breaks</string>
-    <string name="info_lockdown_breaks">A few minutes with nothing blocked, without ending lockdown. A break lifts lockdown on every device.</string>
+    <string name="info_lockdown_breaks">Time with nothing blocked, without ending lockdown. Lockdown earns break time into a pool; a break uses the pool, and ending it early puts what\'s left back. A break lifts lockdown on every device.</string>
     <string name="lockdown_take_break">Take a break</string>
     <string name="lockdown_end_break">End break</string>
     <string name="lockdown_on_break">On a break</string>
@@ -54,24 +54,27 @@
     <string name="lockdown_break_ready">Break available</string>
     <string name="lockdown_breaks_off">Breaks are off</string>
     <string name="lockdown_break_not_locked">Lockdown isn\'t on</string>
-    <string name="lockdown_break_next">Next at %1$s</string>
     <string name="lockdown_break_not_now">No breaks until %1$s</string>
-    <string name="lockdown_n_a_day">%1$d a day</string>
-    <string name="lockdown_break_length">Length</string>
-    <string name="info_break_length">How long a break lasts.</string>
     <string name="info_break_needs">What you have to do to take a break.</string>
-    <string name="lockdown_break_gap">Time between breaks</string>
-    <string name="info_break_gap">How long after a break ends before you can take another.</string>
-    <string name="lockdown_per_hour">Per hour</string>
-    <string name="lockdown_per_day">Per day</string>
-    <string name="lockdown_per_week">Per week</string>
-    <string name="info_break_limits">The most breaks in the last hour, today or this week.</string>
-    <string name="lockdown_break_stack">Stack breaks</string>
-    <string name="info_break_stack">Taking a break during a break adds its time on, and time left when you end a break early is added to your next one that day. When off, a break has to end before the next one, and time left is lost.</string>
-    <string name="lockdown_break_make_up">Make up the time</string>
-    <string name="info_break_make_up">Adds each break\'s length to the end of lockdown.</string>
+    <string name="lockdown_break_make_up">Make up break time</string>
+    <string name="info_break_make_up">Adds the time each break is used to the end of lockdown.</string>
+    <string name="lockdown_break_pool">Pool</string>
+    <string name="lockdown_break_pool_value">%1$s · +%2$s in %3$s</string>
+    <string name="lockdown_break_pool_full">%1$s · full</string>
+    <string name="lockdown_pooled">%1$s pooled</string>
+    <string name="lockdown_break_earn">Earn</string>
+    <string name="info_break_earn">How much break time each stretch of lockdown adds to the pool. Off turns breaks off.</string>
+    <string name="lockdown_break_every">Every</string>
+    <string name="lockdown_break_every_value">%1$s of lockdown</string>
+    <string name="info_break_every">How much lockdown earns each lot of break time. Time on a break doesn\'t count.</string>
+    <string name="lockdown_break_cap">Cap</string>
+    <string name="info_break_cap">The most break time the pool holds. When it\'s full, it stops filling until some is used.</string>
+    <string name="lockdown_break_reset">Reset at midnight</string>
+    <string name="info_break_reset">Empties the pool at midnight.</string>
+    <string name="lockdown_break_empty">No break time yet</string>
+    <string name="lockdown_break_more_at">More at %1$s</string>
     <string name="lockdown_no_breaks_during">No breaks during</string>
-    <string name="info_break_off">Times when breaks can\'t be taken.</string>
+    <string name="info_break_off">Times when breaks can\'t be taken and the pool doesn\'t fill.</string>
     <string name="lockdown_breaks_taken">Breaks</string>
     <string name="lockdown_break_time">%1$s on breaks</string>
 
@@ -149,22 +152,6 @@
     <plurals name="lockdown_schedules_count">
         <item quantity="one">%d schedule</item>
         <item quantity="other">%d schedules</item>
-    </plurals>
-    <plurals name="lockdown_breaks_taken">
-        <item quantity="one">%d taken</item>
-        <item quantity="other">%d taken</item>
-    </plurals>
-    <plurals name="lockdown_break_limit_hour">
-        <item quantity="one">%d break this hour</item>
-        <item quantity="other">%d breaks this hour</item>
-    </plurals>
-    <plurals name="lockdown_break_limit_day">
-        <item quantity="one">%d break today</item>
-        <item quantity="other">%d breaks today</item>
-    </plurals>
-    <plurals name="lockdown_break_limit_week">
-        <item quantity="one">%d break this week</item>
-        <item quantity="other">%d breaks this week</item>
     </plurals>
     <plurals name="challenge_taps">
         <item quantity="one">%d tap</item>

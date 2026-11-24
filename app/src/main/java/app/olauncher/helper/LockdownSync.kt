@@ -281,6 +281,10 @@ object LockdownSync {
             // Written again, so breaks always say they're shared
             .put("breaks", Lockdown.breaks(prefs).encode())
             .put("breakLog", Breaks.encodeLog(Breaks.trim(Lockdown.breakLog(prefs), now)))
+            // The break time saved up (ms), and when it next gets more while it's earning, or 0. Counted
+            // from the last look, so it stays the same between looks and doesn't make a new send each time
+            .put("breakPool", Lockdown.pool(prefs).banked)
+            .put("breakPoolNext", Lockdown.pool(prefs).let { pool -> if (pool.earning) Breaks.nextEarn(breaks, pool, pool.at) ?: 0L else 0L })
             // The Mac requests done here, so the Mac knows when to stop acting on its own
             .put("applied", JSONArray(applied(context)))
             // For a Mac app from before: its own lockdown as one on-or-timed state
@@ -468,8 +472,8 @@ object LockdownSync {
                 Lockdown.endTimed(prefs)
             }
             "break" -> if (Lockdown.breakLog(prefs).none { it.id == command.optString("id") })
-                Lockdown.startBreak(context, prefs, Lockdown.Device.MAC, command.optString("id"), at)
-            "endBreak" -> Lockdown.endBreak(prefs)
+                Lockdown.startBreak(context, prefs, Lockdown.Device.MAC, command.optString("id"))
+            "endBreak" -> Lockdown.endBreak(context, prefs)
         }
     }
 
