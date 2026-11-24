@@ -57,18 +57,20 @@ public struct Challenge: Equatable {
     }
 }
 
-/// Breaks' settings, as the phone writes them.
+/// Breaks' settings, as the phone writes them. Break time is earned into a pool shared by every
+/// device: `minutes` for each `every` minutes of lockdown, up to `cap` (0 for none), emptied at
+/// midnight with `reset`.
 public struct BreakConfig: Equatable {
     public var minutes = 0
-    public var cooldown = 0
-    public var stack = false
+    public var every = 60
+    public var cap = 0
+    public var reset = false
     public var makeUp = false
-    public var perHour = 0
-    public var perDay = 0
-    public var perWeek = 0
     public var off: [Schedule] = []
     public var shared = true
     public var challenge = Challenge(type: .nothing)
+    public var autoMinutes = 0
+    public var autoEvery = 0
 
     public init() {}
 
@@ -78,12 +80,12 @@ public struct BreakConfig: Equatable {
         var c = BreakConfig()
         guard let data = text?.data(using: .utf8), let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return c }
         func int(_ k: String) -> Int { max(0, (o[k] as? NSNumber)?.intValue ?? 0) }
-        c.minutes = int("minutes"); c.cooldown = int("cooldown")
-        c.stack = o["stack"] as? Bool ?? false; c.makeUp = o["makeUp"] as? Bool ?? false
-        c.perHour = int("perHour"); c.perDay = int("perDay"); c.perWeek = int("perWeek")
+        c.minutes = int("minutes"); c.every = max(1, (o["every"] as? NSNumber)?.intValue ?? 60); c.cap = int("cap")
+        c.reset = o["reset"] as? Bool ?? false; c.makeUp = o["makeUp"] as? Bool ?? false
         c.off = Schedule.parse(o["off"] as? String ?? "")
         c.shared = o["shared"] as? Bool ?? true
         c.challenge = Challenge.decode(o["challenge"] as? String) ?? Challenge(type: .nothing)
+        c.autoMinutes = int("autoMinutes"); c.autoEvery = int("autoEvery")
         return c
     }
 }
@@ -109,43 +111,26 @@ public struct BreakEntry: Equatable, Codable {
 }
 
 public enum Breaks {
+    /// The least the pool needs for a break
+    public static let minBreak: Ms = 60_000
+
     public enum Can: Equatable {
         case yes, off, notLocked
         case onBreak(until: Ms)
-        case cooldown(until: Ms)
         case offNow(until: Ms)
-        case limit(period: String, count: Int, until: Ms)
+        /// Under a minute in the pool; `next` is when it next gets more, if known
+        case empty(next: Ms?)
     }
 
-    /// Whether `device` can take a break at `now`, as on the phone.
-    public static func check(_ config: BreakConfig, log: [BreakEntry], now: Ms, device: String, locked: Bool, breakUntil: Ms,
+    /// Whether a break can be taken at `now`, with `pool` saved up (more at `poolNext`, or 0), as on the phone.
+    public static func check(_ config: BreakConfig, pool: Ms, poolNext: Ms = 0, now: Ms, locked: Bool, breakUntil: Ms,
                              calendar: Calendar = .current) -> Can {
         if !config.on { return .off }
         if !locked { return .notLocked }
-        if breakUntil > now && !config.stack { return .onBreak(until: breakUntil) }
+        if breakUntil > now { return .onBreak(until: breakUntil) }
         let date = Date(ms: now)
         if let s = config.off.first(where: { $0.covers(date, calendar: calendar) }) { return .offNow(until: s.endAfter(date, calendar: calendar).ms) }
-        let mine = (config.shared ? log : log.filter { $0.device == device }).filter { $0.start <= now }
-        if config.cooldown > 0 && breakUntil <= now, let last = mine.map(\.end).max() {
-            let until = last + Ms(config.cooldown) * 60_000
-            if until > now { return .cooldown(until: until) }
-        }
-        let hour: Ms = 3_600_000
-        if config.perHour > 0 {
-            let starts = mine.map(\.start).filter { $0 > now - hour }.sorted()
-            if starts.count >= config.perHour { return .limit(period: "hour", count: config.perHour, until: starts[starts.count - config.perHour] + hour) }
-        }
-        let midnight = calendar.startOfDay(for: date)
-        if config.perDay > 0, mine.filter({ $0.start >= midnight.ms }).count >= config.perDay {
-            return .limit(period: "day", count: config.perDay, until: calendar.date(byAdding: .day, value: 1, to: midnight)!.ms)
-        }
-        if config.perWeek > 0 {
-            let back = (calendar.component(.weekday, from: date) + 5) % 7
-            let monday = calendar.date(byAdding: .day, value: -back, to: midnight)!
-            if mine.filter({ $0.start >= monday.ms }).count >= config.perWeek {
-                return .limit(period: "week", count: config.perWeek, until: calendar.date(byAdding: .day, value: 7, to: monday)!.ms)
-            }
-        }
+        if pool < minBreak { return .empty(next: poolNext > 0 ? poolNext : nil) }
         return .yes
     }
 }

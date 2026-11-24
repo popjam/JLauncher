@@ -108,6 +108,9 @@ public struct PhoneState: Equatable {
     public var passwordHash = ""
     public var breaks = BreakConfig()
     public var breakLog: [BreakEntry] = []
+    /// The break time saved up (ms), shared by every device, and when it next gets more (wall clock), or 0
+    public var breakPool: Ms = 0
+    public var breakPoolNext: Ms = 0
     public var updatedAt: Ms = 0
     /// The ids of the Mac requests the phone has done lately; nil from a phone from before
     public var applied: [String]?
@@ -156,6 +159,8 @@ public struct PhoneState: Equatable {
             phrase = o["phrase"] as? String ?? ""
             breaks = BreakConfig.decode(o["breaks"] as? String)
             breakLog = BreakEntry.decodeLog(o["breakLog"] as? String)
+            breakPool = max(0, ms(o["breakPool"]))
+            breakPoolNext = max(0, ms(o["breakPoolNext"]))
             applied = strings(o["applied"])
         } else {
             // A phone from before
@@ -277,11 +282,16 @@ public enum Lockdown {
             state.manual = false
             state.timedUntil = 0
         case .break:
-            state.breakUntil = (state.breaks.stack && state.breakUntil > command.at ? state.breakUntil : command.at) + command.ms
+            // The phone runs it from the whole pool, whatever the request says; until it says so, the pool's length
+            guard state.breakUntil <= command.at, state.breakPool >= Breaks.minBreak else { return }
+            state.breakUntil = command.at + state.breakPool
+            state.breakPool = 0
             if !state.breakLog.contains(where: { $0.id == command.id }) {
                 state.breakLog.append(BreakEntry(id: command.id, start: command.at, end: state.breakUntil, device: BreakEntry.mac))
             }
         case .endBreak:
+            // What's left goes back in the pool
+            if state.breakUntil > command.at { state.breakPool += state.breakUntil - command.at }
             state.breakUntil = 0
             state.breakLog = state.breakLog.map { e in
                 var e = e

@@ -269,12 +269,13 @@ final class Model: ObservableObject {
 
     var canBreak: Breaks.Can {
         let s = state
-        return Breaks.check(s.breaks, log: s.breakLog, now: now.ms, device: BreakEntry.mac, locked: status.on, breakUntil: s.breakUntil)
+        return Breaks.check(s.breaks, pool: s.breakPool, poolNext: s.breakPoolNext, now: now.ms, locked: status.on, breakUntil: s.breakUntil)
     }
 
     func takeBreak() {
         guard canBreak == .yes else { return }
-        request(Command(type: .break, ms: Ms(breaks.minutes) * 60_000, at: Date().ms))
+        // The phone uses the whole pool, whatever this says
+        request(Command(type: .break, ms: state.breakPool, at: Date().ms))
     }
 
     func endBreak() { request(Command(type: .endBreak, at: Date().ms)) }

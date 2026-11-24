@@ -105,17 +105,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // Breaks
         let breaks = model.breaks
-        if breaks.on && status.on && !model.onBreak {
-            switch model.canBreak {
-            case .yes:
-                menu.addItem(action("Take a \(breaks.minutes)m break…") { [model] in
-                    Unlocking.run(title: "Take a \(breaks.minutes)m break?", action: "Take break", challenge: breaks.challenge) { model.takeBreak() }
-                })
-            case let can:
-                menu.addItem(label("Break · " + Self.cantBreak(can)))
+        if breaks.on {
+            let pool = "\(model.state.breakPool / 60_000)m"
+            if status.on && !model.onBreak {
+                switch model.canBreak {
+                case .yes:
+                    menu.addItem(action("Take a \(pool) break…") { [model] in
+                        Unlocking.run(title: "Take a \(pool) break?", action: "Take break", challenge: breaks.challenge) { model.takeBreak() }
+                    })
+                case .empty(let next):
+                    menu.addItem(label(Self.cantBreak(.empty(next: next))))
+                case let can:
+                    menu.addItem(label("Break · " + Self.cantBreak(can)))
+                }
             }
+            menu.addItem(label("Break pool · \(pool)"))
         }
-
         menu.addItem(.separator())
         let count = model.items.values.filter(\.blocked).count
         menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count)…") { Dialog.show(width: 460) { ItemsView() } })
@@ -146,11 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .off: return "off"
         case .notLocked: return "lockdown isn't on"
         case .onBreak(let until): return "on one until \(Format.time(until))"
-        case .cooldown(let until): return "next at \(Format.time(until))"
         case .offNow(let until): return "none until \(Format.time(until))"
-        case .limit(let period, let count, let until):
-            let used = period == "hour" ? "an hour" : period == "day" ? "today" : "this week"
-            return "\(count) \(used) used · next at \(Format.time(until))"
+        case .empty(let next): return "No break time yet" + (next.map { " · More at \(Format.time($0))" } ?? "")
         }
     }
 

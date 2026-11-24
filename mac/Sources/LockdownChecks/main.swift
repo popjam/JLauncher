@@ -113,36 +113,40 @@ eq(Lockdown.status(ended, now: now).why, .schedule)
 eq(Lockdown.effective(phone: phone, pending: [Command(type: .start, at: now - 25 * hour)], now: now).manual, false)
 
 // --- Breaks ---
-p = phone; p.manual = true; p.breaks.minutes = 5
+p = phone; p.manual = true; p.breaks.minutes = 5; p.breakPool = 15 * 60_000
+// The request's length is ignored: a break uses the whole pool
 let brk = Command(type: .break, ms: 5 * 60_000, at: now)
 let onBreak = Lockdown.effective(phone: p, pending: [brk], now: now)
-check(Lockdown.onBreak(onBreak, now: now + 60_000), "on a break")
-check(!Lockdown.onBreak(onBreak, now: now + 6 * 60_000), "break over")
+check(Lockdown.onBreak(onBreak, now: now + 10 * 60_000), "on a break")
+check(!Lockdown.onBreak(onBreak, now: now + 16 * 60_000), "break over")
+eq(onBreak.breakUntil, now + 15 * 60_000)
+eq(onBreak.breakPool, 0)
 eq(onBreak.breakLog.count, 1)
 let endedBreak = Lockdown.effective(phone: p, pending: [brk, Command(type: .endBreak, at: now + 60_000)], now: now + 60_000)
 check(!Lockdown.onBreak(endedBreak, now: now + 61_000), "break ended")
 eq(endedBreak.breakLog.first?.end, now + 60_000)
+eq(endedBreak.breakPool, 14 * 60_000)
+// Another straight after, from what was put back
+let again = Lockdown.effective(phone: p, pending: [brk, Command(type: .endBreak, at: now + 60_000), Command(type: .break, at: now + 61_000)], now: now + 61_000)
+eq(again.breakUntil, now + 61_000 + 14 * 60_000)
+// Not with an empty pool
+p.breakPool = 30_000
+check(!Lockdown.onBreak(Lockdown.effective(phone: p, pending: [brk], now: now), now: now + 1), "empty pool")
 
 var config = BreakConfig()
-eq(Breaks.check(config, log: [], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .off)
+eq(Breaks.check(config, pool: 0, now: now, locked: true, breakUntil: 0, calendar: cal), .off)
 config.minutes = 5
-eq(Breaks.check(config, log: [], now: now, device: "mac", locked: false, breakUntil: 0, calendar: cal), .notLocked)
-eq(Breaks.check(config, log: [], now: now, device: "mac", locked: true, breakUntil: now + 1, calendar: cal), .onBreak(until: now + 1))
-config.cooldown = 30
-let entry = BreakEntry(id: "a", start: now - 10 * 60_000, end: now - 5 * 60_000, device: "phone")
-eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .cooldown(until: now + 25 * 60_000))
-config.shared = false
-eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .yes)
-config.shared = true; config.cooldown = 0; config.perDay = 1
-eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal),
-   .limit(period: "day", count: 1, until: date("2026-11-19 00:00").ms))
-config.perDay = 0; config.perWeek = 1
-eq(Breaks.check(config, log: [entry], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal),
-   .limit(period: "week", count: 1, until: date("2026-11-23 00:00").ms))
-config.perWeek = 0; config.off = [Schedule(days: 127, start: 11 * 60, end: 13 * 60)]
-eq(Breaks.check(config, log: [], now: now, device: "mac", locked: true, breakUntil: 0, calendar: cal), .offNow(until: date("2026-11-18 13:00").ms))
-let decoded = BreakConfig.decode("{\"minutes\":5,\"cooldown\":30,\"stack\":true,\"perDay\":3,\"off\":\"31:60:120\",\"shared\":false,\"challenge\":\"TAPS:100\"}")
-check(decoded.minutes == 5 && decoded.cooldown == 30 && decoded.stack && decoded.perDay == 3 && !decoded.shared, "break config")
+eq(Breaks.check(config, pool: hour, now: now, locked: false, breakUntil: 0, calendar: cal), .notLocked)
+eq(Breaks.check(config, pool: hour, now: now, locked: true, breakUntil: now + 1, calendar: cal), .onBreak(until: now + 1))
+eq(Breaks.check(config, pool: 59_999, poolNext: now + 5, now: now, locked: true, breakUntil: 0, calendar: cal), .empty(next: now + 5))
+eq(Breaks.check(config, pool: 0, now: now, locked: true, breakUntil: 0, calendar: cal), .empty(next: nil))
+eq(Breaks.check(config, pool: 60_000, now: now, locked: true, breakUntil: 0, calendar: cal), .yes)
+config.off = [Schedule(days: 127, start: 11 * 60, end: 13 * 60)]
+eq(Breaks.check(config, pool: hour, now: now, locked: true, breakUntil: 0, calendar: cal), .offNow(until: date("2026-11-18 13:00").ms))
+let decoded = BreakConfig.decode("{\"minutes\":5,\"every\":30,\"cap\":45,\"reset\":true,\"makeUp\":true,\"off\":\"31:60:120\",\"shared\":false,\"challenge\":\"TAPS:100\",\"autoMinutes\":10,\"autoEvery\":90}")
+check(decoded.minutes == 5 && decoded.every == 30 && decoded.cap == 45 && decoded.reset && decoded.makeUp && !decoded.shared, "break config")
+check(decoded.autoMinutes == 10 && decoded.autoEvery == 90, "auto breaks")
+eq(BreakConfig.decode("{\"minutes\":5}").every, 60)
 eq(decoded.challenge, Challenge(type: .taps, amount: 100))
 eq(decoded.off, [Schedule(days: 31, start: 60, end: 120)])
 
@@ -205,7 +209,7 @@ eq(Lockdown.lockedUntil(Lockdown.effective(phone: phone, pending: [Command(type:
 // --- Reading the phone's state and the stream ---
 let json: [String: Any] = ["v": 2, "mac": ["manual": true, "timedUntil": 1_763_000_000_000 as Int64, "windows": [[1, 2], [5, 3]], "breakUntil": 7],
                            "phone": ["on": true, "until": 9, "timedUntil": 11], "tv": ["timedUntil": 12], "sites": ["0": "reddit.com", "1": "x.com"], "challenge": "WAIT:30",
-                           "applied": ["a"], "breaks": "{\"minutes\":2}"]
+                           "applied": ["a"], "breaks": "{\"minutes\":2}", "breakPool": 900_000, "breakPoolNext": 13]
 let read = PhoneState(json: json)!
 check(read.manual && read.timedUntil == 1_763_000_000_000 && read.breakUntil == 7 && read.phoneOn && read.phoneUntil == 9, "fields")
 eq(read.windows, [Window(start: 1, end: 2)])
@@ -215,6 +219,7 @@ eq(read.sites, ["reddit.com", "x.com"])
 eq(read.challenge, Challenge(type: .wait, amount: 30))
 eq(read.applied ?? [], ["a"])
 eq(read.breaks.minutes, 2)
+check(read.breakPool == 900_000 && read.breakPoolNext == 13, "break pool")
 // A phone from before
 let before = PhoneState(json: ["manualOn": false, "timedUntil": 5 as Int64, "unlock": "password", "schedules": ""])!
 check(before.timedUntil == 5 && before.challenge == Challenge(type: .password) && before.applied == nil, "old phone")
