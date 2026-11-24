@@ -27,8 +27,8 @@ import kotlin.concurrent.thread
  * - /lockdown/<key>/tv is the TV's apps, sent by the PC that watches the TV (tools/tv-time), which
  *   follows the TV's own lockdown from /phone's "tv": worked out here like the Mac's (on until turned
  *   off, a timer, its windows, its break), and the blocked apps.
- * - /lockdown/<key>/mac/commands is what the Mac asks for (start, add time, end, a break), each once;
- *   the phone removes them as it does them. /mac/installed is the Mac's apps, to choose from here.
+ * - /lockdown/<key>/mac/commands is what the Mac asks for (start, add time, end, a break, a changed
+ *   setting: see [RemoteSettings]), each once; the phone removes them as it does them. /mac/installed is the Mac's apps, to choose from here.
  *
  * Kept light on the battery: nothing stays connected. The phone sends its state only when it has
  * changed, and reads the Mac's side only when the phone is being used (unlocked, the home screen), at
@@ -278,6 +278,11 @@ object LockdownSync {
             .put("challenge", challenge.encode())
             .put("phrase", prefs.lockdownPhrase)
             .put("passwordHash", prefs.lockdownPasswordHash)
+            // The settings the Mac can change, as they're kept here (breaks, the challenge and the phrase are above)
+            .put("rules", JSONObject()
+                .put(RemoteSettings.SCHEDULES, Lockdown.formatSchedules(Lockdown.schedules(prefs)))
+                .put(RemoteSettings.TRIGGERS, Lockdown.formatTriggers(Lockdown.triggers(prefs)))
+                .put("passwordSet", prefs.isLockdownPasswordSet))
             // Written again, so breaks always say they're shared
             .put("breaks", Lockdown.breaks(prefs).encode())
             .put("breakLog", Breaks.encodeLog(Breaks.trim(Lockdown.breakLog(prefs), now)))
@@ -319,6 +324,7 @@ object LockdownSync {
     fun push(context: Context, final: Boolean = false) {
         if (!isOn(context) && !(final && linked(context))) return
         val prefs = Prefs(context)
+        noteLocalChanges(context, prefs)
         val state = runCatching { phoneState(context, prefs) }.getOrNull() ?: return
         val text = state.toString()
         val s = store(context)
@@ -367,6 +373,9 @@ object LockdownSync {
 
     private var lastPull = 0L
 
+    /** Called on the main thread after the Mac's side has been taken in, for a page that shows it */
+    var onPulled: (() -> Unit)? = null
+
     /** The ids of the Mac requests done here lately */
     private fun applied(context: Context): List<String> = runCatching {
         val a = JSONArray(store(context).getString("applied", "[]"))
@@ -387,7 +396,10 @@ object LockdownSync {
         thread {
             val text = runCatching { request(app, "GET", url, null) }.getOrNull() ?: return@thread
             val root = runCatching { JSONObject(text) }.getOrNull() ?: return@thread
-            android.os.Handler(android.os.Looper.getMainLooper()).post { runCatching { apply(app, root) } }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                runCatching { apply(app, root) }
+                runCatching { onPulled?.invoke() }
+            }
         }
     }
 
@@ -474,7 +486,64 @@ object LockdownSync {
             "break" -> if (Lockdown.breakLog(prefs).none { it.id == command.optString("id") })
                 Lockdown.startBreak(context, prefs, Lockdown.Device.MAC, command.optString("id"))
             "endBreak" -> Lockdown.endBreak(context, prefs)
+            "set" -> setFromMac(context, prefs, command.optString("key"), command.optString("value"), at)
         }
+    }
+
+    // --- Settings changed on the Mac (see RemoteSettings) ---
+
+    /** The settings the Mac can change, as kept here */
+    private fun settingValues(prefs: Prefs): Map<String, String> = mapOf(
+        RemoteSettings.SCHEDULES to prefs.lockdownSchedules,
+        RemoteSettings.TRIGGERS to prefs.lockdownTriggers,
+        RemoteSettings.BREAKS to prefs.lockdownBreaks,
+        RemoteSettings.CHALLENGE to prefs.lockdownChallenge,
+        RemoteSettings.PHRASE to prefs.lockdownPhrase,
+    )
+
+    private fun readMap(context: Context, name: String): JSONObject =
+        runCatching { JSONObject(store(context).getString(name, "{}")!!) }.getOrDefault(JSONObject())
+
+    /** When each setting last changed, here or from the Mac */
+    private fun changedAt(context: Context): Map<String, Long> = readMap(context, "settingsChanged").let { o -> o.keys().asSequence().associateWith { o.optLong(it) } }
+
+    private fun saveSeen(context: Context, seen: Map<String, String>, changed: Map<String, Long>) {
+        store(context).edit()
+            .putString("settingsSeen", JSONObject(seen).toString())
+            .putString("settingsChanged", JSONObject(changed).toString())
+            .apply()
+    }
+
+    /** Gives the settings changed here since the last look the time now */
+    private fun noteLocalChanges(context: Context, prefs: Prefs) {
+        val seenJson = readMap(context, "settingsSeen")
+        val seen = seenJson.keys().asSequence().associateWith { seenJson.optString(it) }
+        val current = settingValues(prefs)
+        val changed = RemoteSettings.stamp(current, seen, changedAt(context), System.currentTimeMillis())
+        if (seen != current || changed != changedAt(context)) saveSeen(context, current, changed)
+    }
+
+    /** Takes a setting changed on the Mac at [at], unless it was changed here after that */
+    private fun setFromMac(context: Context, prefs: Prefs, key: String, raw: String, at: Long) {
+        val value = RemoteSettings.normalize(key, raw, prefs.isLockdownPasswordSet) ?: return
+        noteLocalChanges(context, prefs)
+        if (!RemoteSettings.wins(at, changedAt(context)[key] ?: 0L)) return
+        when (key) {
+            RemoteSettings.SCHEDULES -> prefs.lockdownSchedules = value
+            RemoteSettings.TRIGGERS -> {
+                prefs.lockdownTriggers = value
+                Lockdown.checkTriggers(context, prefs)
+            }
+            RemoteSettings.BREAKS -> prefs.lockdownBreaks = value
+            RemoteSettings.CHALLENGE -> {
+                if (value != prefs.lockdownChallenge) Lockdown.cancelWait(prefs)
+                prefs.lockdownChallenge = value
+            }
+            RemoteSettings.PHRASE -> prefs.lockdownPhrase = value
+            else -> return
+        }
+        // Seen as it is now, changed when the Mac changed it
+        saveSeen(context, settingValues(prefs), changedAt(context) + (key to at))
     }
 
     private fun request(context: Context, method: String, url: String, body: String?): String {

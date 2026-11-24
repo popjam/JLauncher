@@ -234,6 +234,66 @@ eq(streamed.sites, ["a.com", "b.com"])
 tree.apply("put", at: "/", NSNull())
 check(tree.value == nil, "deleted")
 
+// --- Settings changed from the Mac (phone: RemoteSettingsTest, BreaksTest, ChallengeTest, LockdownTest) ---
+let ruled = PhoneState(json: ["mac": [:], "passwordHash": "", "phrase": "stay on task",
+                              "rules": ["schedules": "31:1320:420;96:1410:480", "triggers": "TOTAL:300:420:7;JUNK", "passwordSet": true]])!
+check(ruled.rulesKnown && ruled.passwordSet, "rules read")
+eq(ruled.schedules.map(\.encoded), ["31:1320:420", "96:1410:480"])
+eq(ruled.triggers, [Trigger(minutes: 300, until: 420)])
+check(!PhoneState(json: ["mac": [:]])!.rulesKnown, "phone from before sends no rules")
+eq(LockdownSettings.value(LockdownSettings.schedules, in: ruled), "31:1320:420;96:1410:480")
+eq(LockdownSettings.value(LockdownSettings.triggers, in: ruled), "TOTAL:300:420:7")
+// Schedules: taking one off, or covering less, loosens; adding doesn't
+let weeknights = Schedule(days: Schedule.weekdays, start: 1320, end: 420)
+check(Schedule.coverageLost([weeknights], []), "removed")
+check(Schedule.coverageLost([weeknights], [Schedule(days: Schedule.weekdays, start: 1380, end: 420)]), "later start")
+check(!Schedule.coverageLost([weeknights], [weeknights, Schedule(days: Schedule.weekends, start: 0, end: 0)]), "added")
+check(!Schedule.coverageLost([weeknights], [Schedule(days: Schedule.everyDay, start: 1320, end: 420)]), "more days")
+check(!Schedule.coverageLost([], [weeknights]), "none before")
+check(weeknights.covers(day: 1, minute: 60) && !weeknights.covers(day: 5, minute: 60) && weeknights.covers(day: 4, minute: 1400), "overnight")
+check(LockdownSettings.loosens(LockdownSettings.schedules, to: "", from: ruled), "all schedules off")
+check(!LockdownSettings.loosens(LockdownSettings.schedules, to: "31:1320:420;96:1410:480;127:0:0", from: ruled), "schedule added")
+// Lock after: more time first, another end, or taken off loosens
+check(LockdownSettings.loosens(LockdownSettings.triggers, to: "", from: ruled), "trigger off")
+check(LockdownSettings.loosens(LockdownSettings.triggers, to: "TOTAL:360:420:7", from: ruled), "more time")
+check(LockdownSettings.loosens(LockdownSettings.triggers, to: "TOTAL:300:360:7", from: ruled), "other end")
+check(!LockdownSettings.loosens(LockdownSettings.triggers, to: "TOTAL:240:420:7", from: ruled), "less time")
+check(!LockdownSettings.loosens(LockdownSettings.triggers, to: "TOTAL:300:420:7;TOTAL:600:60:7", from: ruled), "trigger added")
+// Challenges, as on the phone
+check(Challenge.loosens(Challenge(type: .random, amount: 200), Challenge(type: .random, amount: 80)), "fewer characters")
+check(!Challenge.loosens(Challenge(type: .random, amount: 80), Challenge(type: .random, amount: 200)), "more characters")
+check(Challenge.loosens(Challenge(type: .password), Challenge(type: .never)), "leaving the password")
+check(!Challenge.loosens(Challenge(type: .hold, amount: 30), Challenge(type: .wait, amount: 15)), "wait is harder")
+eq(Challenge(type: .random, amount: 200).difficulty(), 3)
+eq(Challenge(type: .never).difficulty(), 6)
+check(LockdownSettings.loosens(LockdownSettings.phrase, to: "short", from: ruled), "shorter phrase")
+check(!LockdownSettings.loosens(LockdownSettings.phrase, to: "stay on task, really", from: ruled), "longer phrase")
+// Breaks, as on the phone (BreaksTest)
+var strict = BreakConfig(); strict.minutes = 5; strict.every = 60; strict.cap = 30; strict.reset = true
+var more = strict; more.minutes = 10
+check(strict.loosens(to: more), "more earned")
+var capped = strict; capped.cap = 0
+check(strict.loosens(to: capped), "cap taken off")
+var fewer = strict; fewer.minutes = 2
+check(!strict.loosens(to: fewer), "less earned")
+var offAdded = strict; offAdded.off = [weeknights]
+check(!strict.loosens(to: offAdded) && offAdded.loosens(to: strict), "times off")
+var auto = strict; auto.autoMinutes = 5; auto.autoEvery = 50
+check(strict.loosens(to: auto), "automatic breaks on")
+// Written as the phone writes it, and read back the same
+var written = strict; written.off = [weeknights]; written.challenge = Challenge(type: .hold, amount: 30)
+let reread = BreakConfig.decode(written.encoded)
+check(reread.minutes == 5 && reread.cap == 30 && reread.reset && reread.off.map(\.encoded) == ["31:1320:420"] && reread.challenge == written.challenge, "breaks written")
+// A change made here shows straight away, until the phone has it
+let setCommand = Command(type: .set, devices: Devices.both, at: now, key: LockdownSettings.challenge, value: "TAPS:300")
+eq(Lockdown.effective(phone: ruled, pending: [setCommand], now: now).challenge, Challenge(type: .taps, amount: 300))
+var took = ruled; took.applied = [setCommand.id]
+eq(Lockdown.effective(phone: took, pending: [setCommand], now: now).challenge, ruled.challenge)
+eq(Lockdown.effective(phone: ruled, pending: [Command(type: .set, at: now - 25 * hour, key: LockdownSettings.phrase, value: "old one")], now: now).phrase, "stay on task")
+let coded = try! JSONDecoder().decode(Command.self, from: JSONEncoder().encode(setCommand))
+check(coded.key == LockdownSettings.challenge && coded.value == "TAPS:300", "set kept")
+check(setCommand.json["key"] as? String == "challenge" && setCommand.json["value"] as? String == "TAPS:300", "set sent")
+
 check(Firebase.validKey("abcdefghijkmnpqrstuvwxyz23456789abcdefgh"), "key")
 check(!Firebase.validKey("short"), "short key")
 check(Firebase.validURL("https://jl-default-rtdb.europe-west1.firebasedatabase.app"), "url")

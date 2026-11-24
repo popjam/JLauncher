@@ -6,6 +6,8 @@ enum Style {
     static let red = Color(red: 0xEF / 255, green: 0x53 / 255, blue: 0x50 / 255)
     static let orange = Color(red: 0xFF / 255, green: 0xA7 / 255, blue: 0x26 / 255)
     static let edge = Color.white.opacity(0.5)
+    /// What's chosen: the blocked pill, a ticked day
+    static let accent = Color(red: 0x8F / 255, green: 0xB3 / 255, blue: 1)
     static let faint = Color.white.opacity(195 / 255)
     /// Over a blocked app or site: nearly black
     static let shadeBlock = Color.black.opacity(0xF2 / 255)

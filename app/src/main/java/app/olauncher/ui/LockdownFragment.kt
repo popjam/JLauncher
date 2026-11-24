@@ -30,6 +30,8 @@ class LockdownFragment : LockdownBaseFragment() {
 
     override fun onResume() {
         super.onResume()
+        // Shows what the Mac changed as soon as it's read
+        LockdownSync.onPulled = { if (isAdded && holdLists.none { it.selecting }) render() }
         LockdownSync.pull(requireContext(), force = true)
         if (section == null) {
             if (arguments?.getBoolean(LOCK_FOR) == true) {
@@ -49,6 +51,7 @@ class LockdownFragment : LockdownBaseFragment() {
 
     override fun onPause() {
         main.removeCallbacks(refresh)
+        LockdownSync.onPulled = null
         super.onPause()
     }
 

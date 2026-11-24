@@ -18,6 +18,8 @@ final class Model: ObservableObject {
     @Published private(set) var syncError: String?
     /// Requests made here that the phone hasn't done yet, oldest first
     @Published private(set) var pending: [Command]
+    /// Settings changed here that the phone didn't take within a day (it ignores older requests), the latest for each setting
+    @Published private(set) var notApplied: [Command]
     /// The shared list of what's blocked, this Mac's copy
     @Published private(set) var items: [String: BlockItem]
     /// The phone's apps, to block from here: package to name
@@ -40,6 +42,7 @@ final class Model: ObservableObject {
         key = defaults.string(forKey: "key") ?? ""
         waitRequestedAt = Ms(defaults.integer(forKey: "waitRequestedAt"))
         pending = (defaults.data(forKey: "pendingList")).flatMap { try? JSONDecoder().decode([Command].self, from: $0) } ?? []
+        notApplied = (defaults.data(forKey: "notApplied")).flatMap { try? JSONDecoder().decode([Command].self, from: $0) } ?? []
         items = (defaults.data(forKey: "items")).flatMap { try? JSONSerialization.jsonObject(with: $0) }.map(BlockItems.decode) ?? [:]
         // The last state seen, so blocking works straight away and without a connection
         if let data = defaults.data(forKey: "phone"), let json = try? JSONSerialization.jsonObject(with: data) {
@@ -75,10 +78,34 @@ final class Model: ObservableObject {
     /// The Mac's requests haven't all reached the phone yet
     var waitingForPhone: Bool { pending.contains { !$0.applied(by: phone) && !$0.expired(now: now.ms) } }
 
+    /// The settings with a change here the phone hasn't taken yet
+    var waitingKeys: Set<String> {
+        Set(pending.filter { $0.type == .set && !$0.applied(by: phone) && !$0.expired(now: now.ms) }.compactMap(\.key))
+    }
+
     private func tick() {
         now = Date()
         let left = pending.filter { !$0.applied(by: phone) && !$0.expired(now: now.ms) }
-        if left.count != pending.count { setPending(left) }
+        if left.count != pending.count {
+            // A changed setting the phone never took goes back to the phone's value, and is said so
+            let lapsed = pending.filter { $0.type == .set && !$0.applied(by: phone) && $0.expired(now: now.ms) }
+            if !lapsed.isEmpty {
+                var list = notApplied
+                for command in lapsed.sorted(by: { $0.at < $1.at }) {
+                    list.removeAll { $0.key == command.key }
+                    list.append(command)
+                }
+                setNotApplied(list)
+            }
+            setPending(left)
+        }
+    }
+
+    func dismissNotApplied(_ command: Command) { setNotApplied(notApplied.filter { $0.id != command.id }) }
+
+    private func setNotApplied(_ list: [Command]) {
+        notApplied = list
+        if let data = try? JSONEncoder().encode(list) { defaults.set(data, forKey: "notApplied") }
     }
 
     // --- Pairing ---
@@ -105,6 +132,7 @@ final class Model: ObservableObject {
         itemsTask?.cancel(); itemsTask = nil
         url = ""; key = ""; phone = nil; lastHeard = nil; syncError = nil
         setPending([])
+        setNotApplied([])
         for k in ["url", "key", "phone"] { defaults.removeObject(forKey: k) }
     }
 
@@ -255,7 +283,17 @@ final class Model: ObservableObject {
         request(Command(type: .start, devices: Devices.both, until: ms.map { at + $0 } ?? 0, at: at))
     }
 
+    /// Lockdown until `until` (wall clock); never shortens one running, as on the phone
+    func start(until: Ms) { request(Command(type: .start, devices: Devices.both, until: until, at: Date().ms)) }
+
     func add(_ ms: Ms) { request(Command(type: .add, devices: Devices.both, ms: ms, at: Date().ms)) }
+
+    // --- Settings (see LockdownSettings): the whole new value, shown here at once, taken by the phone unless it changed it later ---
+
+    func set(_ key: String, _ value: String) {
+        setNotApplied(notApplied.filter { $0.key != key })
+        request(Command(type: .set, devices: Devices.both, at: Date().ms, key: key, value: value))
+    }
 
     /// Ends lockdown (on until turned off, and the timer). Only after what ending early needs.
     func end() {

@@ -111,6 +111,12 @@ public struct PhoneState: Equatable {
     /// The break time saved up (ms), shared by every device, and when it next gets more (wall clock), or 0
     public var breakPool: Ms = 0
     public var breakPoolNext: Ms = 0
+    /// The settings the Mac can change (see LockdownSettings): the schedules and Lock after as the phone keeps
+    /// them, and whether a password is set. `rulesKnown` is false from a phone from before, which doesn't send them.
+    public var rulesKnown = false
+    public var schedules: [Schedule] = []
+    public var triggers: [Trigger] = []
+    public var passwordSet = false
     public var updatedAt: Ms = 0
     /// The ids of the Mac requests the phone has done lately; nil from a phone from before
     public var applied: [String]?
@@ -162,6 +168,13 @@ public struct PhoneState: Equatable {
             breakPool = max(0, ms(o["breakPool"]))
             breakPoolNext = max(0, ms(o["breakPoolNext"]))
             applied = strings(o["applied"])
+            passwordSet = !passwordHash.isEmpty
+            if let rules = o["rules"] as? [String: Any] {
+                rulesKnown = true
+                schedules = Schedule.parse(rules["schedules"] as? String ?? "")
+                triggers = Trigger.parse(rules["triggers"] as? String ?? "")
+                passwordSet = rules["passwordSet"] as? Bool ?? passwordSet
+            }
         } else {
             // A phone from before
             manual = o["manualOn"] as? Bool ?? false
@@ -183,7 +196,7 @@ public struct PhoneState: Equatable {
 
 /// A request from the Mac, queued at /lockdown/<key>/mac/commands, for `devices`.
 public struct Command: Equatable, Codable {
-    public enum Kind: String, Codable { case start, add, end, `break`, endBreak }
+    public enum Kind: String, Codable { case start, add, end, `break`, endBreak, set }
     public var id: String
     public var type: Kind
     public var devices: Int
@@ -192,9 +205,14 @@ public struct Command: Equatable, Codable {
     /// add: how much; break: how long
     public var ms: Ms
     public var at: Ms
+    /// set: which setting (see LockdownSettings) and its whole new value
+    public var key: String?
+    public var value: String?
 
-    public init(id: String = UUID().uuidString, type: Kind, devices: Int = Devices.mac, until: Ms = 0, ms: Ms = 0, at: Ms) {
+    public init(id: String = UUID().uuidString, type: Kind, devices: Int = Devices.mac, until: Ms = 0, ms: Ms = 0, at: Ms,
+                key: String? = nil, value: String? = nil) {
         (self.id, self.type, self.devices, self.until, self.ms, self.at) = (id, type, devices, until, ms, at)
+        (self.key, self.value) = (key, value)
     }
 
     public init(from decoder: Decoder) throws {
@@ -205,9 +223,16 @@ public struct Command: Equatable, Codable {
         until = try c.decodeIfPresent(Ms.self, forKey: .until) ?? 0
         ms = try c.decodeIfPresent(Ms.self, forKey: .ms) ?? 0
         at = try c.decode(Ms.self, forKey: .at)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+        value = try c.decodeIfPresent(String.self, forKey: .value)
     }
 
-    public var json: [String: Any] { ["id": id, "type": type.rawValue, "devices": devices, "until": until, "ms": ms, "at": at] }
+    public var json: [String: Any] {
+        var o: [String: Any] = ["id": id, "type": type.rawValue, "devices": devices, "until": until, "ms": ms, "at": at]
+        if let key { o["key"] = key }
+        if let value { o["value"] = value }
+        return o
+    }
 
     public var forMac: Bool { devices & Devices.mac != 0 }
 
@@ -298,6 +323,9 @@ public enum Lockdown {
                 if e.end > command.at && e.start <= command.at { e.end = command.at }
                 return e
             }
+        case .set:
+            // Shown straight away; what has lockdown on (the windows) changes once the phone takes it
+            if let key = command.key, let value = command.value { LockdownSettings.apply(key, value, to: &state) }
         }
     }
 

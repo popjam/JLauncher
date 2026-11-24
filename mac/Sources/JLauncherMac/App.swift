@@ -88,13 +88,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(label("Phone · " + phoneLine(phone)))
         }
         if model.waitingForPhone { menu.addItem(label("Waiting for phone")) }
+        for command in model.notApplied {
+            menu.addItem(submenu("Not applied · " + LockdownSettings.name(command.key ?? ""), items: [
+                action("Resend") { RulesMenu.resend(command) },
+                action("Dismiss") { [model] in model.dismissNotApplied(command) },
+            ]))
+        }
         if let error = model.syncError { menu.addItem(label(error)) }
         menu.addItem(.separator())
 
+        // The phone's lengths, then until a time; "Until turned off" starts it, or keeps it on past its end
         let add = status.on
-        let lengths = Self.lengths.prefix(add ? 5 : 7).map { (title, ms) in
+        var lengths = Self.lengths.map { (title, ms) in
             action((add ? "+" : "") + title) { [model] in add ? model.add(ms) : model.start(for: ms) }
-        } + (add ? [NSMenuItem]() : [NSMenuItem.separator(), action("Until turned off") { [model] in model.start(for: nil) }])
+        }
+        lengths.append(action("Until a time…") { Dialog.show { UntilTimeView() } })
+        if !add {
+            lengths += [.separator(), action("Until turned off") { [model] in model.start(for: nil) }]
+        } else if !model.state.manual {
+            lengths += [.separator(), action("Until turned off…") { Dialog.show { KeepOnView() } }]
+        }
         menu.addItem(submenu(add ? "Add time" : "Start", items: lengths))
         if status.on && Lockdown.endable(model.state, now: Date().ms) {
             menu.addItem(action(endTitle(status)) { [model] in
@@ -124,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         let count = model.items.values.filter(\.blocked).count
         menu.addItem(action(count == 0 ? "Apps and websites…" : "Apps and websites · \(count)…") { Dialog.show(width: 460) { ItemsView() } })
+        menu.addItem(RulesMenu.item())
         if !Blocker.accessibilityOn {
             menu.addItem(action("Allow Accessibility (needed for websites)…") { Blocker.askForAccessibility() })
         }
@@ -181,25 +195,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // --- Menu helpers ---
 
-    private func label(_ title: String) -> NSMenuItem {
+    private func label(_ title: String) -> NSMenuItem { Menus.label(title) }
+
+    private func action(_ title: String, _ run: @escaping () -> Void) -> NSMenuItem { Menus.action(title, run) }
+
+    private func submenu(_ title: String, items: [NSMenuItem]) -> NSMenuItem { Menus.submenu(title, items: items) }
+}
+
+/// Building menu items
+@MainActor
+enum Menus {
+    static func label(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
         return item
     }
 
-    private func action(_ title: String, _ run: @escaping () -> Void) -> NSMenuItem {
+    static func action(_ title: String, enabled: Bool = true, ticked: Bool = false, _ run: @escaping () -> Void) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: "")
         let target = MenuAction(run)
         item.target = target
         item.representedObject = target // keeps it alive
+        item.isEnabled = enabled
+        item.state = ticked ? .on : .off
         return item
     }
 
-    private func submenu(_ title: String, items: [NSMenuItem]) -> NSMenuItem {
+    static func submenu(_ title: String, enabled: Bool = true, items: [NSMenuItem]) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let menu = NSMenu()
+        menu.autoenablesItems = false
         items.forEach(menu.addItem)
         item.submenu = menu
+        item.isEnabled = enabled
         return item
     }
 }
