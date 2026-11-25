@@ -175,6 +175,36 @@ object StatIcons {
         ".XXXXXXXXX.",
         "...........",
     )
+    /** A folded newspaper: a headline, a picture and columns, the back page showing on the right */
+    val NEWSPAPER = icon(
+        "...........",
+        "XXXXXXXXX..",
+        "X.......X..",
+        "X.XXXXX.XXX",
+        "X.......X.X",
+        "X.XX.XX.X.X",
+        "X.XX....X.X",
+        "X.XX.XX.X.X",
+        "X.......X.X",
+        ".XXXXXXXXX.",
+        "...........",
+    )
+
+    /** Projects: a folder */
+    val FOLDER = icon(
+        "...........",
+        "XXXX.......",
+        "X...X......",
+        "X....XXXXXX",
+        "X.........X",
+        "XXXXXXXXXXX",
+        "X.........X",
+        "X.........X",
+        "X.........X",
+        "XXXXXXXXXXX",
+        "...........",
+    )
+
     val BRIEFCASE = icon(
         "...........",
         "....XXX....",

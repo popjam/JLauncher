@@ -1231,7 +1231,7 @@
     <string name="lockdown_keep_on_button">Keep on</string>
     <string name="lockdown_starts_now">Lockdown starts now</string>
     <string name="lockdown_home_widget">Home widget</string>
-    <string name="info_lockdown_home_widget">A lock on the Home screen showing how long until lockdown ends. Tap it to add time; hold it to take a break. During a break it counts down the break; tap it to end the break.</string>
+    <string name="info_lockdown_home_widget">A lock on the Home screen showing how long until lockdown ends. Tap it to add time. Hold it to take a break, or during a break to end it. Keep holding it to open Lockdown. During a break it counts down the break.</string>
     <string name="lockdown_no_places">No places</string>
     <string name="lockdown_block_these">Block these</string>
     <string name="lockdown_only_allow">Only allow these</string>
@@ -1390,6 +1390,7 @@
     </plurals>
     <!-- The Reddit newsletter, run on the PC -->
     <string name="newsletter">Newsletter</string>
+    <string name="projects">Projects</string>
     <string name="newsletter_daily">Daily</string>
     <string name="newsletter_weekly">Weekly</string>
     <string name="newsletter_pc">PC</string>
@@ -1414,6 +1415,15 @@
     <string name="newsletter_pc_never">PC not seen yet</string>
     <string name="newsletter_issues">Issues</string>
     <string name="newsletter_no_issues">No issues yet</string>
+    <string name="newsletter_all">All</string>
+    <string name="newsletter_open">Open</string>
+    <string name="newsletter_download">Download</string>
+    <string name="newsletter_remove_download">Remove download</string>
+    <string name="newsletter_mark_read">Mark as read</string>
+    <string name="newsletter_mark_unread">Mark as unread</string>
+    <string name="newsletter_drive_folder">Drive folder</string>
+    <string name="newsletter_folder_set">Chosen</string>
+    <string name="newsletter_folder_none">Not chosen</string>
     <string name="newsletter_reader_mode">Reader</string>
     <string name="newsletter_scrolling">Scrolling</string>
     <string name="newsletter_pages">Pages</string>

@@ -57,6 +57,12 @@
     <string name="info_break_needs">What you have to do to take a break.</string>
     <string name="lockdown_break_make_up">Make up break time</string>
     <string name="info_break_make_up">Adds the time each break is used to the end of lockdown.</string>
+    <string name="lockdown_break_screen_off">End when the screen turns off</string>
+    <string name="info_break_screen_off">A break taken on the phone ends when its screen turns off, and what\'s left goes back in the pool. Breaks taken on the Mac or the TV, and automatic breaks, carry on.</string>
+    <string name="lockdown_break_bubble">Countdown over apps</string>
+    <string name="info_break_bubble">During a break, a small box over every app shows the time left. Drag it to move it. Needs the accessibility service.</string>
+    <string name="lockdown_break_bubble_size">Size</string>
+    <string name="info_break_bubble_size">How big the countdown box is.</string>
     <string name="lockdown_break_pool">Pool</string>
     <string name="lockdown_break_pool_value">%1$s · +%2$s in %3$s</string>
     <string name="lockdown_break_pool_full">%1$s · full</string>

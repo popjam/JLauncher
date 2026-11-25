@@ -671,6 +671,30 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(LOCKDOWN_HOME_WIDGET, false)
         set(value) = prefs.edit { putBoolean(LOCKDOWN_HOME_WIDGET, value) }
 
+    /** A break taken on the phone ends when its screen turns off */
+    var lockdownBreakEndsOnScreenOff: Boolean
+        get() = prefs.getBoolean("LOCKDOWN_BREAK_ENDS_SCREEN_OFF", true)
+        set(value) = prefs.edit { putBoolean("LOCKDOWN_BREAK_ENDS_SCREEN_OFF", value) }
+
+    /** A floating countdown over every app during a break */
+    var lockdownBreakBubble: Boolean
+        get() = prefs.getBoolean("LOCKDOWN_BREAK_BUBBLE", false)
+        set(value) = prefs.edit { putBoolean("LOCKDOWN_BREAK_BUBBLE", value) }
+
+    /** The bubble's size: 0 small, 1 medium, 2 large */
+    var lockdownBreakBubbleSize: Int
+        get() = prefs.getInt("LOCKDOWN_BREAK_BUBBLE_SIZE", 1)
+        set(value) = prefs.edit { putInt("LOCKDOWN_BREAK_BUBBLE_SIZE", value) }
+
+    /** Where the bubble was dragged to, as fractions of the screen; negative until it's moved */
+    var lockdownBreakBubbleX: Float
+        get() = prefs.getFloat("LOCKDOWN_BREAK_BUBBLE_X", -1f)
+        set(value) = prefs.edit { putFloat("LOCKDOWN_BREAK_BUBBLE_X", value) }
+
+    var lockdownBreakBubbleY: Float
+        get() = prefs.getFloat("LOCKDOWN_BREAK_BUBBLE_Y", -1f)
+        set(value) = prefs.edit { putFloat("LOCKDOWN_BREAK_BUBBLE_Y", value) }
+
     /** How much a tap on the home widget adds */
     var lockdownWidgetMinutes: Int
         get() = prefs.getInt(LOCKDOWN_WIDGET_MINUTES, 30)

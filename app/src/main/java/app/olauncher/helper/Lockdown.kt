@@ -467,7 +467,14 @@ object Lockdown {
         return runCatching { Social.currentPlace(context) }.getOrNull() in places
     }
 
-    fun isLocked(context: Context, lock: Lock, prefs: Prefs = Prefs(context)) = enabled(prefs, lock) && isActive(context, prefs)
+    /**
+     * A break lifts what lockdown blocks (apps, sites, the app list, hidden apps) but not what guards
+     * lockdown itself or the apps: those stay locked for as long as lockdown is on
+     */
+    fun isLocked(context: Context, lock: Lock, prefs: Prefs = Prefs(context)) =
+        enabled(prefs, lock) && if (lock in KEPT_ON_BREAK) isOn(context, prefs) else isActive(context, prefs)
+
+    private val KEPT_ON_BREAK = setOf(Lock.APP_CHANGES, Lock.LAUNCHER, Lock.PROTECT, Lock.SYSTEM_SETTINGS)
 
     fun enabled(prefs: Prefs, lock: Lock) = when (lock) {
         Lock.APP_LIST -> prefs.lockdownAppDrawer
@@ -762,6 +769,21 @@ object Lockdown {
         prefs.lockdownBreakUntil = 0L
         autoBreak(prefs, now)?.let { prefs.lockdownAutoBreakSkip = it.second }
         prefs.lockdownBreakLog = Breaks.encodeLog(Breaks.ended(breakLog(prefs), now, Device.values().map { it.name.lowercase() }.toSet()))
+    }
+
+    /**
+     * The phone's screen turned off: a break from the pool taken on the phone ends, when that's chosen,
+     * and what's left of it goes back in the pool. Breaks taken on the Mac or the TV, and automatic
+     * ones, carry on, as the phone's screen goes off while those are used.
+     */
+    fun screenOff(context: Context, prefs: Prefs = Prefs(context)): Boolean {
+        if (!prefs.lockdownBreakEndsOnScreenOff) return false
+        val now = System.currentTimeMillis()
+        if (prefs.lockdownBreakUntil <= now) return false
+        val running = breakLog(prefs).lastOrNull { it.start <= now && it.end > now } ?: return false
+        if (running.device != Device.PHONE.name.lowercase()) return false
+        endBreak(context, prefs)
+        return true
     }
 
     /**

@@ -41,6 +41,11 @@ import kotlin.concurrent.thread
  * scrolling or a page at a time, in the reader's own plain style (the book's own style and its
  * prev/next bars are left out). Images are off unless turned on. Where you were and what you've read
  * are kept for each issue.
+ *
+ * Reading: tapping the left or right side turns a page (scrolls a screen when scrolling); swiping
+ * left or right goes to the next post, or back to the start of this one and then the one before;
+ * swiping up opens the contents, and swiping down leaves the issue (when scrolling, only from the
+ * top). The contents are pulled down to leave too.
  */
 class NewsletterReaderFragment : CardPageFragment() {
 
@@ -52,6 +57,35 @@ class NewsletterReaderFragment : CardPageFragment() {
         private const val HOST = "book.local"
 
         fun paged(context: Context) = prefs(context).getBoolean("paged", false)
+
+        /** How much of [file] has been read, 0 to 1, or null when it hasn't been opened */
+        fun readFraction(context: Context, file: String): Float? {
+            val prefs = prefs(context)
+            val total = prefs.getInt("total_$file", 0)
+            if (total <= 0 || !prefs.contains("read_$file")) return null
+            if (prefs.getBoolean("done_$file", false)) return 1f
+            return readOf(prefs, file).size.toFloat() / total
+        }
+
+        /** Read to the end, or marked read */
+        fun finished(context: Context, file: String): Boolean {
+            val prefs = prefs(context)
+            if (prefs.getBoolean("done_$file", false)) return true
+            val total = prefs.getInt("total_$file", 0)
+            return total > 0 && readOf(prefs, file).size >= total
+        }
+
+        /** Marks [file] read, or unread again from the start */
+        fun setFinished(context: Context, file: String, on: Boolean) {
+            val edit = prefs(context).edit()
+            if (on) edit.putBoolean("done_$file", true)
+            else edit.remove("done_$file").remove("read_$file").remove("pos_$file")
+            edit.apply()
+        }
+
+        private fun readOf(prefs: android.content.SharedPreferences, file: String) =
+            prefs.getString("read_$file", "").orEmpty().split(',').mapNotNull { it.toIntOrNull() }.toSet()
+
         fun setPaged(context: Context, on: Boolean) = prefs(context).edit().putBoolean("paged", on).apply()
         private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     }
@@ -95,6 +129,16 @@ class NewsletterReaderFragment : CardPageFragment() {
         load()
     }
 
+    /** The cover shown while the issue downloads */
+    private var downloadCover: IssueCoverView? = null
+    private val downloadTick = object : Runnable {
+        override fun run() {
+            val cover = downloadCover ?: return
+            NewsletterIssues.downloads[file]?.let { if (cover.progress != it) cover.progress = it }
+            if (downloading) handler.postDelayed(this, 150L)
+        }
+    }
+
     private val back = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = showContents()
     }
@@ -122,7 +166,11 @@ class NewsletterReaderFragment : CardPageFragment() {
         readerView = FrameLayout(context).apply { isVisible = false; isClickable = true }
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, back)
         return FrameLayout(context).apply {
-            addView(contentsView)
+            // The contents are pulled down to leave, like any page; the reader does it with a swipe
+            addView(PullDismissLayout(context).apply {
+                addView(contentsView)
+                onDismiss = { leave() }
+            })
             addView(readerView)
         }
     }
@@ -157,28 +205,22 @@ class NewsletterReaderFragment : CardPageFragment() {
         }
         if (downloading) return
         downloading = true
-        status = getString(R.string.newsletter_downloading, 0, 0)
-        renderContents()
-        thread {
-            var lastShown = 0L
-            val ok = NewsletterIssues.fetch(context, file) { done, size ->
-                val now = System.currentTimeMillis()
-                if (now - lastShown > 300) {
-                    lastShown = now
-                    handler.post { status = progressText(done, size); if (isAdded && current < 0) renderContents() }
-                }
-            }
-            handler.post {
-                downloading = false
-                if (!isAdded) return@post
-                if (ok) open(local) else { status = getString(R.string.newsletter_not_on_drive); renderContents() }
-            }
+        status = null
+        NewsletterIssues.download(context, file, 0L) { ok ->
+            downloading = false
+            if (!isAdded) return@download
+            if (ok) open(local) else { status = getString(R.string.newsletter_not_on_drive); renderContents() }
         }
+        renderContents()
+        handler.removeCallbacks(downloadTick)
+        handler.post(downloadTick)
     }
 
-    private fun progressText(done: Long, size: Long): String {
-        val mb = { b: Long -> ((b + 512 * 1024) / (1024 * 1024)).toInt() }
-        return if (size > 0) getString(R.string.newsletter_downloading, mb(done), mb(size)) else getString(R.string.newsletter_downloading_unknown, mb(done))
+    /** Leaves the issue, keeping where it was */
+    private fun leave() {
+        if (!isAdded) return
+        savePosition()
+        findNavController().popBackStack()
     }
 
     private fun open(local: java.io.File) {
@@ -186,6 +228,8 @@ class NewsletterReaderFragment : CardPageFragment() {
         book.onSuccess {
             opened = it
             status = null
+            // For the cover's bar, how far through it is
+            prefs.edit().putInt("total_$file", it.book.pages.size).apply()
         }.onFailure {
             local.delete()
             status = getString(R.string.newsletter_cant_open)
@@ -207,14 +251,15 @@ class NewsletterReaderFragment : CardPageFragment() {
     private fun renderContents() {
         if (!isAdded) return
         cardList.removeAllViews()
+        downloadCover = null
         val book = opened?.book
         if (book == null) {
-            val card = Card(getString(R.string.newsletter_issue))
             when {
-                status != null -> card.body(line(status!!))
-                !NewsletterIssues.hasFolder(requireContext()) ->
-                    card.body(row(getString(R.string.newsletter_pick_folder), null) { pickFolder.launch(null) })
-                else -> card.body(line(getString(R.string.newsletter_loading)))
+                downloading -> cardList.addView(downloadingView())
+                status != null -> Card(getString(R.string.newsletter_issue)).body(line(status!!))
+                !NewsletterIssues.hasFolder(requireContext()) -> Card(getString(R.string.newsletter_issue))
+                    .body(row(getString(R.string.newsletter_pick_folder), null) { pickFolder.launch(null) })
+                else -> Card(getString(R.string.newsletter_issue)).body(line(getString(R.string.newsletter_loading)))
             }
             return
         }
@@ -245,6 +290,28 @@ class NewsletterReaderFragment : CardPageFragment() {
             first += section.pages.size
         }
         card.body(*rows.toTypedArray())
+    }
+
+    /** The issue's cover, large and centred, filling as it downloads */
+    private fun downloadingView(): View {
+        val context = requireContext()
+        val issue = NewsletterIssues.fromName(file)
+        val date = issue?.date?.take(10)?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+        val cover = IssueCoverView(context).apply {
+            kind = title.substringBefore(" · ").uppercase(Locale.getDefault())
+            day = date?.dayOfMonth?.toString().orEmpty()
+            month = date?.format(java.time.format.DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))?.uppercase(Locale.getDefault()).orEmpty()
+            weekday = date?.format(java.time.format.DateTimeFormatter.ofPattern("EEE", Locale.getDefault())).orEmpty()
+            progress = NewsletterIssues.downloads[file] ?: -1f
+            isClickable = false
+        }
+        downloadCover = cover
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 48.dpToPx(), 0, 0)
+            addView(cover, LinearLayout.LayoutParams((resources.displayMetrics.widthPixels * 0.46f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
     }
 
     private fun showContents() {
@@ -399,6 +466,10 @@ class NewsletterReaderFragment : CardPageFragment() {
         @JavascriptInterface fun tap() = handler.post { if (current >= 0) controls.isVisible = !controls.isVisible }
         @JavascriptInterface fun next() = handler.post { this@NewsletterReaderFragment.next() }
         @JavascriptInterface fun prev() = handler.post { previous() }
+        @JavascriptInterface fun nextStory() = handler.post { this@NewsletterReaderFragment.next() }
+        @JavascriptInterface fun prevStory() = handler.post { if (current > 0) openPage(current - 1, 0f) }
+        @JavascriptInterface fun contents() = handler.post { if (current >= 0) showContents() }
+        @JavascriptInterface fun exit() = handler.post { leave() }
     }
 
     private inner class Client : WebViewClient() {
@@ -512,6 +583,18 @@ class NewsletterReaderFragment : CardPageFragment() {
         };
         JL.next = function() { if (JL.paged && JL.page < JL.pages - 1) JL.go(JL.page + 1); else Reader.next(); };
         JL.prev = function() { if (JL.paged && JL.page > 0) JL.go(JL.page - 1); else Reader.prev(); };
+        JL.atTop = function() { return window.scrollY <= 2; };
+        JL.atBottom = function() { return window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2; };
+        // Scrolling: a screen down or up, or on to the next or previous post at either end
+        JL.screen = function(down) {
+          if (down) { if (JL.atBottom()) Reader.next(); else window.scrollBy({ top: window.innerHeight - 64, behavior: 'smooth' }); }
+          else { if (JL.atTop()) Reader.prev(); else window.scrollBy({ top: -(window.innerHeight - 64), behavior: 'smooth' }); }
+        };
+        // Back: to this post's start, or the post before when already there
+        JL.back = function() {
+          if (JL.paged ? JL.page > 0 : !JL.atTop()) { if (JL.paged) JL.go(0); else window.scrollTo(0, 0); }
+          else Reader.prevStory();
+        };
         document.addEventListener('DOMContentLoaded', function() {
           if (JL.paged) {
             var c = document.createElement('div');
@@ -522,20 +605,30 @@ class NewsletterReaderFragment : CardPageFragment() {
           setTimeout(function() { JL.measure(); JL.restore(JL.start); }, 30);
         });
         window.addEventListener('load', function() { if (JL.paged) { JL.measure(); JL.restore(JL.start); } });
-        var sx = 0, sy = 0;
+        var sx = 0, sy = 0, fromTop = true, fromBottom = false;
         // A swipe gives no click, so what it set is cleared at the next touch rather than eating that tap
-        document.addEventListener('touchstart', function(e) { JL.swiped = false; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+        document.addEventListener('touchstart', function(e) {
+          JL.swiped = false; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+          // Where the scroll was when the finger went down: up and down swipes only count from the ends
+          fromTop = JL.paged || JL.atTop(); fromBottom = JL.paged || JL.atBottom();
+        }, { passive: true });
         document.addEventListener('touchend', function(e) {
-          if (!JL.paged) return;
           var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
-          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { JL.swiped = true; if (dx < 0) JL.next(); else JL.prev(); }
+          var ax = Math.abs(dx), ay = Math.abs(dy);
+          if (ax > 60 && ax > ay * 1.5) {
+            JL.swiped = true;
+            if (dx < 0) Reader.nextStory(); else JL.back();
+          } else if (ay > 90 && ay > ax * 1.5) {
+            if (dy > 0 && fromTop) { JL.swiped = true; Reader.exit(); }
+            else if (dy < 0 && fromBottom) { JL.swiped = true; Reader.contents(); }
+          }
         }, { passive: true });
         document.addEventListener('click', function(e) {
           if (JL.swiped) { JL.swiped = false; return; }
           if (e.target.closest && e.target.closest('a')) return;
           var x = e.clientX / window.innerWidth;
-          if (JL.paged && x < 0.3) JL.prev();
-          else if (JL.paged && x > 0.7) JL.next();
+          if (x < 0.3) { if (JL.paged) JL.prev(); else JL.screen(false); }
+          else if (x > 0.7) { if (JL.paged) JL.next(); else JL.screen(true); }
           else Reader.tap();
         });
     """

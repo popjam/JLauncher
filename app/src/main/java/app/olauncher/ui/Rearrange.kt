@@ -30,13 +30,25 @@ import kotlin.math.hypot
  * A view's touch listener for holding and dragging it. Holding lifts it; moving then starts a drag
  * with [start] (null if it can't be moved now). Letting go without moving does [onHold] instead.
  * Until it's lifted, touches go on to [then] (the view's own touch listener, if it has one) and then
- * the view itself, so taps, swipes and scrolling work as before.
+ * the view itself, so taps, swipes and scrolling work as before. With [onLongHold], keeping it held
+ * still for [LONG_HOLD_MS] after it lifts does that at once instead, and letting go then does nothing.
  */
 class HoldToDrag(
     private val then: View.OnTouchListener? = null,
     private val onHold: (View) -> Unit = { it.performLongClick() },
+    private val onLongHold: ((View) -> Unit)? = null,
     private val start: (view: View, x: Float, y: Float) -> DragSession?,
 ) : View.OnTouchListener {
+
+    private var longHeld = false
+    private val longHold = Runnable {
+        val v = view ?: return@Runnable
+        if (!lifted || session != null || !v.isAttachedToWindow) return@Runnable
+        longHeld = true
+        v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+        onLongHold?.invoke(v)
+    }
 
     private var lifted = false
     private var session: DragSession? = null
@@ -53,6 +65,7 @@ class HoldToDrag(
                 downX = event.rawX
                 downY = event.rawY
                 lifted = false
+                longHeld = false
                 session = null
                 // Just before the view's own long press, so that's cancelled rather than done
                 v.postDelayed(lift, (ViewConfiguration.getLongPressTimeout() - 60L).coerceAtLeast(250L))
@@ -62,15 +75,25 @@ class HoldToDrag(
                 if (!lifted) {
                     if (moved) v.removeCallbacks(lift)
                 } else {
-                    if (session == null && moved) session = start(v, downX, downY)
+                    if (longHeld) return true
+                    if (session == null && moved) {
+                        v.removeCallbacks(longHold)
+                        session = start(v, downX, downY)
+                    }
                     session?.move(event.rawX, event.rawY)
                     return true
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 v.removeCallbacks(lift)
+                v.removeCallbacks(longHold)
                 if (lifted) {
                     lifted = false
+                    if (longHeld) {
+                        longHeld = false
+                        session = null
+                        return true
+                    }
                     v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
                     val dragged = session
                     session = null
@@ -103,6 +126,12 @@ class HoldToDrag(
         v.parent?.requestDisallowInterceptTouchEvent(true)
         v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         v.animate().scaleX(1.04f).scaleY(1.04f).setDuration(120).start()
+        if (onLongHold != null) v.postDelayed(longHold, LONG_HOLD_MS)
+    }
+
+    companion object {
+        /** How much longer than a hold a long hold is */
+        const val LONG_HOLD_MS = 900L
     }
 }
 

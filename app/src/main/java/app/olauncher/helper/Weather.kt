@@ -92,10 +92,8 @@ object Weather {
             else String.format(Locale.getDefault(), "%.1f mm", amount)
     }
 
-    /** What the home screen shows under the icon: today's high and the UV index now. */
-    fun homeText(day: Day, uv: Int) = if (uv >= HIGH_UV) "${day.max}° · UV $uv" else "${day.max}°"
-
-    private const val HIGH_UV = 6
+    /** What the home screen shows under the icon: the UV index now; the icon's colour gives the heat */
+    fun homeText(uv: Int) = "UV $uv"
 
     /** Colours from cold to hot, at temperatures in °C */
     private val TEMP_COLORS = Style.TEMPERATURE

@@ -676,6 +676,25 @@ abstract class LockdownBaseFragment : SettingsBaseFragment() {
             switch("makeUp", getString(R.string.lockdown_break_make_up), R.string.info_break_make_up, config.makeUp, level = 1, enabled = on) {
                 saveBreaks(config, config.copy(makeUp = !config.makeUp))
             },
+            // Off lets a break run on with the phone put down, so turning it off is loosening
+            switch("screenOff", getString(R.string.lockdown_break_screen_off), R.string.info_break_screen_off,
+                prefs.lockdownBreakEndsOnScreenOff, level = 1, enabled = on) {
+                val change = { prefs.lockdownBreakEndsOnScreenOff = !prefs.lockdownBreakEndsOnScreenOff; render() }
+                if (prefs.lockdownBreakEndsOnScreenOff) gate.loosen(change) else change()
+            },
+            // Automatic breaks count down too, so this isn't greyed with manual breaks off
+            switch("bubble", getString(R.string.lockdown_break_bubble), R.string.info_break_bubble, prefs.lockdownBreakBubble, level = 1) {
+                prefs.lockdownBreakBubble = !prefs.lockdownBreakBubble
+                app.olauncher.helper.MyAccessibilityService.refreshBreakBubble()
+                render()
+            },
+            if (prefs.lockdownBreakBubble) cycle("bubbleSize", getString(R.string.lockdown_break_bubble_size), R.string.info_break_bubble_size,
+                listOf(getString(R.string.size_small), getString(R.string.size_normal), getString(R.string.size_large)),
+                prefs.lockdownBreakBubbleSize.coerceIn(0, 2), level = 2) {
+                prefs.lockdownBreakBubbleSize = it
+                app.olauncher.helper.MyAccessibilityService.refreshBreakBubble()
+                render()
+            } else null,
             row("noBreaks", getString(R.string.lockdown_no_breaks_during), R.string.info_break_off, level = 1, enabled = on),
         ) + offRows.map { it.second } + listOf(
             addRow("addOff", R.string.info_lockdown_add_break_off, level = 2, enabled = on) {

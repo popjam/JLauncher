@@ -340,11 +340,13 @@ class MoodStore(context: Context) {
         }
     }
 
-    /** Supplements' row keeps its place when [ids] leaves it out. */
+    /** Supplements' and Projects' rows keep their places when [ids] leaves them out. */
     fun setOrder(ids: List<String>) = update { data ->
-        val supplements = data.order.indexOf(SUPPLEMENTS)
         val order = ids.toMutableList()
-        if (SUPPLEMENTS !in order && supplements >= 0) order.add(supplements.coerceAtMost(order.size), SUPPLEMENTS)
+        for (kept in listOf(SUPPLEMENTS, PROJECTS)) {
+            val place = data.order.indexOf(kept)
+            if (kept !in order && place >= 0) order.add(place.coerceAtMost(order.size), kept)
+        }
         data.order.clear()
         data.order.addAll(order)
     }
@@ -753,6 +755,9 @@ class MoodStore(context: Context) {
 
         /** The check-in's supplements question and the list after "Changed": steps, never stats */
         const val SUPPLEMENTS = "supplements"
+
+        /** The Projects row in the stats list: not a stat, but kept in their order so it can be moved among them */
+        const val PROJECTS = "projects"
         const val SUPPLEMENT_CHANGES = "supplementChanges"
         /** Supplements' colour in the stats list and the check-in */
         const val SUPPLEMENTS_COLOR = Style.Palette.TEAL_DEEP

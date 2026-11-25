@@ -126,8 +126,21 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
         val values = todayValues(data)
         statList.attach(rows, scroll)
         fun open(id: String) = findNavController().navigate(R.id.action_statListFragment_to_statFragment, bundleOf(StatFragment.STAT_ID to id))
-        // In the stat pages' order: Supplements sits among the stats where it was dragged to, at the top until then
-        StatFragment.pageIds(context).forEach { id ->
+        // In the stat pages' order: Supplements sits among the stats where it was dragged to, at the top until
+        // then; Projects too, last until it's moved
+        val ids = StatFragment.pageIds(context).toMutableList()
+        val projectsAt = data.order.indexOf(MoodStore.PROJECTS).takeIf { it >= 0 }
+            ?.let { at -> ids.count { data.order.indexOf(it) in 0 until at } } ?: ids.size
+        ids.add(projectsAt.coerceIn(0, ids.size), MoodStore.PROJECTS)
+        ids.forEach { id ->
+            if (id == MoodStore.PROJECTS) {
+                val row = row(getString(R.string.projects), StatIcons.FOLDER, PROJECTS_COLOR, null) {}
+                rows.addView(row)
+                statList.item(row, id, label = getString(R.string.projects), selectable = false, onTap = {
+                    findNavController().navigate(R.id.action_statListFragment_to_projectsFragment)
+                })
+                return@forEach
+            }
             if (id == MoodStore.SUPPLEMENTS) {
                 val row = row(getString(R.string.supplements), StatIcons.TABLET, MoodStore.SUPPLEMENTS_COLOR,
                     data.supplements.takeIf { it.isNotEmpty() }?.let { getString(R.string.supplements_today, app.olauncher.data.Supplements.takenCount(it, LocalDate.now())) }) {}
@@ -218,6 +231,9 @@ class StatListFragment : Fragment(R.layout.fragment_stat_list) {
     }
 
     companion object {
+        /** Projects' folder, in the stats' colours */
+        val PROJECTS_COLOR = Style.Palette.GOLD
+
         private val ADD = StatIcons.run {
             listOf(
                 "...........",

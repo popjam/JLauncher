@@ -86,6 +86,13 @@
             app:exitAnim="@anim/fade_exit"
             app:popEnterAnim="@anim/fade_enter"
             app:popExitAnim="@anim/fade_exit" />
+        <action
+            android:id="@+id/action_statListFragment_to_projectsFragment"
+            app:destination="@id/projectsFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
     </fragment>
 
     <!-- Every note written, searchable, from the stat list -->
@@ -183,11 +190,40 @@
         android:name="app.olauncher.ui.LockdownPageFragment"
         android:label="LockdownPageFragment" />
 
-    <!-- The Reddit newsletter: running it on the PC, its settings, and reading its issues -->
+    <!-- Projects, from the stats list: each opens its own page -->
+    <fragment
+        android:id="@+id/projectsFragment"
+        android:name="app.olauncher.ui.ProjectsFragment"
+        android:label="ProjectsFragment">
+        <action
+            android:id="@+id/action_projectsFragment_to_newsletterFragment"
+            app:destination="@id/newsletterFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+    </fragment>
+
+    <!-- The Reddit newsletter: its issues, running it on the PC, and its settings -->
     <fragment
         android:id="@+id/newsletterFragment"
         android:name="app.olauncher.ui.NewsletterFragment"
-        android:label="NewsletterFragment" />
+        android:label="NewsletterFragment">
+        <action
+            android:id="@+id/action_newsletterFragment_to_readerFragment"
+            app:destination="@id/newsletterReaderFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+        <action
+            android:id="@+id/action_newsletterFragment_to_settingsFragment"
+            app:destination="@id/newsletterSettingsFragment"
+            app:enterAnim="@anim/fade_enter"
+            app:exitAnim="@anim/fade_exit"
+            app:popEnterAnim="@anim/fade_enter"
+            app:popExitAnim="@anim/fade_exit" />
+    </fragment>
 
     <fragment
         android:id="@+id/newsletterSettingsFragment"

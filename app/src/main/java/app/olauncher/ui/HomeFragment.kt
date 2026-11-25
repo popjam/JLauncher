@@ -361,7 +361,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             binding.weatherIcon.code = today.code
             binding.weatherIcon.tint = Weather.tempColor(now?.temp ?: today.max, it.fahrenheit)
             binding.weatherIcon.contentDescription = Weather.conditionName(requireContext(), today.code)
-            binding.tvWeather.text = Weather.homeText(today, now?.uv ?: today.uv)
+            binding.tvWeather.text = Weather.homeText(now?.uv ?: today.uv)
         }
         binding.mainLayout.viewTreeObserver.addOnGlobalLayoutListener { alignScreenTimeWithDateTime() }
         viewModel.showRecentApps.observe(viewLifecycleOwner) {
@@ -471,17 +471,37 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
             // Its own width, not the column's: a column sized to its children leaves out ones that fill it, so the time was cut to the lock's width
             addView(lockdownWidgetText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(lockdownWidgetPool, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            setOnClickListener { onLockdownWidgetTap() }
-            // Held without dragging: a break, when breaks are on and lockdown is; otherwise the Lockdown page
-            setOnLongClickListener {
-                if (Lockdown.breaks(prefs).on && Lockdown.isOn(requireContext(), prefs) && !Lockdown.onBreak(prefs)) {
-                    buzz(requireContext())
-                    lockdownGate.takeBreak { populateLockdownWidget() }
-                } else runCatching { findNavController().navigate(R.id.lockdownFragment) }
-                true
-            }
-            setOnTouchListener(HoldToDrag { _, x, y -> startWidgetDrag(Arrangement.LOCKDOWN, x, y) })
+            setOnClickListener { addLockdownTime() }
+            // Held and let go: between a break and lockdown; held on: the Lockdown page; held and dragged: moved
+            setOnTouchListener(HoldToDrag(onHold = { onLockdownWidgetHold() }, onLongHold = { openLockdown() }) { _, x, y ->
+                startWidgetDrag(Arrangement.LOCKDOWN, x, y)
+            })
         }
+    }
+
+    /**
+     * Held: on a break, the break ends and lockdown blocks again; locked with breaks on, a break; with
+     * lockdown off or no breaks, there's nothing to switch, so the Lockdown page
+     */
+    private fun onLockdownWidgetHold() {
+        val context = requireContext()
+        val on = Lockdown.isOn(context, prefs)
+        when {
+            on && Lockdown.onBreak(prefs) -> {
+                buzz(context)
+                lockdownGate.endBreak()
+                populateLockdownWidget()
+            }
+            on && Lockdown.breaks(prefs).on -> {
+                buzz(context)
+                lockdownGate.takeBreak { populateLockdownWidget() }
+            }
+            else -> openLockdown()
+        }
+    }
+
+    private fun openLockdown() {
+        runCatching { findNavController().navigate(R.id.lockdownFragment) }
     }
 
     /** Asks for and starts breaks from the home screen */
@@ -529,18 +549,7 @@ class HomeFragment : Fragment(), View.OnClickListener, View.OnLongClickListener 
         if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) handler.postDelayed(lockdownTick, if (onBreak) 1_000 else 30_000)
     }
 
-    /** A tap: during a break, the break ends at once; otherwise the set amount more of timed lockdown, straight away */
-    private fun onLockdownWidgetTap() {
-        val context = requireContext()
-        if (Lockdown.isOn(context, prefs) && Lockdown.onBreak(prefs)) {
-            buzz(context)
-            lockdownGate.endBreak()
-            return populateLockdownWidget()
-        }
-        addLockdownTime()
-    }
-
-    /** The set amount more of timed lockdown, on the devices Start uses */
+    /** A tap: the set amount more of timed lockdown, on the devices Start uses */
     private fun addLockdownTime() {
         val context = requireContext()
         Lockdown.addTime(context, prefs.lockdownWidgetMinutes * 60_000L, prefs)

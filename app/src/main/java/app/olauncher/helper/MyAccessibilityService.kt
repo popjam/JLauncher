@@ -49,6 +49,21 @@ class MyAccessibilityService : AccessibilityService() {
             .enabledInputMethodList.map { it.packageName }.toSet()
         main.postDelayed(recheck, RECHECK_MS)
         runCatching { registerReceiver(unlocked, android.content.IntentFilter(Intent.ACTION_USER_PRESENT)) }
+        runCatching { registerReceiver(screenOff, android.content.IntentFilter(Intent.ACTION_SCREEN_OFF)) }
+        breakBubble.start()
+    }
+
+    /** The break's countdown over every app, when it's turned on */
+    private val breakBubble by lazy { BreakBubble(this) }
+
+    /** The screen went off: a break taken on the phone ends, when that's chosen */
+    private val screenOff = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = CrashLog.guard {
+            if (Lockdown.screenOff(context)) {
+                LockdownSystem.sync(context)
+                breakBubble.refresh()
+            }
+        }
     }
 
     /** The phone was unlocked: a moment the Mac's requests are read, as it's in use */
@@ -654,6 +669,8 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
         runCatching { unregisterReceiver(unlocked) }
+        runCatching { unregisterReceiver(screenOff) }
+        breakBubble.stop()
         main.removeCallbacks(guard)
         main.removeCallbacks(recheck)
         main.removeCallbacks(siteCheck)
@@ -665,6 +682,8 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         instance = null
         runCatching { unregisterReceiver(unlocked) }
+        runCatching { unregisterReceiver(screenOff) }
+        breakBubble.stop()
         main.removeCallbacks(guard)
         main.removeCallbacks(recheck)
         main.removeCallbacks(siteCheck)
@@ -709,6 +728,11 @@ class MyAccessibilityService : AccessibilityService() {
             }
 
         val isRunning get() = instance != null
+
+        /** Shows or hides the break's countdown now, after a break or its setting changes */
+        fun refreshBreakBubble() {
+            instance?.breakBubble?.refresh()
+        }
 
         fun closeIfShowing(packageName: String) {
             instance?.timeUp(packageName)

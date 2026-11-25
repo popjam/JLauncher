@@ -132,6 +132,8 @@ class BatteryWatcher(private val context: Context) {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_SCREEN_ON || intent.action == Intent.ACTION_SCREEN_OFF) Workload.screenChanged(context)
+            // Also here, for when the accessibility service (which does the same) isn't on
+            if (intent.action == Intent.ACTION_SCREEN_OFF) runCatching { if (Lockdown.screenOff(context)) LockdownSystem.sync(context) }
             runCatching { Workload.track(context, Workload.BATTERY) { Battery.record(context) } }
         }
     }
