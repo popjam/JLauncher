@@ -496,7 +496,9 @@ class NewsletterReaderFragment : CardPageFragment() {
         };
         JL.go = function(p) {
           JL.page = Math.max(0, Math.min(JL.pages - 1, p));
-          window.scrollTo(JL.page * window.innerWidth, 0);
+          // The body clips the columns (html and body both hide overflow), so the window can't scroll
+          // to a page: the columns are moved instead
+          document.getElementById('jl-cols').style.transform = 'translateX(' + (-JL.page * window.innerWidth) + 'px)';
           Reader.pages(JL.page, JL.pages);
         };
         JL.position = function() {
@@ -521,7 +523,8 @@ class NewsletterReaderFragment : CardPageFragment() {
         });
         window.addEventListener('load', function() { if (JL.paged) { JL.measure(); JL.restore(JL.start); } });
         var sx = 0, sy = 0;
-        document.addEventListener('touchstart', function(e) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+        // A swipe gives no click, so what it set is cleared at the next touch rather than eating that tap
+        document.addEventListener('touchstart', function(e) { JL.swiped = false; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
         document.addEventListener('touchend', function(e) {
           if (!JL.paged) return;
           var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
