@@ -25,8 +25,9 @@ import org.json.JSONObject
 import kotlin.concurrent.thread
 
 /**
- * A newsletter profile's settings, as the PC sent them: its subreddits, and how posts, comments,
- * images and the book are done. With [SUBREDDIT], one subreddit's own settings instead. Each change
+ * A newsletter profile's settings, as the PC sent them: its subreddits, posts, comments and title. For
+ * [NewsletterSync.SHARED], what both newsletters share instead: images, where posts are read from and
+ * the book's look. With [SUBREDDIT], one subreddit's own settings. Each change
  * goes to the PC, which writes it into the profile's file there; the email and Reddit logins never
  * leave the PC.
  */
@@ -165,6 +166,7 @@ class NewsletterSettingsFragment : CardPageFragment() {
         val title = when {
             subIndex >= 0 -> sub?.let { "r/${it.name}" } ?: ""
             profile == NewsletterSync.WEEKLY -> getString(R.string.newsletter_weekly)
+            profile == NewsletterSync.SHARED -> getString(R.string.newsletter_shared)
             else -> getString(R.string.newsletter_daily)
         }
         headerHolder?.addView(pageHeader(context, StatIcons.BOOK, title) { findNavController().popBackStack() })
@@ -172,6 +174,10 @@ class NewsletterSettingsFragment : CardPageFragment() {
         if (s == null) return
         if (subIndex >= 0) {
             if (sub != null && subs != null) cardList.addView(settingsList(subredditPage(s, subs, subIndex)).view)
+            return
+        }
+        if (profile == NewsletterSync.SHARED) {
+            cardList.addView(settingsList(sharedPage(s)).view)
             return
         }
         val items = subredditsSection(s, subs.orEmpty()).toMutableList()
@@ -185,7 +191,6 @@ class NewsletterSettingsFragment : CardPageFragment() {
             "defaults" to Setting("skipImageAndGalleryPosts", Kind.BOOL),
             "defaults" to Setting("allowImagePostsIfCantFindOtherPosts", Kind.BOOL),
             "defaults" to Setting("skipUnfetchableArticles", Kind.BOOL),
-            "reddit" to Setting("sourceMode", Kind.CHOICE, NewsletterSync.SOURCE_MODES),
         ))
         items += section(R.string.newsletter_comments, s, listOf(
             "defaults" to Setting("commentsPerPost", Kind.INT),
@@ -195,15 +200,8 @@ class NewsletterSettingsFragment : CardPageFragment() {
             "defaults" to Setting("skipAutoModerator", Kind.BOOL),
             "defaults" to Setting("showNestedCommentGuideLines", Kind.BOOL),
         ))
-        items += section(R.string.newsletter_images, s, listOf(
-            "reddit" to Setting("downloadImages", Kind.BOOL),
-            "reddit" to Setting("imageOptimizationPreset", Kind.CHOICE, NewsletterSync.IMAGE_PRESETS),
-        ))
         items += section(R.string.newsletter_book, s, listOf(
             "epub" to Setting("title", Kind.TEXT),
-            "epub" to Setting("generateDatedCover", Kind.BOOL),
-            "epub" to Setting("hierarchicalTOC", Kind.BOOL),
-            "epub" to Setting("simplifiedTOC", Kind.BOOL),
         ))
         val list = settingsList(items)
         cardList.addView(list.view)
@@ -220,6 +218,22 @@ class NewsletterSettingsFragment : CardPageFragment() {
             ))
         }
     }
+
+    // --- What both share ---
+
+    private fun sharedPage(s: JSONObject): List<SettingItem> =
+        section(R.string.newsletter_images, s, listOf(
+            "reddit" to Setting("downloadImages", Kind.BOOL),
+            "reddit" to Setting("imageOptimizationPreset", Kind.CHOICE, NewsletterSync.IMAGE_PRESETS),
+            "reddit" to Setting("galleryFirstImageOnly", Kind.BOOL),
+            "reddit" to Setting("articleImages", Kind.CHOICE, NewsletterSync.ARTICLE_IMAGES),
+        )) + section(R.string.newsletter_posts, s, listOf(
+            "reddit" to Setting("sourceMode", Kind.CHOICE, NewsletterSync.SOURCE_MODES),
+        )) + section(R.string.newsletter_book, s, listOf(
+            "epub" to Setting("generateDatedCover", Kind.BOOL),
+            "epub" to Setting("hierarchicalTOC", Kind.BOOL),
+            "epub" to Setting("simplifiedTOC", Kind.BOOL),
+        ))
 
     // --- The profile ---
 
@@ -400,6 +414,8 @@ class NewsletterSettingsFragment : CardPageFragment() {
         "showNestedCommentGuideLines" -> R.string.info_nl_guides
         "downloadImages" -> R.string.info_nl_download_images
         "imageOptimizationPreset" -> R.string.info_nl_image_quality
+        "galleryFirstImageOnly" -> R.string.info_nl_gallery_first
+        "articleImages" -> R.string.info_nl_article_images
         "title" -> R.string.info_nl_title
         "generateDatedCover" -> R.string.info_nl_cover
         "hierarchicalTOC" -> R.string.info_nl_toc_grouped
@@ -432,6 +448,8 @@ class NewsletterSettingsFragment : CardPageFragment() {
         "showNestedCommentGuideLines" -> R.string.newsletter_set_guides
         "downloadImages" -> R.string.newsletter_set_download_images
         "imageOptimizationPreset" -> R.string.newsletter_set_image_quality
+        "galleryFirstImageOnly" -> R.string.newsletter_set_gallery_first
+        "articleImages" -> R.string.newsletter_set_article_images
         "title" -> R.string.newsletter_set_title
         "generateDatedCover" -> R.string.newsletter_set_cover
         "hierarchicalTOC" -> R.string.newsletter_set_toc_grouped

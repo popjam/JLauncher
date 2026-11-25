@@ -435,7 +435,7 @@ class NewsletterFragment : CardPageFragment() {
         val context = requireContext()
         val card = Card(getString(R.string.settings))
         val profiles = snap?.let { s ->
-            NewsletterSync.PROFILES.filter { s.profiles.containsKey(it) }.map { profile ->
+            (listOf(NewsletterSync.SHARED) + NewsletterSync.PROFILES).filter { s.profiles.containsKey(it) }.map { profile ->
                 row(profileName(profile), null) {
                     findNavController().navigate(R.id.action_newsletterFragment_to_settingsFragment, bundleOf(NewsletterSettingsFragment.PROFILE to profile))
                 }
@@ -456,6 +456,7 @@ class NewsletterFragment : CardPageFragment() {
     private fun profileName(profile: String) = when (profile) {
         NewsletterSync.DAILY -> getString(R.string.newsletter_daily)
         NewsletterSync.WEEKLY -> getString(R.string.newsletter_weekly)
+        NewsletterSync.SHARED -> getString(R.string.newsletter_shared)
         else -> profile.replaceFirstChar { it.titlecase(Locale.getDefault()) }
     }
 

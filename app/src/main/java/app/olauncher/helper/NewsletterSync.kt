@@ -14,7 +14,8 @@ import java.net.URL
  * - requests/<id>: what this phone asks for (run a profile, stop, change a profile's settings), each
  *   done once by the PC and removed;
  * - status: the run going or the last one, with how far it's got;
- * - profiles/<name>: each profile's settings (never the email or Reddit logins, which stay on the PC);
+ * - profiles/<name>: each profile's settings (never the email or Reddit logins, which stay on the PC),
+ *   and under [SHARED] what both share (images, the source, the book's look);
  * - issues: the issues on Drive, newest first;
  * - bridge: when the PC was last heard from.
  *
@@ -26,6 +27,8 @@ object NewsletterSync {
     const val DAILY = "daily"
     const val WEEKLY = "weekly"
     val PROFILES = listOf(DAILY, WEEKLY)
+    /** The settings both newsletters share; changed like a profile's, but never run */
+    const val SHARED = "shared"
 
     /** How long before the PC counts as not running the bridge; it says it's there every 5 minutes */
     const val PC_AWAY_MS = 15 * 60_000L
@@ -40,6 +43,7 @@ object NewsletterSync {
     val COMMENT_STYLES = listOf("threaded", "nested", "html")
     val SOURCE_MODES = listOf("html", "rss", "json", "auto")
     val IMAGE_PRESETS = listOf("default", "aggressive", "extreme")
+    val ARTICLE_IMAGES = listOf("all", "top", "none")
 
     /** The settings every subreddit has, which one subreddit can set its own way */
     val SUBREDDIT_SETTINGS = listOf(

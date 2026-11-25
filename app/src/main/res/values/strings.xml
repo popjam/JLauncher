@@ -1393,6 +1393,7 @@
     <string name="projects">Projects</string>
     <string name="newsletter_daily">Daily</string>
     <string name="newsletter_weekly">Weekly</string>
+    <string name="newsletter_shared">Shared</string>
     <string name="newsletter_pc">PC</string>
     <string name="newsletter_needs_pairing">Needs the Mac pairing from Lockdown</string>
     <string name="newsletter_run">Run</string>
@@ -1461,6 +1462,8 @@
     <string name="newsletter_set_guides">Reply guide lines</string>
     <string name="newsletter_set_download_images">Download images</string>
     <string name="newsletter_set_image_quality">Image size</string>
+    <string name="newsletter_set_gallery_first">First gallery image only</string>
+    <string name="newsletter_set_article_images">Article images</string>
     <string name="newsletter_set_title">Title</string>
     <string name="newsletter_set_cover">Dated cover</string>
     <string name="newsletter_set_toc_grouped">Contents by subreddit</string>
