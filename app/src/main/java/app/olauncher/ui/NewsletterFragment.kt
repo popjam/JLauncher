@@ -357,15 +357,14 @@ class NewsletterFragment : CardPageFragment() {
     private fun bar(percent: Int): View {
         val context = requireContext()
         val radius = 2.dpToPx().toFloat()
-        return FrameLayout(context).apply {
+        val done = percent.coerceIn(0, 100)
+        // The filled part and the rest share the width by weight
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 100f
             background = GradientDrawable().apply { setColor(faint(40)); cornerRadius = radius }
             addView(View(context).apply { background = GradientDrawable().apply { setColor(teal); cornerRadius = radius } },
-                FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
-            // The filled part, once its width is known
-            post {
-                val fill = getChildAt(0) ?: return@post
-                fill.layoutParams = fill.layoutParams.apply { width = width * percent.coerceIn(0, 100) / 100 }
-            }
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, done.toFloat()))
         }
     }
 
